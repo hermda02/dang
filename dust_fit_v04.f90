@@ -34,7 +34,7 @@ program dust_fit
     real(dp)           :: missval = -1.6375d30
     logical(lgt)       :: anynull, double_precision, test, exist, output_fg
   
-    character(len=128) :: dust_file, mask_file, arg1
+    character(len=128) :: dust_file, mask_file, arg1, synch_file
     character(len=128) :: mapfile, title, direct
   
     real(dp), allocatable, dimension(:,:,:,:)    :: fg_amp
@@ -52,6 +52,7 @@ program dust_fit
   
     dust_file  = 'test_data/npipe6v20_353_map_Q_n0008.fits'
     mask_file  = '~/data/masks/mask_fullsky_n0008.fits'
+    synch_file = 'test_data/sim_synch_030_n0008.fits'
     tqu(1)     = 'T'
     tqu(2)     = 'Q'
     tqu(3)     = 'U'
@@ -77,15 +78,15 @@ program dust_fit
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
-    niter             = 50000      ! # of MC-MC iterations
+    niter             = 20000      ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
     output_iter       = 1000       ! Output maps every <- # of iterations
     nu_ref_s          = 30.0d0     ! Synchrotron reference frequency
     nu_ref_d          = 353.d0     ! Dust reference frequency
-    beta_s            = -3.00d0    ! Synchrotron beta initial guess
+    beta_s            = -3.20d0    ! Synchrotron beta initial guess
     beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
-    beta_std          = 0.1d0      ! \beta_synch Gaussian prior std
-    beta_samp_nside   = 8          ! \beta_synch nside sampling
+    beta_std          = 0.01d0     ! \beta_synch Gaussian prior std
+    beta_samp_nside   = 4          ! \beta_synch nside sampling
     output_fg         = .true.     ! Option for outputting foregrounds for all bands
     test              = .true.     ! Testing Metropolis-Hasting apparatus
     !----------------------------------------------------------------------------------------------------------
@@ -110,13 +111,16 @@ program dust_fit
     do j = 1, nbands
         call read_bintab('test_data/' // trim(bands(j)) // 'rms_n0008.fits',rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
-        call read_bintab('test_data/' // trim(bands(j)) // 'noise_n0008.fits', &
+        call read_bintab('test_data/' // trim(bands(j)) // 'n0008.fits', &
         map,npix,nmaps,nullval,anynull,header=header)
         maps(:,:,j) = map
     end do
 
     call read_bintab(dust_file,dust_temp,npix,nmaps,nullval,anynull,header=header)
     call read_bintab(mask_file,mask,npix,1,nullval,anynull,header=header)
+    call read_bintab(synch_file,synch_temp,npix,nmaps,nullval,anynull,header=header)
+
+    fg_amp(:,:,loc,1) = synch_temp
 
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
@@ -136,53 +140,83 @@ program dust_fit
 
         do iter = 1, niter
         
-            write(*,*) 'Iteration', iter
-            write(*,*) '-----------------------'
-            write(*,*) ''
+            ! write(*,*) 'Iteration', iter
+            ! write(*,*) '-----------------------'
+            ! write(*,*) ''
 
-            write(*,*) 'Sampling A_synch'
+            ! write(*,*) 'Sampling A_synch'
             ! ! -------------------------------------------------------------------------------------------------------------------
-            fg_amp(:,k,loc,1)       = sample_s_amp((maps-dust_map),fg_amp(:,:,loc,1), rmss, k, 1)
+            ! fg_amp(:,k,loc,1)       = sample_s_amp((maps-dust_map),fg_amp(:,:,loc,1), k)
         
-            do i = 0, npix-1
-                do j = 1, nbands
-                    fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_fg(1,nuz(j),beta_s(i,k))
-                end do
-            end do
-            synch_map(:,k,:)        = fg_amp(:,k,:,1)
+            ! do i = 0, npix-1
+            !     do j = 1, nbands
+            !         fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_pow(nuz(j),beta_s(i,k))
+            !     end do
+            ! end do
+            ! synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
-            write(*,*) 'Chi^2 ', compute_chisq(fg_amp,k)
-            write(*,*) ''
+            ! write(*,*) 'Chi^2 ', compute_chisq(fg_amp,k)
+            ! write(*,*) ''
 
-            ! Beta Sampling
+            ! write(*,*) 'Sampling Beta at nside ', beta_samp_nside
             ! -------------------------------------------------------------------------------------------------------------------
             beta_s(:,k)             = sample_beta((maps-dust_map), npix, k, beta_std, beta_s, beta_samp_nside)
             do i = 0, npix-1
                 do j = 1, nbands
-                    fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_fg(1,nuz(j),beta_s(i,k))
+                    fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_pow(nuz(j),beta_s(i,k))
                 end do
             end do
             synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
-            write(*,*) 'Mean synch beta: '
-            write(*,*) sum(beta_s(:,k))/npix
-            write(*,*) 'Chi^2 ', compute_chisq(fg_amp,k)
-            write(*,*) ''
+            ! write(*,*) 'Mean synch beta: '
+            ! write(*,*) sum(beta_s(:,k))/npix
+            ! write(*,*) 'Chi^2 ', compute_chisq(fg_amp,k)
+            ! write(*,*) ''
 
-            write(*,*) 'Sampling dust amplitudes'
+            ! write(*,*) 'Sampling dust amplitudes'
             ! ! -------------------------------------------------------------------------------------------------------------------
             do j = 1, nbands
-                fg_amp(:,k,j,2)     = temp_fit((maps(:,:,j)-synch_map(:,:,j)-cmb_map(:,:,j)),dust_temp(:,:),rmss(:,:,j),k)
-                dust_map(:,k,j)     = fg_amp(:,k,j,2)*dust_temp(:,k)
+                ! if (nuz(j) == 20.d0) then
+                !     fg_amp(:,k,j,2) = 1.644429d-2
+                !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+                ! else if (nuz(j) == 30.d0) then
+                !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+                ! else if (nuz(j) == 45.d0) then
+                !     fg_amp(:,k,j,2) = 1.19689d-3
+                !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+                ! else if (nuz(j) == 70.d0) then
+                !     fg_amp(:,k,j,2) = 5.890824d-2
+                !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+                ! else if (nuz(j) == 100.d0) then
+                !     fg_amp(:,k,j,2) = 2.9665593d-1
+                !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+                ! else
+                fg_amp(:,k,j,2) = temp_fit((maps(:,:,j)-synch_map(:,:,j)),dust_temp(:,:),rmss(:,:,j),k)
+                dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+                ! end if
             end do
 
             ! -------------------------------------------------------------------------------------------------------------------
-            write(*,*) 'Amplitudes: ', fg_amp(0,k,:,2)
-            write(*,*) ''
-            write(*,*) 'Chi^2 ', compute_chisq(fg_amp,k)
-            write(*,*) ''
+            ! write(*,*) 'Amplitudes: ', fg_amp(0,k,:,2)
+            ! write(*,*) ''
+            ! write(*,*) 'Chi^2 ', compute_chisq(fg_amp,k)
+            ! write(*,*) ''
 
             res                     = maps - synch_map - dust_map
+            ! write(*,*) (maps(15,k,5))
+            ! write(*,*) (synch_map(15,k,5))
+            ! write(*,*) (dust_map(15,k,5))
+            ! write(*,*) (maps(15,k,5)-synch_map(15,k,5)-dust_map(15,k,5))
+            ! stop
+
+            if (mod(iter,100) .EQ. 0) then
+                write(*,*) 'Iteration', iter
+                write(*,*) '-----------------------'
+                write(*,*) 'Mean synch beta: '
+                write(*,*) sum(beta_s(:,k))/npix
+                write(*,*) 'Dust Amplitudes: ', fg_amp(0,k,:,2)
+                write(*,*) 'Chi^2 ', compute_chisq(fg_amp,k)
+            end if
 
             call write_data
             if (mod(iter,output_iter) .EQ. 0) then
@@ -210,16 +244,16 @@ program dust_fit
       end if
     end function
 
-    function temp_fit(band,temp,rms,map_n)
+    function temp_fit(band,temp,rs,map_n)
         implicit none
     
         integer(i4b), intent(in)            :: map_n
-        real(dp), dimension(0:npix-1,nmaps) :: band, temp, rms, cov
+        real(dp), dimension(0:npix-1,nmaps) :: band, temp,rs, cov
         real(dp)                            :: temp_fit, norm, chiz
         real(dp)                            :: amplitude, amp, new
         real(dp)                            :: sum1, sum2, chi_0
     
-        cov = rms*2
+        cov = rs*2
     
         ! Uncertainty, used for sampling.
         norm  = sum(cov(:,map_n)*temp(:,map_n)**2.d0)/sum(mask)
@@ -234,8 +268,8 @@ program dust_fit
 
         if (sum1 < 0.d0) then
             amp = 0.d0
-            write(*,*) bands(j)
-            write(*,*) 'Negative Dust Amplitude'
+            ! write(*,*) bands(j)
+            ! write(*,*) 'Negative Dust Amplitude'
         else
             amp   = sum1/sum2
             chi_0 = 0.d0
@@ -259,27 +293,26 @@ program dust_fit
   
     end function temp_fit
   
-    function sample_s_amp(band,A,rms,map_n,comm)
+    function sample_s_amp(band,A,map_n)
       implicit none
   
-      integer(i4b),                               intent(in) :: map_n, comm
+      integer(i4b),                               intent(in) :: map_n
       real(dp), dimension(0:npix-1,nmaps),        intent(in) :: A
-      real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: band, rms
+      real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: band
       real(dp)                                               :: sum1, sum2, powerl, chi_0, chi_00, ch
       real(dp)                                               :: amp, new, chiz, damp, fitval
       real(dp), dimension(0:npix-1,nmaps)                    :: norm
       real(dp), dimension(0:npix-1,nmaps,nbands)             :: cov
       real(dp), dimension(0:npix-1,nmaps,nbands,2)           :: trmp
       real(dp), dimension(0:npix-1)                          :: sample_s_amp
-      integer(i4b)                                           :: fail
 
-      cov = rms*2
+      cov = rmss*2
 
       do i = 0, npix-1
         sum1 = 0.0d0
         sum2 = 0.0d0
         do j = 1, nbands
-            powerl        = compute_fg(comm,nuz(j),beta_s(i,map_n))
+            powerl        = compute_pow(nuz(j),beta_s(i,map_n))
             sum1          = sum1 + (band(i,map_n,j)*powerl)*cov(i,map_n,j)
             sum2          = sum2 + (powerl)**2.d0*cov(i,map_n,j)
             norm(i,map_n) = norm(i,map_n) + cov(i,map_n,j)*(powerl)**2.d0
@@ -297,17 +330,18 @@ program dust_fit
 
         chi_00 = 0.d0
         do j = 1, nbands
-            chi_00 = chi_00 + (band(i,map_n,j)-(A(i,map_n))*compute_fg(1,nuz(j),beta_s(i,map_n)))**2.d0/cov(i,map_n,j)
+            chi_00 = chi_00 + (band(i,map_n,j)-(A(i,map_n))*compute_pow(nuz(j),beta_s(i,map_n)))**2.d0/cov(i,map_n,j)
         end do
         chi_0 = 0.d0
         do j = 1, nbands
-            chi_0 = chi_0 + (band(i,map_n,j)-(sum1/sum2)*compute_fg(1,nuz(j),beta_s(i,map_n)))**2.d0/cov(i,map_n,j)
+            chi_0 = chi_0 + (band(i,map_n,j)-(sum1/sum2)*compute_pow(nuz(j),beta_s(i,map_n)))**2.d0/cov(i,map_n,j)
         end do
+        ! write(*,*) 
         do l = 1, iterations
             chiz = 0.d0
             new = amp + rand_normal(0.d0,1.d0)/sqrt(norm(i,map_n))
             do j = 1, nbands
-                chiz = chiz + (band(i,map_n,j)-(new*compute_fg(1,nuz(j),beta_s(i,map_n))))**2.d0/cov(i,map_n,j)
+                chiz = chiz + (band(i,map_n,j)-(new*compute_pow(nuz(j),beta_s(i,map_n))))**2.d0/cov(i,map_n,j)
             end do
             if (chiz < chi_0) then
                 amp = new
@@ -349,7 +383,6 @@ program dust_fit
         cov     = rmss*rmss
 
         nside1 = npix2nside(npix)
-        write(*,*) 'Sampling Beta at nside ', nside2
         if (nside1 == nside2) then
             npix2 = npix
         else
@@ -396,7 +429,7 @@ program dust_fit
 
             ! Chi-square from the most recent Gibbs chain update
             do j = 1, nbands
-                a = a + (((fg_amp_low(i,map_n,loc) * compute_fg(1,nuz(j),sol)) &
+                a = a + (((fg_amp_low(i,map_n,loc) * compute_pow(nuz(j),sol)) &
                       - band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2
             end do
             c   = a
@@ -416,7 +449,7 @@ program dust_fit
                 t = rand_normal(sam, sigma)
                 b = 0.d0
                 do j = 1, nbands
-                    tmp(j) = fg_amp_low(i,map_n,loc)*compute_fg(1,nuz(j),t)
+                    tmp(j) = fg_amp_low(i,map_n,loc)*compute_pow(nuz(j),t)
                     b      = b + ((tmp(j)-band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
                 end do
                 b = b
@@ -664,23 +697,18 @@ program dust_fit
       compute_chisq = chisq/(sum(mask(:,1))+nbands+3) ! n-1 dof, npix + nbands + A_s + A_dust + A_cmb + \beta_s
     end function compute_chisq
   
-    function compute_fg(comp,freq,param)
+    function compute_pow(freq,pow)
         implicit none
-        integer(i4b), intent(in)           :: comp
-        real(dp), intent(in)               :: freq, param
-        real(dp)                           :: compute_fg, x, x0, y, rj_cmb
+        real(dp), intent(in)               :: freq, pow
+        real(dp)                           :: compute_pow, x, x0, y, rj_cmb
 
         y = h*(freq*1.0d9) / (k_B*T_CMB)
 
         rj_cmb = ((exp(y)-1)**2.d0)/(y**2.d0*exp(y))
 
-        if (comp == 1) then
-           compute_fg  = (freq/nu_ref_s)**param
-        else if (comp == 2) then
-           compute_fg = param
-        end if
+        compute_pow  = (freq/nu_ref_s)**pow
   
-    end function compute_fg
+    end function compute_pow
 
     function dust_spec(nu,Td,betad)
         implicit none
