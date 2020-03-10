@@ -172,22 +172,8 @@ program dust_fit
             write(*,*) 'Sampling dust amplitudes'
             ! ! -------------------------------------------------------------------------------------------------------------------
             do j = 1, nbands
-                ! if (nuz(j) .eq. 50.d0) then
-                !     fg_amp(:,k,5,2)   = 0.15d0
-                !     dust_map(:,k,j)   = fg_amp(:,k,j,2)*dust_temp(:,k)
-                    ! ! if (iter == 1) then
-                    !     write(iter_str, '(i0.4)') iter
-                    !     title = trim(direct) // trim(bands(j)) // 'no_dust_' &
-                    !          // trim(tqu(k)) // '_' // trim(iter_str) // '.fits'
-                    !     call write_maps((maps(:,k,j) - dust_map(:,k,j)),npix,1,title)
-                    ! end if
-                ! else if (nuz(j) .eq. 100.d0) then
-                !     fg_amp(:,k,6,2)   = 0.05d0
-                !     dust_map(:,k,j)   = fg_amp(:,k,j,2)*dust_temp(:,k)
-                ! else
                 fg_amp(:,k,j,2)     = temp_fit((maps(:,:,j)-synch_map(:,:,j)-cmb_map(:,:,j)),dust_temp(:,:),rmss(:,:,j),k)
                 dust_map(:,k,j)     = fg_amp(:,k,j,2)*dust_temp(:,k)
-                ! end if
             end do
 
             ! -------------------------------------------------------------------------------------------------------------------
@@ -196,7 +182,7 @@ program dust_fit
             write(*,*) 'Chi^2 ', compute_chisq(fg_amp,k)
             write(*,*) ''
 
-            res                     = maps - synch_map - dust_map ! - cmb_map
+            res                     = maps - synch_map - dust_map
 
             call write_data
             if (mod(iter,output_iter) .EQ. 0) then
