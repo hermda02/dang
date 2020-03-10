@@ -85,7 +85,7 @@ program dust_fit
     beta_s            = -3.00d0    ! Synchrotron beta initial guess
     beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
     beta_std          = 0.1d0      ! \beta_synch Gaussian prior std
-    beta_samp_nside   = 4          ! \beta_synch nside sampling
+    beta_samp_nside   = 8          ! \beta_synch nside sampling
     output_fg         = .true.     ! Option for outputting foregrounds for all bands
     test              = .true.     ! Testing Metropolis-Hasting apparatus
     !----------------------------------------------------------------------------------------------------------
@@ -110,7 +110,7 @@ program dust_fit
     do j = 1, nbands
         call read_bintab('test_data/' // trim(bands(j)) // 'rms_n0008.fits',rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
-        call read_bintab('test_data/' // trim(bands(j)) // 'n0008.fits', &
+        call read_bintab('test_data/' // trim(bands(j)) // 'noise_n0008.fits', &
         map,npix,nmaps,nullval,anynull,header=header)
         maps(:,:,j) = map
     end do
@@ -416,11 +416,13 @@ program dust_fit
             c   = a
             sam = beta_s_mu
             if (test .eqv. .true.) then
-                prob(1)   = 1.d0
-                chi(1)    = a
-                tump(1)   = sol
-                accept(1) = 0.d0
-                naccept   = 0
+                if (i == 100) then
+                    prob(1)   = 1.d0
+                    chi(1)    = a
+                    tump(1)   = sol
+                    accept(1) = 0.d0
+                    naccept   = 0
+                end if
             end if
 
             do l = 1, iterations
@@ -437,8 +439,10 @@ program dust_fit
                     sam = t
                     c   = b
                     if (test .eqv. .true.) then
-                        naccept  = naccept + 1
-                        prob(l+1)= 1
+                        if (i == 100) then
+                            naccept  = naccept + 1
+                            prob(l+1)= 1
+                        end if
                     end if
                 else
                     x(2) = exp(0.5d0*(c-b))
@@ -449,20 +453,22 @@ program dust_fit
                             sam = t
                             c   = b
                             if (test .eqv. .true.) then
-                                naccept = naccept + 1
+                                if (i == 100) then
+                                    naccept = naccept + 1
+                                end if
                             end if
                         end if
                     end if
                     ! Metropolis testing apparatus
                     !-----------------------------
                     if (test .eqv. .true.) then
-                        if (i == 350) then
+                        if (i == 100) then
                             prob(l+1)   = p
                         end if
                     end if
                 end if
                 if (test .eqv. .true.) then
-                    if (i == 350) then 
+                    if (i == 100) then 
                         chi(l+1)    = c
                         tump(l+1)   = sam
                         accept(l+1) = naccept/l
@@ -479,7 +485,7 @@ program dust_fit
             ! Metropolis testing apparatus
             !-----------------------------
             if (test .eqv. .true.) then
-                if (i == 350) then
+                if (i == 100) then
                     inquire(file=trim(direct) // trim(tqu(k)) // '_prob.dat',exist=exist)
                     if (exist) then
                         open(40,file = trim(direct) // trim(tqu(k)) // '_prob.dat',&
