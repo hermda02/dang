@@ -77,32 +77,32 @@ program dust_fit
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
-    niter           = 10000   ! # of MC-MC iterations
-    iterations      = 100     ! # of iterations in the samplers
-    output_iter     = 500     ! Output maps every <- # of iterations
-    nu_ref_s        = 30.0d0  ! Synchrotron reference frequency
-    nu_ref_d        = 353.d0  ! Dust reference frequency
-    beta_s          = -3.00d0 ! Synchrotron beta initial guess
-    beta_s_mu       = -3.10d0 ! \beta_synch Gaussian prior mean
-    beta_std        = 0.1d0   ! \beta_synch Gaussian prior std
-    beta_samp_nside = 4       ! \beta_synch nside sampling
-    output_fg       = .true.  ! Option for outputting foregrounds for all bands
-    test            = .true.  ! Testing Metropolis-Hasting apparatus
+    niter             = 50000      ! # of MC-MC iterations
+    iterations        = 100        ! # of iterations in the samplers
+    output_iter       = 1000       ! Output maps every <- # of iterations
+    nu_ref_s          = 30.0d0     ! Synchrotron reference frequency
+    nu_ref_d          = 353.d0     ! Dust reference frequency
+    beta_s            = -3.00d0    ! Synchrotron beta initial guess
+    beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
+    beta_std          = 0.1d0      ! \beta_synch Gaussian prior std
+    beta_samp_nside   = 4          ! \beta_synch nside sampling
+    output_fg         = .true.     ! Option for outputting foregrounds for all bands
+    test              = .true.     ! Testing Metropolis-Hasting apparatus
     !----------------------------------------------------------------------------------------------------------
 
-    bands(1) = ('sim_data_020_')
-    bands(2) = ('sim_data_030_')
-    bands(3) = ('sim_data_045_')
-    bands(4) = ('sim_data_070_')
-    bands(5) = ('sim_data_100_')
+    bands(1)   = ('sim_data_020_')
+    bands(2)   = ('sim_data_030_')
+    bands(3)   = ('sim_data_045_')
+    bands(4)   = ('sim_data_070_')
+    bands(5)   = ('sim_data_100_')
 
-    nuz(1)   = 20.0d0
-    nuz(2)   = 30.0d0
-    nuz(3)   = 45.0d0
-    nuz(4)   = 70.0d0
-    nuz(5)   = 100.0d0
+    nuz(1)     = 20.0d0
+    nuz(2)     = 30.0d0
+    nuz(3)     = 45.0d0
+    nuz(4)     = 70.0d0
+    nuz(5)     = 100.0d0
 
-    loc      = minloc(abs(nuz-nu_ref_s),1)
+    loc        = minloc(abs(nuz-nu_ref_s),1)
 
     !----------------------------------------------------------------------------------------------------------
     ! Read maps
@@ -142,27 +142,27 @@ program dust_fit
 
             write(*,*) 'Sampling A_synch'
             ! ! -------------------------------------------------------------------------------------------------------------------
-            fg_amp(:,k,loc,1)           = sample_s_amp((maps-dust_map),fg_amp(:,:,loc,1), rmss, k, 1)
+            fg_amp(:,k,loc,1)       = sample_s_amp((maps-dust_map),fg_amp(:,:,loc,1), rmss, k, 1)
         
             do i = 0, npix-1
                 do j = 1, nbands
-                    fg_amp(i,k,j,1)   = fg_amp(i,k,loc,1)*compute_fg(1,nuz(j),beta_s(i,k))
+                    fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_fg(1,nuz(j),beta_s(i,k))
                 end do
             end do
-            synch_map(:,k,:)          = fg_amp(:,k,:,1)
+            synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
             write(*,*) 'Chi^2 ', compute_chisq(fg_amp,k)
             write(*,*) ''
 
             ! Beta Sampling
             ! -------------------------------------------------------------------------------------------------------------------
-            beta_s(:,k)               = sample_beta((maps-dust_map), npix, k, beta_std, beta_s, beta_samp_nside)
+            beta_s(:,k)             = sample_beta((maps-dust_map), npix, k, beta_std, beta_s, beta_samp_nside)
             do i = 0, npix-1
                 do j = 1, nbands
-                    fg_amp(i,k,j,1)   = fg_amp(i,k,loc,1)*compute_fg(1,nuz(j),beta_s(i,k))
+                    fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_fg(1,nuz(j),beta_s(i,k))
                 end do
             end do
-            synch_map(:,k,:)          = fg_amp(:,k,:,1)
+            synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
             write(*,*) 'Mean synch beta: '
             write(*,*) sum(beta_s(:,k))/npix
@@ -185,8 +185,8 @@ program dust_fit
                 !     fg_amp(:,k,6,2)   = 0.05d0
                 !     dust_map(:,k,j)   = fg_amp(:,k,j,2)*dust_temp(:,k)
                 ! else
-                fg_amp(:,k,j,2)   = temp_fit((maps(:,:,j)-synch_map(:,:,j)-cmb_map(:,:,j)),dust_temp(:,:),rmss(:,:,j),k)
-                dust_map(:,k,j)   = fg_amp(:,k,j,2)*dust_temp(:,k)
+                fg_amp(:,k,j,2)     = temp_fit((maps(:,:,j)-synch_map(:,:,j)-cmb_map(:,:,j)),dust_temp(:,:),rmss(:,:,j),k)
+                dust_map(:,k,j)     = fg_amp(:,k,j,2)*dust_temp(:,k)
                 ! end if
             end do
 
@@ -196,94 +196,13 @@ program dust_fit
             write(*,*) 'Chi^2 ', compute_chisq(fg_amp,k)
             write(*,*) ''
 
+            res                     = maps - synch_map - dust_map ! - cmb_map
 
-            res                       = maps - synch_map - dust_map - cmb_map
-
-            title = trim(direct) // 'pixel_350_A_d.dat'
-            inquire(file=title,exist=exist)
-            if (exist) then
-                open(30,file=title, status="old",position="append", action="write")
-            else
-                open(30,file=title, status="new", action="write")
-            endif
-            write(30,*) dust_map(350,k,loc)
-            close(30)
-
-            title = trim(direct) // 'pixel_350_A_s.dat'
-            inquire(file=title,exist=exist)
-            if (exist) then
-                open(31,file=title, status="old",position="append", action="write")
-            else
-                open(31,file=title, status="new", action="write")
-            endif
-            write(31,*) fg_amp(350,k,loc,1)
-            close(31)
-
-            title = trim(direct) // 'pixel_350_beta_s.dat'
-            inquire(file=title,exist=exist)
-            if (exist) then
-                open(32,file=title, status="old",position="append", action="write")
-            else
-                open(32,file=title, status="new", action="write")
-            endif
-            write(32,*) beta_s(350,k)
-            close(32)
-
-            title = trim(direct) // 'total_chisq.dat'
-            inquire(file=title,exist=exist)
-            if (exist) then
-                open(33,file=title, status="old",position="append", action="write")
-            else
-                open(33,file=title, status="new", action="write")
-            endif
-            write(33,*) compute_chisq(fg_amp,k)
-            close(33)
-
+            call write_data
             if (mod(iter,output_iter) .EQ. 0) then
-
-                inquire(file=trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat',exist=exist)
-                if (exist) then
-                    open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="old", &
-                                position="append", action="write")
-                else
-                    open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="new", action="write")
-                endif
-                write(34,'(12(E17.8))') fg_amp(1,k,:,2)
-                close(34)
-
-                write(iter_str, '(i0.5)') iter
-                if (output_fg .eqv. .true.) then
-                    do j = 1, nbands
-                        title = trim(direct) // trim(bands(j)) // 'dust_fit_'// trim(tqu(k)) & 
-                                // '_' // trim(iter_str) // '.fits'
-                        call write_maps(dust_map(:,k,j),npix,1,title)
-                        title = trim(direct) // trim(bands(j)) // 'synch_amplitude_' //  trim(tqu(k)) &
-                                // '_' // trim(iter_str) // '.fits'
-                        call write_maps(fg_amp(:,k,j,1),npix,1,title)
-                    end do
-                else 
-                    title = trim(direct) // trim(bands(loc)) // 'synch_amplitude_' //  trim(tqu(k)) &
-                            // '_' // trim(iter_str) // '.fits'
-                    call write_maps(fg_amp(:,k,loc,1),npix,1,title)
-                end if
-                do j = 1, nbands
-                    title = trim(direct) // trim(bands(j)) // 'residual_' // trim(tqu(k)) & 
-                            // '_' // trim(iter_str) // '.fits'
-                    call write_maps(res(:,k,j),npix,1,title)
-                end do
-                title = trim(direct) // 'synch_beta_' // trim(tqu(k)) // '_' // trim(iter_str) // '.fits'
-                call write_maps(beta_s(:,k),npix,1,title)
-                chi_map = 0.d0
-                do i = 0, npix-1
-                    do j = 1, nbands
-                        chi_map(i,k) = chi_map(i,k) + (maps(i,k,j) - synch_map(i,k,j) - dust_map(i,j,k))**2.d0/rmss(i,k,j)**2.d0
-                    end do
-                end do
-                chi_map(:,k) = chi_map(:,k)/(nbands+3)
-                title = trim(direct) // 'chisq_' // trim(tqu(k)) // '_' // trim(iter_str) // '.fits'
-                call write_maps(chi_map(:,k),npix,1,title)
-
+                call write_maps(k)
             end if
+            
         end do    
     end do
   
@@ -632,15 +551,106 @@ program dust_fit
 
     end function sample_beta
   
-    subroutine write_maps(map,npix,nmap,title)
-      implicit none
-  
-      integer(i4b), intent(in)       :: npix, nmap
-      character(len=80), intent(in) :: title
-      real(dp), dimension(npix,nmap) :: map
-      call write_bintab(map, npix, nmap, header, nlheader, trim(title))
+    subroutine write_maps(nm)
+        implicit none
+
+        integer(i4b), intent(in)    :: nm
+        real(dp), dimension(npix,1) :: map
+
+        write(iter_str, '(i0.5)') iter
+        if (output_fg .eqv. .true.) then
+            do j = 1, nbands
+                title = trim(direct) // trim(bands(j)) // 'dust_fit_'// trim(tqu(nm)) & 
+                        // '_' // trim(iter_str) // '.fits'
+                map(:,1)   = dust_map(:,nm,j)
+                call write_bintab(map,npix,1, header, nlheader, trim(title))
+                title = trim(direct) // trim(bands(j)) // 'synch_amplitude_' //  trim(tqu(nm)) &
+                        // '_' // trim(iter_str) // '.fits'
+                map(:,1)   = fg_amp(:,nm,j,1)
+                call write_bintab(map,npix,1, header, nlheader, trim(title))
+            end do
+        else 
+            title = trim(direct) // trim(bands(loc)) // 'synch_amplitude_' //  trim(tqu(nm)) &
+                    // '_' // trim(iter_str) // '.fits'
+            map(:,1)   = fg_amp(:,nm,loc,1)
+            call write_bintab(map,npix,1, header, nlheader, trim(title))
+        end if
+        do j = 1, nbands
+            title = trim(direct) // trim(bands(j)) // 'residual_' // trim(tqu(nm)) & 
+                    // '_' // trim(iter_str) // '.fits'
+            map(:,1)   = res(:,nm,j)
+            call write_bintab(map,npix,1, header, nlheader, trim(title))
+        end do
+        title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
+        map(:,1)   = beta_s(:,nm)
+        call write_bintab(map,npix,1, header, nlheader, trim(title))
+        chi_map = 0.d0
+        do i = 0, npix-1
+            do j = 1, nbands
+                chi_map(i,nm) = chi_map(i,nm) + (maps(i,nm,j) - synch_map(i,nm,j) - dust_map(i,j,nm))**2.d0/rmss(i,nm,j)**2.d0
+            end do
+        end do
+        chi_map(:,nm) = chi_map(:,nm)/(nbands+3)
+        title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
+        map(:,1)   = chi_map(:,nm)
+        call write_bintab(map,npix,1, header, nlheader, trim(title))
 
     end subroutine write_maps
+
+    subroutine write_data
+        implicit none
+
+        title = trim(direct) // 'pixel_350_A_d.dat'
+        inquire(file=title,exist=exist)
+        if (exist) then
+            open(30,file=title, status="old",position="append", action="write")
+        else
+            open(30,file=title, status="new", action="write")
+        endif
+        write(30,*) dust_map(350,k,loc)
+        close(30)
+
+        title = trim(direct) // 'pixel_350_A_s.dat'
+        inquire(file=title,exist=exist)
+        if (exist) then
+            open(31,file=title, status="old",position="append", action="write")
+        else
+            open(31,file=title, status="new", action="write")
+        endif
+        write(31,*) fg_amp(350,k,loc,1)
+        close(31)
+
+        title = trim(direct) // 'pixel_350_beta_s.dat'
+        inquire(file=title,exist=exist)
+        if (exist) then
+            open(32,file=title, status="old",position="append", action="write")
+        else
+            open(32,file=title, status="new", action="write")
+        endif
+        write(32,*) beta_s(350,k)
+        close(32)
+
+        title = trim(direct) // 'total_chisq.dat'
+        inquire(file=title,exist=exist)
+        if (exist) then
+            open(33,file=title, status="old",position="append", action="write")
+        else
+            open(33,file=title, status="new", action="write")
+        endif
+        write(33,*) compute_chisq(fg_amp,k)
+        close(33)
+
+        inquire(file=trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat',exist=exist)
+        if (exist) then
+            open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="old", &
+                        position="append", action="write")
+        else
+            open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="new", action="write")
+        endif
+        write(34,'(12(E17.8))') fg_amp(1,k,:,2)
+        close(34)
+
+    end subroutine write_data
   
     function compute_chisq(amp,map_n)
       use healpix_types
