@@ -80,7 +80,7 @@ program dust_fit
     !----------------------------------------------------------------------------------------------------------
     niter             = 1000       ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
-    output_iter       = 10         ! Output maps every <- # of iterations
+    output_iter       = 100        ! Output maps every <- # of iterations
     nu_ref_s          = 30.0d0     ! Synchrotron reference frequency
     nu_ref_d          = 353.d0     ! Dust reference frequency
     beta_s            = -3.10d0    ! Synchrotron beta initial guess
@@ -122,15 +122,15 @@ program dust_fit
 
     fg_amp(:,:,loc,1) = synch_temp
 
-    ! fg_amp(:,1,1,2) = 1.644429d-2
-    ! fg_amp(:,1,2,2) = 8.39923d-3
-    ! fg_amp(:,1,3,2) = 1.19689d-3
-    ! fg_amp(:,1,4,2) = 5.890824d-2
-    ! fg_amp(:,1,5,2) = 2.9665593d-1
+    fg_amp(:,1,1,2) = 1.644429d-2
+    fg_amp(:,1,2,2) = 8.39923d-3
+    fg_amp(:,1,3,2) = 1.19689d-3
+    fg_amp(:,1,4,2) = 5.890824d-2
+    fg_amp(:,1,5,2) = 2.9665593d-1
 
-    ! do j = 1, nbands
-    !     dust_map(:,1,j) = fg_amp(:,1,j,2)*dust_temp(:,1)
-    ! end do
+    do j = 1, nbands
+        dust_map(:,1,j) = fg_amp(:,1,j,2)*dust_temp(:,1)
+    end do
 
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
@@ -168,38 +168,38 @@ program dust_fit
 
             ! write(*,*) 'Sampling Beta at nside ', beta_samp_nside
             ! -------------------------------------------------------------------------------------------------------------------
-            beta_s(:,k)             = sample_beta((maps-dust_map), npix, k, beta_std, beta_s, beta_samp_nside)
-            do i = 0, npix-1
-                do j = 1, nbands
-                    fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_pow(nuz(j),beta_s(i,k))
-                end do
-            end do
+            ! beta_s(:,k)             = sample_beta((maps-dust_map), npix, k, beta_std, beta_s, beta_samp_nside)
+            ! do i = 0, npix-1
+            !     do j = 1, nbands
+            !         fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_pow(nuz(j),beta_s(i,k))
+            !     end do
+            ! end do
             synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             ! write(*,*) 'Sampling dust amplitudes'
             ! ! -------------------------------------------------------------------------------------------------------------------
-            do j = 1, nbands
-                ! if (nuz(j) == 20.d0) then
-                !     fg_amp(:,k,j,2) = 1.644429d-2
-                !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
-                ! else if (nuz(j) == 30.d0) then
-                !     fg_amp(:,k,j,2) = 8.39923d-3
-                !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
-                ! else if (nuz(j) == 45.d0) then
-                !     fg_amp(:,k,j,2) = 1.19689d-3
-                !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
-                ! else if (nuz(j) == 70.d0) then
-                !     fg_amp(:,k,j,2) = 5.890824d-2
-                !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
-                ! else if (nuz(j) == 100.d0) then
-                !     fg_amp(:,k,j,2) = 2.9665593d-1
-                !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
-                ! else
-                    fg_amp(:,k,j,2) = temp_fit((maps(:,:,j)-synch_map(:,:,j)),dust_temp(:,:),rmss(:,:,j),k)
-                    dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
-                ! end if
-            end do
+            ! do j = 1, nbands
+            !     ! if (nuz(j) == 20.d0) then
+            !     !     fg_amp(:,k,j,2) = 1.644429d-2
+            !     !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+            !     ! else if (nuz(j) == 30.d0) then
+            !     !     fg_amp(:,k,j,2) = 8.39923d-3
+            !     !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+            !     ! else if (nuz(j) == 45.d0) then
+            !     !     fg_amp(:,k,j,2) = 1.19689d-3
+            !     !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+            !     ! else if (nuz(j) == 70.d0) then
+            !     !     fg_amp(:,k,j,2) = 5.890824d-2
+            !     !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+            !     ! else if (nuz(j) == 100.d0) then
+            !     !     fg_amp(:,k,j,2) = 2.9665593d-1
+            !     !     dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+            !     ! else
+            !         fg_amp(:,k,j,2) = temp_fit((maps(:,:,j)-synch_map(:,:,j)),dust_temp(:,:),rmss(:,:,j),k, fg_amp(0,k,j,2))
+            !         dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+            !     ! end if
+            ! end do
             res                     = maps - synch_map - dust_map
 
             if (mod(iter,1) .EQ. 0) then
@@ -237,116 +237,245 @@ program dust_fit
       end if
     end function
 
-    function temp_fit(band,temp,rs,map_n)
+    function temp_fit(band,temp,rs,map_n,old)
         implicit none
     
         integer(i4b), intent(in)            :: map_n
         real(dp), dimension(0:npix-1,nmaps) :: band, temp,rs, cov
-        real(dp)                            :: temp_fit, norm, chiz
-        real(dp)                            :: amplitude, amp, new
-        real(dp)                            :: sum1, sum2, chi_0
+        real(dp)                            :: temp_fit, norm, sam, p
+        real(dp)                            :: amp, old, sum1, sum2, num
+        real(dp)                            :: chi, chi_0, chi_00, t
+        real(dp), dimension(2)              :: x
     
         cov = rs*2
-    
-        ! Uncertainty, used for sampling.
-        norm  = sum(cov(:,map_n)*temp(:,map_n)**2.d0)/sum(mask)
-        
-        sum1 = 0.d0
-        sum2 = 0.d0
-    
-        do i=0,npix-1
-            sum1   = sum1 + (band(i,map_n)*temp(i,map_n))*cov(i,map_n)*mask(i,1)
-            sum2   = sum2 + temp(i,map_n)**2.d0*cov(i,map_n)*mask(i,1)
-        end do
 
-        if (sum1 < 0.d0) then
-            amp = 0.d0
-            ! write(*,*) bands(j)
-            ! write(*,*) 'Negative Dust Amplitude'
-        else
-            amp   = sum1/sum2
-            chi_0 = 0.d0
-            do i = 0, npix-1
-                chi_0 = chi_0 + (band(i,map_n)-amp*temp(i,map_n))**2.d0/cov(i,map_n)*mask(i,1)
+        type = 'metrop'
+
+        if (trim(type) == 'linear') then
+                
+            ! Uncertainty, used for sampling.
+            norm  = sum(cov(:,map_n)*temp(:,map_n)**2.d0)/sum(mask)
+            
+            sum1 = 0.d0
+            sum2 = 0.d0
+        
+            do i=0,npix-1
+                sum1   = sum1 + (band(i,map_n)*temp(i,map_n))*cov(i,map_n)*mask(i,1)
+                sum2   = sum2 + temp(i,map_n)**2.d0*cov(i,map_n)*mask(i,1)
             end do
-    
-            do l = 1, iterations
-                chiz = 0.d0
-                new = amp + rand_normal(0.d0,1.d0)/sqrt(norm)
+
+            if (sum1 < 0.d0) then
+                amp = 0.d0
+                ! write(*,*) bands(j)
+                ! write(*,*) 'Negative Dust Amplitude'
+            else
+                amp   = sum1/sum2
+                chi_0 = 0.d0
                 do i = 0, npix-1
-                    chiz = chiz + (band(i,map_n)-new*temp(i,map_n))**2.d0/cov(i,map_n)*mask(i,1)
+                    chi_0 = chi_0 + (band(i,map_n)-amp*temp(i,map_n))**2.d0/cov(i,map_n)*mask(i,1)
                 end do
-                if (chiz < chi_0) then
-                    amp = new
-                    chi_0 = chiz
-                end if
-            end do
+        
+                do l = 1, iterations
+                    chiz = 0.d0
+                    new = amp + rand_normal(0.d0,1.d0)/sqrt(norm)
+                    do i = 0, npix-1
+                        chiz = chiz + (band(i,map_n)-new*temp(i,map_n))**2.d0/cov(i,map_n)*mask(i,1)
+                    end do
+                    if (chiz < chi_0) then
+                        amp = new
+                        chi_0 = chiz
+                    end if
+                end do
+            end if
+            temp_fit  = amp
         end if
-        temp_fit  = amp
+
+
+        if (trim(type) == 'metrop') then
+
+            x(1) = 1.d0
+
+            ! Uncertainty, used for sampling.
+            norm  = sum(cov(:,map_n)*mask(:,1)*temp(:,map_n)**2.d0)/sum(mask)
+            
+            sum1 = 0.d0
+            sum2 = 0.d0
+        
+            do i=0,npix-1
+                sum1   = sum1 + (band(i,map_n)*temp(i,map_n))*cov(i,map_n)*mask(i,1)
+                sum2   = sum2 + temp(i,map_n)**2.d0*cov(i,map_n)*mask(i,1)
+            end do
+
+            if (sum1 < 0.d0) then
+                sam = 0.d0
+            else
+                sam    = sum1/sum2
+                chi_00 = 0.d0
+                do i = 0, npix-1
+                    chi_00 = chi_00 + (band(i,map_n)-old*temp(i,map_n))**2.d0/cov(i,map_n)*mask(i,1)
+                end do
+                chi = chi_00
+                do l = 1, iterations
+                    ! Begin sampling from the prior
+                    t     = sam + rand_normal(0.d0, 1.d0)/norm
+                    chi_0 = 0.d0
+                    do i = 0, npix-1
+                        chi_0  = chi_0 + ((t*temp(i,map_n)-band(i,map_n))**2.d0)/cov(i,map_n)**2.d0*mask(i,1)
+                    end do
+
+                    if (chi_0 < chi_00 .and. t .gt. 0.d0) then
+                        sam = t
+                        chi = chi_0
+                    else
+                        x(2) = exp(0.5d0*(chi-chi_0))
+                        p = minval(x)
+                        call RANDOM_NUMBER(num)
+                        if (num < p) then
+                            if (t .lt. -2.5 .and. t .gt. -3.5) then
+                                sam = t
+                                chi = chi_0
+                            end if
+                        end if
+                    end if
+                end do
+            end if
+            if (chi < chi_00) then
+                temp_fit = sam
+            else
+                temp_fit = old
+            end if
+        end if
   
     end function temp_fit
   
     function sample_s_amp(band,A,map_n)
-      implicit none
+        implicit none
   
-      integer(i4b),                               intent(in) :: map_n
-      real(dp), dimension(0:npix-1,nmaps),        intent(in) :: A
-      real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: band
-      real(dp)                                               :: sum1, sum2, powerl, chi_0, chi_00, ch
-      real(dp)                                               :: amp, new, chiz, damp, fitval
-      real(dp), dimension(0:npix-1,nmaps)                    :: norm
-      real(dp), dimension(0:npix-1,nmaps,nbands)             :: cov
-      real(dp), dimension(0:npix-1,nmaps,nbands,2)           :: trmp
-      real(dp), dimension(0:npix-1)                          :: sample_s_amp
+        integer(i4b),                               intent(in) :: map_n
+        real(dp), dimension(0:npix-1,nmaps),        intent(in) :: A
+        real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: band
+        character(len=6)                                       :: type
+        real(dp)                                               :: sum1, sum2, powerl
+        real(dp)                                               :: chi, chi_0, chi_00, p
+        real(dp)                                               :: amp, num, t, sam
+        real(dp), dimension(2)                                 :: x
+        real(dp), dimension(nbands)                            :: tmp
+        real(dp), dimension(0:npix-1,nmaps)                    :: norm
+        real(dp), dimension(0:npix-1,nmaps,nbands)             :: cov
+        real(dp), dimension(0:npix-1,nmaps,nbands,2)           :: trmp
+        real(dp), dimension(0:npix-1)                          :: sample_s_amp
 
-      cov = rmss*2
+        cov = rmss*2
 
-      do i = 0, npix-1
-        sum1 = 0.0d0
-        sum2 = 0.0d0
-        do j = 1, nbands
-            powerl        = compute_pow(nuz(j),beta_s(i,map_n))
-            sum1          = sum1 + (band(i,map_n,j)*powerl)*cov(i,map_n,j)
-            sum2          = sum2 + (powerl)**2.d0*cov(i,map_n,j)
-            norm(i,map_n) = norm(i,map_n) + cov(i,map_n,j)*(powerl)**2.d0
-        end do
-        norm(i,map_n)     = norm(i,map_n)/nbands
-        amp               = sum1/sum2
+        type = 'metrop'
 
-        ! Enforce positive amplitude for temperature.
-        ! if (map_n == 1) then
-        !     if (amp < 0.d0) then 
-        !         amp = 0.d0
-        !     end if
-        ! end if
-        sample_s_amp(i) = amp
-
-        chi_00 = 0.d0
-        do j = 1, nbands
-            chi_00 = chi_00 + (band(i,map_n,j)-(A(i,map_n))*compute_pow(nuz(j),beta_s(i,map_n)))**2.d0/cov(i,map_n,j)
-        end do
-        chi_0 = 0.d0
-        do j = 1, nbands
-            chi_0 = chi_0 + (band(i,map_n,j)-(sum1/sum2)*compute_pow(nuz(j),beta_s(i,map_n)))**2.d0/cov(i,map_n,j)
-        end do
-        ! write(*,*) 
-        do l = 1, iterations
-            chiz = 0.d0
-            new = amp + rand_normal(0.d0,1.d0)/sqrt(norm(i,map_n))
-            do j = 1, nbands
-                chiz = chiz + (band(i,map_n,j)-(new*compute_pow(nuz(j),beta_s(i,map_n))))**2.d0/cov(i,map_n,j)
+        if (trim(type) == 'linear') then
+            do i = 0, npix-1
+                sum1 = 0.0d0
+                sum2 = 0.0d0
+                do j = 1, nbands
+                    powerl        = compute_pow(nuz(j),beta_s(i,map_n))
+                    sum1          = sum1 + (band(i,map_n,j)*powerl)*cov(i,map_n,j)
+                    sum2          = sum2 + (powerl)**2.d0*cov(i,map_n,j)
+                    norm(i,map_n) = norm(i,map_n) + cov(i,map_n,j)*(powerl)**2.d0
+                end do
+                norm(i,map_n)     = norm(i,map_n)/nbands
+                amp               = sum1/sum2
+        
+                ! Enforce positive amplitude for temperature.
+                ! if (map_n == 1) then
+                !     if (amp < 0.d0) then 
+                !         amp = 0.d0
+                !     end if
+                ! end if
+                sample_s_amp(i) = amp
+        
+                chi_00 = 0.d0
+                do j = 1, nbands
+                    chi_00 = chi_00 + (band(i,map_n,j)-(A(i,map_n))*compute_pow(nuz(j),beta_s(i,map_n)))**2.d0/cov(i,map_n,j)
+                end do
+                chi_0 = 0.d0
+                do j = 1, nbands
+                    chi_0 = chi_0 + (band(i,map_n,j)-(sum1/sum2)*compute_pow(nuz(j),beta_s(i,map_n)))**2.d0/cov(i,map_n,j)
+                end do
+                ! write(*,*) 
+                do l = 1, iterations
+                    chiz = 0.d0
+                    new = amp + rand_normal(0.d0,1.d0)/sqrt(norm(i,map_n))
+                    do j = 1, nbands
+                        chiz = chiz + (band(i,map_n,j)-(new*compute_pow(nuz(j),beta_s(i,map_n))))**2.d0/cov(i,map_n,j)
+                    end do
+                    if (chiz < chi_0) then
+                        amp = new
+                        chi_0 = chiz
+                    end if
+                end do
+                if (chi_0 < chi_00) then
+                    sample_s_amp(i) = amp
+                else
+                    sample_s_amp(i) = A(i,map_n)
+                end if
             end do
-            if (chiz < chi_0) then
-                amp = new
-                chi_0 = chiz
-            end if
-        end do
-        if (chi_0 < chi_00) then
-            sample_s_amp(i) = amp
-        else
-            sample_s_amp(i) = A(i,map_n)
         end if
-      end do
+
+        if (trim(type) == 'metrop') then
+            x(1) = 1.d0
+            do i = 0, npix-1
+                sum1 = 0.0d0
+                sum2 = 0.0d0
+                do j = 1, nbands
+                    powerl        = compute_pow(nuz(j),beta_s(i,map_n))
+                    sum1          = sum1 + (band(i,map_n,j)*powerl)*cov(i,map_n,j)
+                    sum2          = sum2 + (powerl)**2.d0*cov(i,map_n,j)
+                    norm(i,map_n) = norm(i,map_n) + cov(i,map_n,j)*(powerl)**2.d0
+                end do
+                norm(i,map_n)     = norm(i,map_n)/nbands
+                amp               = sum1/sum2
+
+                ! Enforce positive amplitude for temperature.
+                ! if (map_n == 1) then
+                !     if (amp < 0.d0) then 
+                !         amp = 0.d0
+                !     end if
+                ! end if
+                sam = amp
+
+                chi_00 = 0.d0
+                do j = 1, nbands
+                    chi_00 = chi_00 + (band(i,map_n,j)-(A(i,map_n))*compute_pow(nuz(j),beta_s(i,map_n)))**2.d0/cov(i,map_n,j)
+                end do
+                chi = chi_00
+                do l = 1, iterations
+                    ! Begin sampling from the prior
+                    t     = sam + rand_normal(0.d0, 1.d0)/norm(i,map_n)
+                    chi_0 = 0.d0
+                    do j = 1, nbands
+                        tmp(j) = t*compute_pow(nuz(j),beta_s(i,map_n))
+                        chi_0  = chi_0 + ((tmp(j)-band(i,map_n,j))**2.d0)/cov(i,map_n,j)**2.d0
+                    end do
+
+                    if (chi_0 < chi_00 .and. t .gt. 0.d0) then
+                        sam = t
+                        chi = chi_0
+                    else
+                        x(2) = exp(0.5d0*(chi-chi_0))
+                        p = minval(x)
+                        call RANDOM_NUMBER(num)
+                        if (num < p) then
+                            if (t .lt. -2.5 .and. t .gt. -3.5) then
+                                sam = t
+                                chi = chi_0
+                            end if
+                        end if
+                    end if
+                end do
+                if (chi < chi_00) then
+                    sample_s_amp(i) = sam
+                else
+                    sample_s_amp(i) = A(i,map_n)
+                end if
+            end do
+        end if
     end function sample_s_amp
   
     function sample_beta(band, npix, map_n, sigma, beta, nside2)
