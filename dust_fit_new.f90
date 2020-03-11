@@ -840,7 +840,8 @@ program dust_fit
         real(dp), intent(in)                    :: s_amp, bet
         real(dp), dimension(nbands), intent(in) :: d_amp
         real(dp), dimension(101)                :: A_s, A_s_ln, A_s_like
-        real(dp)                                :: del_a_s, signal
+        real(dp), dimension(101)                :: A_d, A_d_ln, A_d_like
+        real(dp)                                :: del_a_s, del_a_d, signal
         integer(i4b)                            :: x, y, z
 
         del_a_s = s_amp/100.d0
@@ -877,11 +878,12 @@ program dust_fit
         end do 
         close(52)
 
-        ! del_a_s = s_amp/1000.d0
+        do z = 1, nbands
+            del_a_d = d_amp(z)/100.d0
 
-        ! do x = 1, 101
-        !     A_s(x) = (x*del_a_s) + (949.d0/1000)*s_amp
-        ! end do
+            do x = 1, 101
+                A_d(x) = (x*del_d_s) + (949.d0/1000)*d_amp
+            end do
 
         ! do x = 1, 101
         !     signal = 0.d0
