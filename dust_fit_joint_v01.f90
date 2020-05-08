@@ -79,9 +79,9 @@ program dust_fit
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
-    niter             = 5000       ! # of MC-MC iterations
+    niter             = 10         ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
-    output_iter       = 1000       ! Output maps every <- # of iterations
+    output_iter       = 1          ! Output maps every <- # of iterations
     like_iter         = 1000       ! Output likelihood test every <- # of iterations
     nu_ref_s          = 30.0d0     ! Synchrotron reference frequency
     nu_ref_d          = 353.d0     ! Dust reference frequency
@@ -827,7 +827,6 @@ program dust_fit
         implicit none
         integer(i4b),              intent(in)     :: npix, map_n
         real(dp), allocatable, dimension(:,:,:)   :: T_nu, T_nu_T, covar, A_1, A_2
-        ! real(dp), allocatable, dimension(:)       :: amp_vec
         real(dp), allocatable, dimension(:,:)     :: A, lower, upper, c_1, dats
         real(dp), allocatable, dimension(:)       :: b, c, d
         integer(i4b)                              :: x, y, z
@@ -837,7 +836,7 @@ program dust_fit
         z = nbands
 
         allocate(T_nu(x,y,z),T_nu_T(y,x,z),dats(x,z))
-        allocate(A_1(y,x,z),A_2(y,y,z)) ! amp_vec(0:y-1),
+        allocate(A_1(y,x,z),A_2(y,y,z)) 
         allocate(A(y,y),b(y),c(y),d(y))
         allocate(lower(y,y),upper(y,y))
         allocate(covar(x,x,z),c_1(y,z))
@@ -861,26 +860,6 @@ program dust_fit
             end do
         end do
 
-        ! write(*,*) T_nu(1,x+1,:)
-        ! write(*,*) T_nu(1,x+2,:)
-        ! write(*,*) T_nu(1,x+3,:)
-        ! write(*,*) T_nu(1,x+4,:)
-        ! write(*,*) ''
-
-        ! Amplitude vector initialization
-        ! do i= 0, x-1
-        !     amp_vec(i) = fg_amp(i,map_n,loc,1)
-        ! end do
-        ! l = 1
-        ! do while (i .lt. (nbands-1))
-        !     write(*,*) l
-        !     do j= 1, z
-        !         if (j /= j_corr) then
-        !             amp_vec(x-1+l) = fg_amp(0,map_n,j,2)
-        !             l = l + 1
-        !         end if
-        !     end do
-        ! end do
 
         do j=1, nbands
             T_nu_T(:,:,j) = transpose(T_nu(:,:,j))
@@ -900,16 +879,17 @@ program dust_fit
             fg_amp(i-1,map_n,loc,1) = b(i)
         end do
         l = 1
-        do while (i .lt. (nbands-1))
-            write(*,*) l
+        do while (l .lt. (nbands-1))
             do j= 1, z
                 if (j /= j_corr) then
+                    ! write(*,*) l
                     fg_amp(:,map_n,j,2) = b(x+l)
                     write(*,*) b(x+l)
                     l = l + 1
                 end if
             end do
         end do
+        ! stop
 
         deallocate(T_nu,T_nu_T)
         ! deallocate(amp_vec)

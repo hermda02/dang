@@ -52,7 +52,7 @@ program dust_fit
     character(len=5)                             :: iter_str
   
     dust_file  = 'data/test_data/npipe6v20_353_map_Q_n0008.fits'
-    mask_file  = '~/data/masks/mask_fullsky_n0008.fits'
+    mask_file  = 'data/mask_fullsky_n0008.fits'
     synch_file = 'data/test_data/sim_synch_030_n0008.fits'
     tqu(1)     = 'T'
     tqu(2)     = 'Q'
@@ -873,7 +873,7 @@ program dust_fit
 
         call cholesky_decomp(A,lower,y)
         upper = transpose(lower)
-        
+
         call forward_sub(lower,d,c)
         call backward_sub(upper,b,d)
 

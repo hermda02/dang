@@ -51,9 +51,9 @@ program dust_fit
     character(len=80), allocatable, dimension(:) :: bands
     character(len=5)                             :: iter_str
   
-    dust_file  = 'test_data/npipe6v20_353_map_Q_n0008.fits'
-    mask_file  = 'test_data/mask_fullsky_n0008.fits'
-    synch_file = 'test_data/sim_synch_030_n0008.fits'
+    dust_file  = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
+    mask_file  = 'data/mask_fullsky_n0004.fits'
+    synch_file = 'data/test_data/sim_synch_030_n0008.fits'
     tqu(1)     = 'T'
     tqu(2)     = 'Q'
     tqu(3)     = 'U'
@@ -112,9 +112,9 @@ program dust_fit
     ! Read maps
 
     do j = 1, nbands
-        call read_bintab('test_data/' // trim(bands(j)) // 'rms_n0008.fits',rms,npix,nmaps,nullval,anynull,header=header)
+        call read_bintab('data/test_data/' // trim(bands(j)) // 'rms_n0004.fits',rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
-        call read_bintab('test_data/' // trim(bands(j)) // 'n0008.fits', &
+        call read_bintab('data/test_data/' // trim(bands(j)) // 'n0004.fits', &
         map,npix,nmaps,nullval,anynull,header=header)
         maps(:,:,j) = map
     end do
@@ -150,14 +150,6 @@ program dust_fit
 
     do k = 1, nmaps
         
-        ! do i = 0, npix-1
-        !     par(1) = beta_s(i,k)
-        !     do j = 1, nbands
-        !         fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
-        !     end do
-        ! end do
-        ! synch_map(:,k,:)        = fg_amp(:,k,:,1)
-
         ! if (k == 1) then
         !     write(*,*) 'Sampling Temperature'
         !     write(*,*) '-----------------------'
@@ -177,26 +169,26 @@ program dust_fit
 
             write(*,*) 'Jointly Sampling Amplitudes' 
             call sample_joint_amp(npix,k)
-
+            dust_amps = fg_amp(0,k,:,2)
 
             ! write(*,*) 'Sampling A_synch'
             ! ! -------------------------------------------------------------------------------------------------------------------
             ! fg_amp(:,k,loc,1)       = sample_spec_amp((maps(:,k,:)-dust_map(:,k,:)),'synch', rmss(:,k,:))
         
-            !do i = 0, npix-1
-            !    par(1) = beta_s(i,k)
-            !    do j = 1, nbands
-            !        fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
-            !    end do
-            !end do
-            !synch_map(:,k,:)        = fg_amp(:,k,:,1)
+            do i = 0, npix-1
+                par(1) = beta_s(i,k)
+                do j = 1, nbands
+                    fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
+                end do
+            end do
+            synch_map(:,k,:)        = fg_amp(:,k,:,1)
 
             ! ! write(*,*) 'Sampling dust amplitudes'
             ! ! -------------------------------------------------------------------------------------------------------------------
-            !do j = 1, nbands
+            do j = 1, nbands
             !     fg_amp(:,k,j,2) = temp_fit((maps(:,k,j)-synch_map(:,k,j)),dust_temp(:,k),rmss(:,k,j),mask(:,1))
-            !    dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
-            !end do
+                dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+            end do
 
             ! ! -------------------------------------------------------------------------------------------------------------------
 
@@ -213,16 +205,14 @@ program dust_fit
             ! synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
-            !res                     = maps - synch_map - dust_map
-
-            dust_amps = fg_amp(0,k,:,2)
+            res       = maps - synch_map - dust_map
 
             call compute_chisq(fg_amp,k)
 
             if (mod(iter, 1) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 5e10.3)')&
                  iter, " - chisq: " , chisq, " - A_s: ",&
-                 fg_amp(350,k,2,1),  " - beta_s: ",&
+                 fg_amp(150,k,2,1),  " - beta_s: ",&
                  sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps
             end if
 
@@ -232,7 +222,7 @@ program dust_fit
             end if
 
             ! if (mod(iter,like_iter) .EQ. 0) then
-            !     call likelihood(fg_amp(350,k,2,1),fg_amp(350,k,:,2),beta_s(350,k),k)
+            !     call likelihood(fg_amp(150,k,2,1),fg_amp(150,k,:,2),beta_s(150,k),k)
             ! end if
             
         end do    
@@ -863,6 +853,16 @@ program dust_fit
                 end if
             end do
         end do
+        do i =1,x
+           l = 1
+           do j = 1, z
+              if (j /= j_corr) then
+              write(*,*) T_nu(i,x+l,j)
+              l = l + 1
+              end if
+           end do
+        end do
+stop
 
         A(:,:) = 0.d0
         do j=1, nbands
@@ -892,7 +892,7 @@ program dust_fit
         do while (l .lt. (nbands-1))
             do j= 1, z
                 if (j /= j_corr) then
-                    fg_amp(0,map_n,j,2) = b(x+l)
+                    fg_amp(:,map_n,j,2) = b(x+l)
                     l = l + 1
                 end if
             end do
@@ -1032,34 +1032,34 @@ program dust_fit
     subroutine write_data
         implicit none
 
-        title = trim(direct) // 'pixel_350_A_d.dat'
+        title = trim(direct) // 'pixel_150_A_d.dat'
         inquire(file=title,exist=exist)
         if (exist) then
             open(30,file=title, status="old",position="append", action="write")
         else
             open(30,file=title, status="new", action="write")
         endif
-        write(30,*) dust_map(350,k,loc)
+        write(30,*) dust_map(150,k,loc)
         close(30)
 
-        title = trim(direct) // 'pixel_350_A_s.dat'
+        title = trim(direct) // 'pixel_150_A_s.dat'
         inquire(file=title,exist=exist)
         if (exist) then
             open(31,file=title, status="old",position="append", action="write")
         else
             open(31,file=title, status="new", action="write")
         endif
-        write(31,*) fg_amp(350,k,loc,1)
+        write(31,*) fg_amp(150,k,loc,1)
         close(31)
 
-        title = trim(direct) // 'pixel_350_beta_s.dat'
+        title = trim(direct) // 'pixel_150_beta_s.dat'
         inquire(file=title,exist=exist)
         if (exist) then
             open(32,file=title, status="old",position="append", action="write")
         else
             open(32,file=title, status="new", action="write")
         endif
-        write(32,*) beta_s(350,k)
+        write(32,*) beta_s(150,k)
         close(32)
 
         title = trim(direct) // 'total_chisq.dat'
@@ -1133,8 +1133,8 @@ program dust_fit
         do x = 1, 200
             signal = 0.d0
             do z = 1, nbands
-                signal    = A_s(x)*compute_spectrum('synch',nuz(j),pars) + fg_amp(350,map_n,z,2)*dust_temp(350,map_n)
-                A_s_ln(x) = A_s_ln(x) + (((maps(350,map_n,z) - signal)**2.d0)/(rmss(350,map_n,z)**2))
+                signal    = A_s(x)*compute_spectrum('synch',nuz(j),pars) + fg_amp(150,map_n,z,2)*dust_temp(150,map_n)
+                A_s_ln(x) = A_s_ln(x) + (((maps(150,map_n,z) - signal)**2.d0)/(rmss(150,map_n,z)**2))
             end do
             A_s_like(x) = exp((-0.5d0)*A_s_ln(x))
         end do 
