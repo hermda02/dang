@@ -47,4 +47,5 @@ for xi in range(ndim):
         ax.axvline(means[yi],color=col[yi])
         ax.axhline(means[xi],color=col[xi])
 
-plt.show()
+plt.savefig('corner_plot.png',dpi=300,bbox_inches='tight')
+

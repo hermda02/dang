@@ -13,34 +13,25 @@ plt.rc('text', usetex=True)
 planck  = np.loadtxt('/home/daniel/graduate_school/masters_thesis/tools/Planck_color.txt')/255.
 pl_cmap = colors.LinearSegmentedColormap.from_list('planck',planck)
 
-a_s = np.loadtxt('pixel_350_A_s.dat')
-b_s = np.loadtxt('pixel_350_beta_s.dat')
+a_s = np.loadtxt('pixel_150_A_s.dat')
+b_s = np.loadtxt('pixel_150_beta_s.dat')
 chi = np.loadtxt('total_chisq.dat')
 
 iterations = len(a_s)
 
 x   = np.linspace(1,iterations,iterations)
 
-plt.plot(x,a_s)
-plt.title(r'$A_s$ trace plot')
-plt.ylabel(r'$A_s$')
-plt.xlabel('Gibbs iteration')
-plt.show()
+# plt.plot(x,a_s)
+# plt.show()
 
-plt.plot(x,b_s)
-plt.title(r'$\beta_s$ trace plot')
-plt.ylabel(r'$\beta_s$')
-plt.xlabel('Gibbs iteration')
-plt.show()
+# plt.plot(x,b_s)
+# plt.show()
 
-plt.plot(x,chi)
-plt.title(r'$\chi^2$ trace plot')
-plt.xlabel('Gibbs iteration')
-plt.ylabel(r'$\chi^2$')
-plt.yscale('log')
-plt.show()
+# plt.plot(x,chi)
+# plt.yscale('log')
+# plt.show()
 
-xedges = np.arange(-7.52, 7.53, 0.0001)
+xedges = np.arange(-3, -1.99, 0.01)
 yedges = np.arange(-3.3, -2.795, 0.005)
 
 d, xedges, yedges = np.histogram2d(a_s, b_s, bins=(xedges,yedges)) 
