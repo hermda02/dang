@@ -68,10 +68,10 @@ program dust_fit
 
     !----------------------------------------------------------------------------------------------------------
     allocate(dust_temp(0:npix-1,nmaps), synch_temp(0:npix-1,nmaps), dust_amps(nbands))
-    allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands), model(0:npix-1,nmaps,nbands))
-    allocate(res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps), mask(0:npix-1,1))
+    allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands))!, model(0:npix-1,nmaps,nbands))
+    allocate(mask(0:npix-1,1))!, res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps))
     allocate(fg_amp(0:npix-1,nmaps,nbands,3), beta_s(0:npix-1,nmaps))
-    allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps), HI(0:npix-1,nmaps))
+    !allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps), HI(0:npix-1,nmaps))
     allocate(cmb_map(0:npix-1,nmaps,nbands), dust_map(0:npix-1,nmaps,nbands), synch_map(0:npix-1,nmaps,nbands))
     allocate(nuz(nbands), bands(nbands), par(2))
 
@@ -79,7 +79,7 @@ program dust_fit
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
-    niter             = 10         ! # of MC-MC iterations
+    niter             = 5          ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
     output_iter       = 1          ! Output maps every <- # of iterations
     like_iter         = 1000       ! Output likelihood test every <- # of iterations
@@ -205,21 +205,21 @@ program dust_fit
             ! synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
-            res       = maps - synch_map - dust_map
+!            res       = maps - synch_map - dust_map
 
-            call compute_chisq(fg_amp,k)
+            !call compute_chisq(fg_amp,k)
 
-            if (mod(iter, 1) == 0 .or. iter == 1) then
-                write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 5e10.3)')&
-                 iter, " - chisq: " , chisq, " - A_s: ",&
-                 fg_amp(150,k,2,1),  " - beta_s: ",&
-                 sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps
-            end if
+            !if (mod(iter, 1) == 0 .or. iter == 1) then
+            !    write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 5e10.3)')&
+            !     iter, " - chisq: " , chisq, " - A_s: ",&
+            !     fg_amp(150,k,2,1),  " - beta_s: ",&
+            !     sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps
+            !end if
 
-            call write_data
-            if (mod(iter,output_iter) .EQ. 0) then
-                call write_maps(k)
-            end if
+ !           call write_data
+ !           if (mod(iter,output_iter) .EQ. 0) then
+ !               call write_maps(k)
+ !           end if
 
             ! if (mod(iter,like_iter) .EQ. 0) then
             !     call likelihood(fg_amp(150,k,2,1),fg_amp(150,k,:,2),beta_s(150,k),k)
@@ -846,23 +846,26 @@ program dust_fit
         do i=1,x
             l = 1
             do j=1, z
-                T_nu(i,i,j)      = (nuz(j)/nu_ref_s)**beta_s(i-1,map_n)
-                if (j /= j_corr) then
+               T_nu(i,i,j)      = (nuz(j)/nu_ref_s)**beta_s(i-1,map_n)
+               if (j /= j_corr) then
                     T_nu(i,x+l,j) = dust_temp(i-1,map_n)
                     l = l + 1
                 end if
             end do
         end do
+        !do j =1, z
+        !   write(*,*) T_nu(1,1,j)
+        !   write(*,*) T_nu(x/2,x/2,j)
+        !   write(*,*) T_nu(x,x,j)
+        !end do
         do i =1,x
            l = 1
            do j = 1, z
               if (j /= j_corr) then
-              write(*,*) T_nu(i,x+l,j)
               l = l + 1
               end if
            end do
         end do
-stop
 
         A(:,:) = 0.d0
         do j=1, nbands
@@ -874,11 +877,24 @@ stop
             c(:)          = c(:) + c_1(:,j)
         end do
 
-        !write(*,*) T_nu(1,1,1), T_nu(20,20,1)
-        !write(*,*) dats(1,1), dats(20,1), covar(1,1,1), covar(20,20,1)
-        !write(*,*) A_1(1,1,1), A_1(20,20,1), A_2(1,1,1), A_2(20,20,1)
-        !write(*,*) A_1(1,1,1)*T_nu(1,1,1), A_1(20,20,1)*T_nu(20,20,1)
-        !write(*,*) A(1,1), A(20,20)
+        write(*,*) sum(abs(A))
+
+!        write(*,*) T_nu(1,1,1), T_nu(20,20,1)
+!        write(*,*) ''
+!        write(*,*) dats(1,1), dats(20,1), covar(1,1,1), covar(20,20,1)
+!        write(*,*) ''
+!        write(*,*) A_1(1,1,1), A_1(20,20,1), A_2(1,1,1), A_2(20,20,1)
+!        write(*,*) ''
+!        write(*,*) A_1(1,1,1)*T_nu(1,1,1), A_1(20,20,1)*T_nu(20,20,1)
+!        write(*,*) ''
+!        write(*,*) A(1,1), A(20,20)
+!        write(*,*) ''
+
+!        do i = 1, y
+!           do j = 1, y
+!              write(*,*) A(i,j) - A(j,i)
+!           end do
+!        end do
 
         call cholesky_decomp(A,lower,y)
         upper = transpose(lower)
@@ -898,7 +914,7 @@ stop
             end do
         end do
         write(*,*) ''
-        write(*,*) b(x+1:)
+        !write(*,*) b(x+1:)
         write(*,*) ''
         deallocate(A_1)
         deallocate(A_2)
@@ -916,30 +932,36 @@ stop
 
     end subroutine sample_joint_amp
   
-    subroutine cholesky_decomp(A,lower,n)
+    subroutine cholesky_decomp(mat,low,n)
         implicit none
-        real(dp), dimension(:,:), intent(in)  :: A
-        real(dp), dimension(:,:), intent(out) :: lower
+        real(dp), dimension(:,:), intent(in)  :: mat
+        real(dp), dimension(:,:), intent(out) :: low
         integer(i4b),             intent(in)  :: n
         integer(i4b)                          :: ip
         real(dp)                              :: s
 
+
+        !low(:,:) = 0.d0
         do i = 1, n
             do j = 1, i
                 s = 0
                 if (j == i) then
                     do ip = 1, j-1
-                        s = s + (lower(ip,j))**2
+                        s = s + (low(ip,j))**2
                     end do
-                    lower(j,j) = sqrt(A(j,j)-s)
+                    low(j,j) = sqrt(mat(j,j)-s)
                 else
                     do ip = 1, j-1
-                        s = lower(ip,i)*lower(ip,j)
+                        s = low(ip,i)*low(ip,j)
                     end do
-                    lower(j,i) = (A(j,i)-s)/lower(j,j)
+                    low(j,i) = (mat(j,i)-s)/low(j,j)
                 end if
             end do
         end do
+        
+        !do i = 1, n
+           
+
 
     end subroutine cholesky_decomp
 
