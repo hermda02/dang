@@ -877,7 +877,10 @@ program dust_fit
             c(:)          = c(:) + c_1(:,j)
         end do
 
-        write(*,*) sum(abs(A))
+        write(*,*) 'sum(abs(A)) = ', sum(abs(A))
+        write(*,*) 'sum(abs(T_nu)) = ', sum(abs(T_nu))
+        write(*,*) 'sum(abs(T_nu)) = ', sum(abs(T_nu_T))
+        write(*,*) 'sum(abs(covar)) = ', sum(abs(covar))
 
 !        write(*,*) T_nu(1,1,1), T_nu(20,20,1)
 !        write(*,*) ''
