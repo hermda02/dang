@@ -46,27 +46,39 @@ program dust_fit
     real(dp)                                     :: nu_ref_s, beta_s_std, beta_s_mu
     real(dp)                                     :: nu_ref_d, beta_d_std, beta_d_mu, T_d_mu
     real(dp)                                     :: chisq
-    character(len=80),  dimension(180)           :: header
-    character(len=80),  dimension(3)             :: tqu
+    character(len=80), dimension(180)            :: header
+    character(len=80), dimension(3)              :: tqu
     character(len=80), allocatable, dimension(:) :: bands
     character(len=5)                             :: iter_str
-  
-    dust_file  = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
-    mask_file  = 'data/mask_fullsky_n0004.fits'
-    synch_file = 'data/test_data/temp_synch_030_n0004.fits'
-    tqu(1)     = 'T'
-    tqu(2)     = 'Q'
-    tqu(3)     = 'U'
-    i          = getsize_fits(dust_file, nside=nside, ordering=ordering, nmaps=nmaps)
-    npix       = nside2npix(nside) 
-    nbands     = 4
-    nfgs       = 2
-    nlheader   = size(header)
-    nmaps      = 1
 
+    !----------------------------------------------------------------------------------------------------------
+    dust_file         = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
+    mask_file         = 'data/mask_fullsky_n0004.fits'
+    synch_file        = 'data/test_data/temp_synch_030_n0004.fits'
+    tqu(1)            = 'T'
+    tqu(2)            = 'Q'
+    tqu(3)            = 'U'
+    i                 = getsize_fits(dust_file, nside=nside, ordering=ordering, nmaps=nmaps)
+    npix              = nside2npix(nside) 
+    nbands            = 6
+    nfgs              = 2
+    nlheader          = size(header)
+    nmaps             = 1
+    niter             = 5          ! # of MC-MC iterations
+    iterations        = 100        ! # of iterations in the samplers
+    output_iter       = 1          ! Output maps every <- # of iterations
+    like_iter         = 1000       ! Output likelihood test every <- # of iterations
+    nu_ref_s          = 30.0d0     ! Synchrotron reference frequency
+    nu_ref_d          = 353.d0     ! Dust reference frequency
+    beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
+    beta_s_std        = 0.1d0      ! \beta_synch Gaussian prior std
+    beta_samp_nside   = 8          ! \beta_synch nside sampling
+    j_corr            = 1          ! which band number has been dust corrected
+    output_fg         = .true.     ! Option for outputting foregrounds for all bands
+    test              = .true.     ! Testing Metropolis-Hasting apparatus
+    !----------------------------------------------------------------------------------------------------------
     call getarg(1,arg1)
     direct = arg1
-
     !----------------------------------------------------------------------------------------------------------
     allocate(dust_temp(0:npix-1,nmaps), synch_temp(0:npix-1,nmaps), dust_amps(nbands))
     allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands), nodust(0:npix-1,nmaps,nbands))!, model(0:npix-1,nmaps,nbands))
@@ -75,37 +87,24 @@ program dust_fit
     !allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps), HI(0:npix-1,nmaps))
     allocate(cmb_map(0:npix-1,nmaps,nbands), dust_map(0:npix-1,nmaps,nbands), synch_map(0:npix-1,nmaps,nbands))
     allocate(nuz(nbands), bands(nbands), par(2))
-
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
-    !----------------------------------------------------------------------------------------------------------
-    niter             = 5          ! # of MC-MC iterations
-    iterations        = 100        ! # of iterations in the samplers
-    output_iter       = 1          ! Output maps every <- # of iterations
-    like_iter         = 1000       ! Output likelihood test every <- # of iterations
-    nu_ref_s          = 30.0d0     ! Synchrotron reference frequency
-    nu_ref_d          = 353.d0     ! Dust reference frequency
-    beta_s            = -3.10d0    ! Synchrotron beta initial guess
-    beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
-    beta_s_std        = 0.1d0      ! \beta_synch Gaussian prior std
-    beta_samp_nside   = 4          ! \beta_synch nside sampling
-    j_corr            = 4          ! which band number has been dust corrected
-    output_fg         = .true.     ! Option for outputting foregrounds for all bands
-    test              = .true.     ! Testing Metropolis-Hasting apparatus
-    !----------------------------------------------------------------------------------------------------------
+    beta_s     = -3.10d0    ! Synchrotron beta initial guess
 
-    bands(1)   = ('sim_data_020_')
-    bands(2)   = ('sim_data_030_')
-    bands(3)   = ('sim_data_045_')
-    bands(4)   = ('sim_data_070_')
-!    bands(5)   = ('sim_data_100_')
+    bands(1)   = ('new_sim_020_')
+    bands(2)   = ('new_sim_045_')
+    bands(3)   = ('new_sim_070_')
+    bands(4)   = ('new_sim_100_')
+    bands(5)   = ('new_sim_200_')
+    bands(6)   = ('new_sim_353_')
 
     nuz(1)     = 20.0d0
-    nuz(2)     = 30.0d0
-    nuz(3)     = 45.0d0
-    nuz(4)     = 70.0d0
-!    nuz(5)     = 100.0d0
+    nuz(2)     = 45.0d0
+    nuz(3)     = 70.0d0
+    nuz(4)     = 100.0d0
+    nuz(5)     = 200.0d0
+    nuz(6)     = 353.0d0
 
     loc        = minloc(abs(nuz-nu_ref_s),1)
 
@@ -132,8 +131,8 @@ program dust_fit
     allocate(chi(iterations*niter+1), tump(iterations*niter+1), accept(iterations*niter+1), prob(iterations*niter+1))
 
     !----------------------------------------------------------------------------------------------------------
-
-    fg_amp(:,:,loc,1) = synch_temp
+    ! sim_data details
+    ! fg_amp(:,:,loc,1) = synch_temp
 
     ! fg_amp(:,1,1,2) = 1.644429d-2
     ! fg_amp(:,1,2,2) = 8.39923d-3
@@ -144,6 +143,15 @@ program dust_fit
     ! do j = 1, nbands
     !     dust_map(:,1,j) = fg_amp(:,1,j,2)*dust_temp(:,1)
     ! end do
+
+    ! new_sim details
+    ! power-law synch with beta_s = -3.1 from 20-100 GHz
+
+    ! dust:
+    !    70 = 0.10941946*dust_353
+    !   100 = 0.18639474*dust_353
+    !   200 = 0.49620873*dust_353
+    !   353 = 1.00000000*dust_353
 
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
@@ -213,7 +221,7 @@ program dust_fit
             call compute_chisq(fg_amp,k)
 
             if (mod(iter, 1) == 0 .or. iter == 1) then
-                write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 5e10.3)')&
+                write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
                  iter, " - chisq: " , chisq, " - A_s: ",&
                  fg_amp(100,k,loc,1),  " - beta_s: ",&
                  sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps
@@ -1112,7 +1120,7 @@ program dust_fit
         else
             open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="new", action="write")
         endif
-        write(34,'(12(E17.8))') dust_amps
+        write(34,'(6(E17.8))') dust_amps
         close(34)
 
     end subroutine write_data
