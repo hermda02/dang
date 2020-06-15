@@ -936,7 +936,6 @@ program dust_fit
             end do
         end do
 
-
         deallocate(amp_prop)
         deallocate(A_1)
         deallocate(A_2)
