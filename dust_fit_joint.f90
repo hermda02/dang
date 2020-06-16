@@ -27,7 +27,7 @@ program dust_fit
     real(dp)           :: c       = 2.99792458d8
     real(dp)           :: T_CMB   = 2.7255d0
   
-    integer(i4b)       :: i, j, k, l, iter, npix, nside, nmaps, ordering, loc, j_corr
+    integer(i4b)       :: i, j, k, l, iter, npix, nside, nmaps, ordering, loc
     integer(i4b)       :: beta_samp_nside, nlheader, niter, nbands, nfgs, iterations
     integer(i4b)       :: output_iter, like_iter
     real(dp)           :: nullval
@@ -50,6 +50,7 @@ program dust_fit
     character(len=80), dimension(3)              :: tqu
     character(len=80), allocatable, dimension(:) :: bands
     character(len=5)                             :: iter_str
+    logical(lgt), allocatable, dimension(:)      :: j_corr
 
     !----------------------------------------------------------------------------------------------------------
     dust_file         = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
@@ -64,6 +65,7 @@ program dust_fit
     nfgs              = 2
     nlheader          = size(header)
     nmaps             = 1
+
     niter             = 5          ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
     output_iter       = 1          ! Output maps every <- # of iterations
@@ -73,14 +75,15 @@ program dust_fit
     beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
     beta_s_std        = 0.1d0      ! \beta_synch Gaussian prior std
     beta_samp_nside   = 8          ! \beta_synch nside sampling
-    j_corr            = 1          ! which band number has been dust corrected
     output_fg         = .true.     ! Option for outputting foregrounds for all bands
     test              = .true.     ! Testing Metropolis-Hasting apparatus
     !----------------------------------------------------------------------------------------------------------
+
     call getarg(1,arg1)
     direct = arg1
+
     !----------------------------------------------------------------------------------------------------------
-    allocate(dust_temp(0:npix-1,nmaps), synch_temp(0:npix-1,nmaps), dust_amps(nbands))
+    allocate(dust_temp(0:npix-1,nmaps), synch_temp(0:npix-1,nmaps), dust_amps(nbands),j_corr(nbands))
     allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands), nodust(0:npix-1,nmaps,nbands))!, model(0:npix-1,nmaps,nbands))
     allocate(mask(0:npix-1,1), res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps))
     allocate(fg_amp(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
@@ -107,7 +110,6 @@ program dust_fit
     nuz(6)     = 353.0d0
 
     loc        = minloc(abs(nuz-nu_ref_s),1)
-
     !----------------------------------------------------------------------------------------------------------
     ! Read maps
 
@@ -125,6 +127,14 @@ program dust_fit
     call read_bintab(mask_file,mask,npix,1,nullval,anynull,header=header)
     call read_bintab(synch_file,synch_temp,npix,nmaps,nullval,anynull,header=header)
 
+    !----------------------------------------------------------------------------------------------------------
+    ! Choose which bands for fitting templates
+    j_corr(1) = .false.
+    j_corr(2) = .true.
+    j_corr(3) = .true.
+    j_corr(4) = .true.
+    j_corr(5) = .true.
+    j_corr(6) = .true.      
     !----------------------------------------------------------------------------------------------------------
     ! Metropolis-Hastings testing things
 
@@ -148,9 +158,10 @@ program dust_fit
     ! power-law synch with beta_s = -3.1 from 20-100 GHz
 
     ! dust:
-    !    70 = 0.10941946*dust_353
-    !   100 = 0.18639474*dust_353
-    !   200 = 0.49620873*dust_353
+    !    45 = 0.0370425187144*dust_353
+    !    70 = 0.0751133882571*dust_353
+    !   100 = 0.132910864952*dust_353
+    !   200 = 0.402910396102*dust_353
     !   353 = 1.00000000*dust_353
 
     !----------------------------------------------------------------------------------------------------------
@@ -848,7 +859,7 @@ program dust_fit
         chi0 = chisq
 
         x = npix
-        y = npix+nbands-1
+        y = npix+nbands-2
         z = nbands
 
         allocate(amp_prop(0:x-1,nmaps,z,nfgs))
@@ -882,8 +893,8 @@ program dust_fit
         do i=1,x
             l = 1
             do j=1, z
-               T_nu(i,i,j)      = (nuz(j)/nu_ref_s)**beta_s(i-1,map_n)
-               if (j /= j_corr) then
+                T_nu(i,i,j) = (nuz(j)/nu_ref_s)**beta_s(i-1,map_n)
+                if (j_corr(j) .eqv. .true.) then
                     T_nu(i,x+l,j) = dust_temp(i-1,map_n)
                     l = l + 1
                 end if
@@ -904,12 +915,12 @@ program dust_fit
         call forward_sub(lower,d,c)
         call backward_sub(upper,b,d)
 
-        !do i =1, x
+        !do i = 1, x
         !    amp_prop(i-1,map_n,loc,1) = b(i)
         !end do
         !l = 1
         !do while (l .lt. (nbands-1))
-        !    do j= 1, z
+        !    do j = 1, z
         !        if (j /= j_corr) then
         !            amp_prop(:,map_n,j,2) = b(x+l)
         !            l = l + 1
@@ -929,7 +940,7 @@ program dust_fit
         l = 1
         do while (l .lt. (nbands-1))
             do j= 1, z
-                if (j /= j_corr) then
+                if (j_corr(j) .eqv. .true.) then
                     fg_amp(:,map_n,j,2) = b(x+l)
                     l = l + 1
                 end if
