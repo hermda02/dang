@@ -52,6 +52,9 @@ program dust_fit
     character(len=5)                             :: iter_str
     logical(lgt), allocatable, dimension(:)      :: j_corr
 
+    real(dp), allocatable, dimension(:,:)        :: mat_test, mat_l, mat_u
+    real(dp), allocatable, dimension(:)          :: x, b, d
+
     !----------------------------------------------------------------------------------------------------------
     dust_file         = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
     mask_file         = 'data/mask_fullsky_n0004.fits'
@@ -92,6 +95,7 @@ program dust_fit
     allocate(nuz(nbands), bands(nbands), par(2))
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
+    allocate(mat_test(3,3), mat_l(3,3), mat_u(3,3), x(3), b(3), d(3))
     !----------------------------------------------------------------------------------------------------------
     beta_s     = -3.10d0    ! Synchrotron beta initial guess
 
@@ -114,7 +118,8 @@ program dust_fit
     ! Read maps
 
     do j = 1, nbands
-        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'rms_n0004.fits',rms,npix,nmaps,nullval,anynull,header=header)
+        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'rms_n0004.fits',&
+        rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
         call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'n0004.fits', &
         map,npix,nmaps,nullval,anynull,header=header)
@@ -190,6 +195,43 @@ program dust_fit
             call compute_chisq(fg_amp,k)
 
             write(*,*) 'Chisq = ', chisq
+
+            ! mat_test(1,1) = 4
+            ! mat_test(1,2) = 12
+            ! mat_test(1,3) = -16
+            ! mat_test(2,1) = 12
+            ! mat_test(2,2) = 37
+            ! mat_test(2,3) = -43
+            ! mat_test(3,1) = -16
+            ! mat_test(3,2) = -43
+            ! mat_test(3,3) = 98
+
+            ! b(1) = 0
+            ! b(2) = 6
+            ! b(3) = 39
+
+            ! x(1) = 1
+            ! x(2) = 1
+            ! x(3) = 1
+
+            ! write(*,*) matmul(mat_test,x)
+            ! write(*,*) b
+            ! stop
+
+            ! call cholesky_decomp(mat_test, mat_l, 3)
+            ! ! write(*,*) mat_l
+            ! mat_u = transpose(mat_l)
+            ! call forward_sub(mat_l,d,b)
+            ! call backward_sub(mat_u,x,d)
+
+            ! write(*,*) x
+            ! stop
+
+            ! call compute_cg(mat_test,x,b,3)
+
+            ! write(*,*) x
+            ! stop
+
 
             write(*,*) 'Jointly Sampling Amplitudes' 
             call sample_joint_amp(npix,k)
@@ -920,31 +962,11 @@ program dust_fit
         upper = transpose(lower)
         call forward_sub(lower,d,c)
         call backward_sub(upper,b,d)
-
-        !do i = 1, x
-        !    amp_prop(i-1,map_n,loc,1) = b(i)
-        !end do
-        !l = 1
-        !do while (l .lt. (nbands-1))
-        !    do j = 1, z
-        !        if (j /= j_corr) then
-        !            amp_prop(:,map_n,j,2) = b(x+l)
-        !            l = l + 1
-        !        end if
-        !    end do
-        !end do
-        !do i = 0, npix-1
-        !    par(1) = beta_s(i,map_n)
-        !    do j = 1, nbands
-        !        amp_prop(i,map_n,j,1) = amp_prop(i,map_n,loc,1)*compute_spectrum('synch',nuz(j),par)
-        !    end do
-        !end do
-
         do i =1, x
             fg_amp(i-1,map_n,loc,1) = b(i)
         end do
         l = 1
-        do while (l .lt. (nbands-1))
+        do while (l .lt. (nbands-nskip))
             do j= 1, z
                 if (j_corr(j) .eqv. .true.) then
                     fg_amp(:,map_n,j,2) = b(x+l)
@@ -1012,7 +1034,7 @@ program dust_fit
         do i = 1, n
             xf(i) = bf(i)
             do m = 1, i-1
-                xf(i) = xf(i)-l(i,m)*xf(m) 
+                xf(i) = xf(i)-l(m,i)*xf(m) 
             end do
             xf(i) = xf(i)/L(i,i)
         end do
@@ -1033,11 +1055,63 @@ program dust_fit
         do i = n-1, 1, -1
             xb(i) = bb(i)
             do m = n, i+1, -1
-                xb(i) = xb(i) - U(i,m)*xb(m)
+                xb(i) = xb(i) - U(m,i)*xb(m)
             end do
             xb(i) = xb(i)/U(i,i)
         end do
     end subroutine backward_sub
+
+    subroutine compute_cg(A,x,b,n)
+        
+        ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
+        ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
+
+        implicit none
+
+        real(dp), dimension(:,:), intent(in) :: A
+        real(dp), dimension(:), intent(in)   :: b
+        real(dp), dimension(:), intent(out)  :: x
+        integer(i4b), intent(in)             :: n
+        real(dp), allocatable, dimension(:)  :: r, q, d, x_init
+        real(dp)                             :: epsil, alpha, beta, delta_0
+        real(dp)                             :: delta_old, delta_new
+        integer(i4b)                         :: i_max
+
+        allocate(r(n),q(n),d(n),x_init(n))
+
+        x_init(:) = 1.0d0
+        i_max = 1000
+
+        i = 0
+        epsil = 1.0d-8
+
+        r = b - matmul(A,x_init)
+        d = r
+        delta_new = sum(r*r)
+        delta_0   = delta_new
+
+        do while( (i .lt. i_max) .and. (delta_new .gt. (epsil**2)*delta_0))
+            q = matmul(A,d)
+            alpha = delta_new/(sum(d*q))
+            x = x_init + alpha*d
+            if (mod(i,50) == 0) then
+                r = b - matmul(A,x)
+            else
+                r = r - alpha*q
+            end if
+            delta_old = delta_new
+            delta_new = sum(r*r)
+            beta = delta_new/delta_old
+            d = r + beta*d
+            i = i + 1
+        end do
+
+        deallocate(r)
+        deallocate(q)
+        deallocate(d)
+        deallocate(x_init)
+
+    end subroutine compute_cg
 
     subroutine write_maps(nm)
         implicit none
