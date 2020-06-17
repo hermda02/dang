@@ -55,7 +55,7 @@ program dust_fit
     !----------------------------------------------------------------------------------------------------------
     dust_file         = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
     mask_file         = 'data/mask_fullsky_n0004.fits'
-    synch_file        = 'data/test_data/temp_synch_030_n0004.fits'
+    synch_file        = 'data/temp_synch_030_n0004.fits'
     tqu(1)            = 'T'
     tqu(2)            = 'Q'
     tqu(3)            = 'U'
@@ -70,7 +70,7 @@ program dust_fit
     iterations        = 100        ! # of iterations in the samplers
     output_iter       = 1          ! Output maps every <- # of iterations
     like_iter         = 1000       ! Output likelihood test every <- # of iterations
-    nu_ref_s          = 30.0d0     ! Synchrotron reference frequency
+    nu_ref_s          = 45.0d0     ! Synchrotron reference frequency
     nu_ref_d          = 353.d0     ! Dust reference frequency
     beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
     beta_s_std        = 0.1d0      ! \beta_synch Gaussian prior std
@@ -95,12 +95,12 @@ program dust_fit
     !----------------------------------------------------------------------------------------------------------
     beta_s     = -3.10d0    ! Synchrotron beta initial guess
 
-    bands(1)   = ('new_sim_020_')
-    bands(2)   = ('new_sim_045_')
-    bands(3)   = ('new_sim_070_')
-    bands(4)   = ('new_sim_100_')
-    bands(5)   = ('new_sim_200_')
-    bands(6)   = ('new_sim_353_')
+    bands(1)   = ('norm_pol_020_')
+    bands(2)   = ('norm_pol_045_')
+    bands(3)   = ('norm_pol_070_')
+    bands(4)   = ('norm_pol_100_')
+    bands(5)   = ('norm_pol_200_')
+    bands(6)   = ('norm_pol_353_')
 
     nuz(1)     = 20.0d0
     nuz(2)     = 45.0d0
@@ -114,9 +114,9 @@ program dust_fit
     ! Read maps
 
     do j = 1, nbands
-        call read_bintab('data/test_data/' // trim(bands(j)) // 'rms_n0004.fits',rms,npix,nmaps,nullval,anynull,header=header)
+        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'rms_n0004.fits',rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
-        call read_bintab('data/test_data/' // trim(bands(j)) // 'n0004.fits', &
+        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'n0004.fits', &
         map,npix,nmaps,nullval,anynull,header=header)
         maps(:,:,j) = map
     end do
@@ -154,7 +154,7 @@ program dust_fit
     !     dust_map(:,1,j) = fg_amp(:,1,j,2)*dust_temp(:,1)
     ! end do
 
-    ! new_sim details
+    ! norm_pol details
     ! power-law synch with beta_s = -3.1 from 20-100 GHz
 
     ! dust:
@@ -180,8 +180,6 @@ program dust_fit
             write(*,*) 'Stokes U'
             write(*,*) '-----------------------'
         end if 
-
-        write(*,*) fg_amp(100,k,loc,1)
 
         do iter = 1, niter
         
@@ -854,12 +852,20 @@ program dust_fit
         real(dp), allocatable, dimension(:,:)     :: A, lower, upper, c_1, dats
         real(dp), allocatable, dimension(:)       :: b, c, d
         real(dp)                                  :: chi0, chi_prop
-        integer(i4b)                              :: x, y, z
+        integer(i4b)                              :: x, y, z, nskip
+
+        nskip = 0
+
+        do j =1, nbands
+           if (j_corr(j) .eqv. .false.) then
+              nskip = nskip + 1
+           end if
+        end do
 
         chi0 = chisq
 
         x = npix
-        y = npix+nbands-2
+        y = npix+nbands-nskip
         z = nbands
 
         allocate(amp_prop(0:x-1,nmaps,z,nfgs))
