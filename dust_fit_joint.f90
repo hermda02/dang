@@ -196,19 +196,19 @@ program dust_fit
 
             write(*,*) 'Chisq = ', chisq
 
-            ! mat_test(1,1) = 4
-            ! mat_test(1,2) = 12
-            ! mat_test(1,3) = -16
-            ! mat_test(2,1) = 12
-            ! mat_test(2,2) = 37
-            ! mat_test(2,3) = -43
-            ! mat_test(3,1) = -16
-            ! mat_test(3,2) = -43
-            ! mat_test(3,3) = 98
+            mat_test(1,1) = 4
+            mat_test(1,2) = 12
+            mat_test(1,3) = -16
+            mat_test(2,1) = 12
+            mat_test(2,2) = 37
+            mat_test(2,3) = -43
+            mat_test(3,1) = -16
+            mat_test(3,2) = -43
+            mat_test(3,3) = 98
 
-            ! b(1) = 0
-            ! b(2) = 6
-            ! b(3) = 39
+            b(1) = 0
+            b(2) = 6
+            b(3) = 39
 
             ! x(1) = 1
             ! x(2) = 1
@@ -218,19 +218,20 @@ program dust_fit
             ! write(*,*) b
             ! stop
 
-            ! call cholesky_decomp(mat_test, mat_l, 3)
-            ! ! write(*,*) mat_l
-            ! mat_u = transpose(mat_l)
-            ! call forward_sub(mat_l,d,b)
-            ! call backward_sub(mat_u,x,d)
+            call cholesky_decomp(mat_test, mat_l, 3)
+            ! write(*,*) mat_l
+            mat_u = transpose(mat_l)
+            call forward_sub(mat_l,d,b)
+            call backward_sub(mat_u,x,d)
 
-            ! write(*,*) x
+            write(*,*) x
+            write(*,*) ''
             ! stop
 
-            ! call compute_cg(mat_test,x,b,3)
+            call compute_cg(mat_test,x,b,3)
 
-            ! write(*,*) x
-            ! stop
+            write(*,*) x
+            stop
 
 
             write(*,*) 'Jointly Sampling Amplitudes' 
@@ -891,7 +892,7 @@ program dust_fit
         integer(i4b),              intent(in)     :: npix, map_n
         real(dp), allocatable, dimension(:,:,:,:) :: amp_prop
         real(dp), allocatable, dimension(:,:,:)   :: T_nu, T_nu_T, covar, A_1, A_2
-        real(dp), allocatable, dimension(:,:)     :: A, lower, upper, c_1, dats
+        real(dp), allocatable, dimension(:,:)     :: A, lower, upper, c_1, dats,Anv
         real(dp), allocatable, dimension(:)       :: b, c, d
         real(dp)                                  :: chi0, chi_prop
         integer(i4b)                              :: x, y, z, nskip
@@ -913,7 +914,7 @@ program dust_fit
         allocate(amp_prop(0:x-1,nmaps,z,nfgs))
         allocate(T_nu(x,y,z),T_nu_T(y,x,z),dats(x,z))
         allocate(A_1(y,x,z),A_2(y,y,z))
-        allocate(A(y,y),b(y),c(y),d(y))
+        allocate(A(y,y),b(y),c(y),d(y), Anv(y,y))
         allocate(lower(y,y),upper(y,y))
         allocate(covar(x,x,z),c_1(y,z))
 
@@ -958,6 +959,14 @@ program dust_fit
             c(:)          = c(:) + c_1(:,j)
         end do
 
+        ! Anv = inv(A)
+
+        ! do i = 1, y
+        !     write(*,*) sum(Anv(:,i))
+        ! end do
+
+        ! stop
+
         call cholesky_decomp(A,lower,y)
         upper = transpose(lower)
         call forward_sub(lower,d,c)
@@ -991,6 +1000,39 @@ program dust_fit
         deallocate(upper)
 
     end subroutine sample_joint_amp
+
+    function inv(A) result(Ainv)
+        real(dp), dimension(:,:), intent(in) :: A
+        real(dp), dimension(size(A,1),size(A,2)) :: Ainv
+      
+        real(dp), dimension(size(A,1)) :: work  ! work array for LAPACK
+        integer, dimension(size(A,1)) :: ipiv   ! pivot indices
+        integer :: n, info
+      
+        ! External procedures defined in LAPACK
+        external DGETRF
+        external DGETRI
+      
+        ! Store A in Ainv to prevent it from being overwritten by LAPACK
+        Ainv = A
+        n = size(A,1)
+      
+        ! DGETRF computes an LU factorization of a general M-by-N matrix A
+        ! using partial pivoting with row interchanges.
+        call DGETRF(n, n, Ainv, n, ipiv, info)
+      
+        if (info /= 0) then
+           stop 'Matrix is numerically singular!'
+        end if
+      
+        ! DGETRI computes the inverse of a matrix using the LU factorization
+        ! computed by DGETRF.
+        call DGETRI(n, Ainv, n, ipiv, work, n, info)
+      
+        if (info /= 0) then
+           stop 'Matrix inversion failed!'
+        end if
+      end function inv
   
     subroutine cholesky_decomp(mat,low,n)
         implicit none
@@ -1079,32 +1121,62 @@ program dust_fit
 
         allocate(r(n),q(n),d(n),x_init(n))
 
-        x_init(:) = 1.0d0
-        i_max = 1000
+        x_init(:) = 1.01d0
+        i_max = 20
+
+        ! write(*,*) A
+        ! write(*,*) ''
+        ! write(*,*) b
+        ! write(*,*) ''
+        ! write(*,*) x_init
+        ! stop
 
         i = 0
-        epsil = 1.0d-8
+        epsil = 1.0d-16
 
         r = b - matmul(A,x_init)
+        write(*,*) 'r_0',r
         d = r
+        ! write(*,*) d
+        ! stop
         delta_new = sum(r*r)
+        ! write(*,*) delta_new
+        ! stop
         delta_0   = delta_new
+        write(*,*) 'delta_0', delta_0
+        write(*,*) '---------------------'
+        write(*,*) ''
 
         do while( (i .lt. i_max) .and. (delta_new .gt. (epsil**2)*delta_0))
             q = matmul(A,d)
+            ! write(*,*) q
+            ! stop
             alpha = delta_new/(sum(d*q))
+            ! write(*,*) alpha
+            ! stop
             x = x_init + alpha*d
-            if (mod(i,50) == 0) then
-                r = b - matmul(A,x)
-            else
-                r = r - alpha*q
-            end if
+            ! write(*,*) x
+            ! stop
+            ! if (mod(i,50) == 0) then
+            !     r = b - matmul(A,x)
+            ! else
+            !     r = r - alpha*q
+            ! end if
+            r = b - matmul(A,x)
+            ! write(*,*) 'b-Ax', b - matmul(A,x)
+            write(*,*) 'r',r
+            ! write(*,*) ''
+            ! stop
             delta_old = delta_new
             delta_new = sum(r*r)
             beta = delta_new/delta_old
             d = r + beta*d
             i = i + 1
+            write(*,*) 'x',x
+            write(*,*) 'delta_new', delta_new
+            write(*,*) ''
         end do
+        stop
 
         deallocate(r)
         deallocate(q)
