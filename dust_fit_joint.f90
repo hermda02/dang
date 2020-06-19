@@ -56,6 +56,7 @@ program dust_fit
     real(dp), allocatable, dimension(:)          :: x, b, d
 
     !----------------------------------------------------------------------------------------------------------
+    ! General paramters
     template_file_01  = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
     template_file_02  = 'data/temp_synch_030_n0004.fits'
     mask_file         = 'data/mask_fullsky_n0004.fits'
@@ -69,15 +70,15 @@ program dust_fit
     nlheader          = size(header)
     nmaps             = 1
 
-    niter             = 5          ! # of MC-MC iterations
+    niter             = 1000       ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
-    output_iter       = 1          ! Output maps every <- # of iterations
+    output_iter       = 100        ! Output maps every <- # of iterations
     like_iter         = 1000       ! Output likelihood test every <- # of iterations
     nu_ref_s          = 45.0d0     ! Synchrotron reference frequency
     nu_ref_d          = 353.d0     ! Dust reference frequency
     beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
     beta_s_std        = 0.1d0      ! \beta_synch Gaussian prior std
-    beta_samp_nside   = 8          ! \beta_synch nside sampling
+    beta_samp_nside   = 4          ! \beta_synch nside sampling
     output_fg         = .true.     ! Option for outputting foregrounds for all bands
     test              = .true.     ! Testing Metropolis-Hasting apparatus
     !----------------------------------------------------------------------------------------------------------
@@ -86,18 +87,20 @@ program dust_fit
     direct = arg1
 
     !----------------------------------------------------------------------------------------------------------
+    ! Array allocation
     allocate(template_01(0:npix-1,nmaps), template_02(0:npix-1,nmaps), dust_amps(nbands),j_corr(nbands))
-    allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands), nodust(0:npix-1,nmaps,nbands))!, model(0:npix-1,nmaps,nbands))
+    allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands), nodust(0:npix-1,nmaps,nbands))
     allocate(mask(0:npix-1,1), res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps))
     allocate(fg_amp(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
-    !allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps), HI(0:npix-1,nmaps))
+    allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps), HI(0:npix-1,nmaps))
     allocate(cmb_map(0:npix-1,nmaps,nbands), dust_map(0:npix-1,nmaps,nbands), synch_map(0:npix-1,nmaps,nbands))
     allocate(nuz(nbands), bands(nbands), par(2))
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
     allocate(mat_test(3,3), mat_l(3,3), mat_u(3,3), x(3), b(3), d(3))
     !----------------------------------------------------------------------------------------------------------
-    beta_s     = -3.10d0    ! Synchrotron beta initial guess
+    beta_s     = -3.095d0    ! Synchrotron beta initial guess
+    beta_d     = 1.60d0     ! Dust beta initial guess
 
     bands(1)   = ('norm_pol_020_')
     bands(2)   = ('norm_pol_045_')
@@ -133,6 +136,7 @@ program dust_fit
     call read_bintab(template_file_02,template_02,npix,nmaps,nullval,anynull,header=header)
 
     !----------------------------------------------------------------------------------------------------------
+    !----------------------------------------------------------------------------------------------------------
     ! Choose which bands for fitting templates
     j_corr(1) = .false.
     j_corr(2) = .true.
@@ -141,35 +145,10 @@ program dust_fit
     j_corr(5) = .true.
     j_corr(6) = .true.      
     !----------------------------------------------------------------------------------------------------------
-    ! Metropolis-Hastings testing things
-
-    allocate(chi(iterations*niter+1), tump(iterations*niter+1), accept(iterations*niter+1), prob(iterations*niter+1))
-
     !----------------------------------------------------------------------------------------------------------
-    ! sim_data details
-    ! fg_amp(:,:,loc,1) = template_02
-
-    ! fg_amp(:,1,1,2) = 1.644429d-2
-    ! fg_amp(:,1,2,2) = 8.39923d-3
-    ! fg_amp(:,1,3,2) = 1.19689d-3
-    ! fg_amp(:,1,4,2) = 5.890824d-2
-    ! fg_amp(:,1,5,2) = 2.9665593d-1
-
-    ! do j = 1, nbands
-    !     dust_map(:,1,j) = fg_amp(:,1,j,2)*template_01(:,1)
-    ! end do
-
-    ! norm_pol details
-    ! power-law synch with beta_s = -3.1 from 20-100 GHz
-
-    ! dust:
-    !    45 = 0.0370425187144*dust_353
-    !    70 = 0.0751133882571*dust_353
-    !   100 = 0.132910864952*dust_353
-    !   200 = 0.402910396102*dust_353
-    !   353 = 1.00000000*dust_353
-    ! temp_norm_01 = maxval(template_01(:,:))
-    ! template_01  = template_01/temp_norm_01
+    ! Metropolis-Hastings testing things
+    allocate(chi(iterations*niter+1), tump(iterations*niter+1), accept(iterations*niter+1), prob(iterations*niter+1))
+    !----------------------------------------------------------------------------------------------------------
 
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
@@ -188,66 +167,19 @@ program dust_fit
             write(*,*) '-----------------------'
         end if 
 
+        call compute_chisq(fg_amp,k)
+
+        write(*,*) 'Chisq = ', chisq
+
         do iter = 1, niter
         
-            write(*,*) 'Iteration', iter
-            write(*,*) '-----------------------'
-            write(*,*) ''
-
-            call compute_chisq(fg_amp,k)
-
-            write(*,*) 'Chisq = ', chisq
-
-            ! 2x2 test
-            ! mat_test(1,1) = 2
-            ! mat_test(1,2) = -1
-            ! mat_test(2,1) = -1
-            ! mat_test(2,2) = 2
-
-            ! b(1) = 1
-            ! b(2) = 0
-
-            ! 3x3 test
-            ! mat_test(1,1) = 4
-            ! mat_test(1,2) = 12
-            ! mat_test(1,3) = -16
-            ! mat_test(2,1) = 12
-            ! mat_test(2,2) = 37
-            ! mat_test(2,3) = -43
-            ! mat_test(3,1) = -16
-            ! mat_test(3,2) = -43
-            ! mat_test(3,3) = 98
-
-            ! b(1) = 0
-            ! b(2) = 6
-            ! b(3) = 39
-
-            ! x(1) = 1
-            ! x(2) = 1
-            ! x(3) = 1
-
-            ! ! write(*,*) matmul(mat_test,x)
-            ! ! write(*,*) b
-            ! ! stop
-
-            ! call cholesky_decomp(mat_test, mat_l, 3)
-            ! ! write(*,*) mat_l
-            ! mat_u = transpose(mat_l)
-            ! call forward_sub(mat_l,d,b)
-            ! call backward_sub(mat_u,x,d)
-
-            ! write(*,*) x
+            ! write(*,*) 'Iteration', iter
+            ! write(*,*) '-----------------------'
             ! write(*,*) ''
-            ! ! stop
-
-            ! call compute_cg(mat_test,x,b,3)
-
-            ! write(*,*) x
-            ! stop
 
 
-            write(*,*) 'Jointly Sampling Amplitudes' 
-            call sample_joint_amp(npix,k)
+            ! write(*,*) 'Jointly Sampling Amplitudes' 
+            call sample_joint_amp(npix,k,'cg')
             dust_amps = fg_amp(0,k,:,2)
 
             ! -------------------------------------------------------------------------------------------------------------------
@@ -267,24 +199,24 @@ program dust_fit
             end do
             ! -------------------------------------------------------------------------------------------------------------------
 
-            !nodust = maps-dust_map
-            !write(*,*) 'Sampling Beta at nside ', beta_samp_nside
+            nodust = maps-dust_map
+            ! write(*,*) 'Sampling Beta at nside ', beta_samp_nside
             ! -------------------------------------------------------------------------------------------------------------------
-            !call sample_index(nodust,'synch',beta_samp_nside,k)
-            !do i = 0, npix-1
-            !    par(1) = beta_s(i,k)
-            !    do j = 1, nbands
-            !        fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
-            !    end do
-            !end do
-            !synch_map(:,k,:)        = fg_amp(:,k,:,1)
+            call sample_index(nodust,'synch',beta_samp_nside,k)
+            do i = 0, npix-1
+               par(1) = beta_s(i,k)
+               do j = 1, nbands
+                   fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
+               end do
+            end do
+            synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
 
             call compute_chisq(fg_amp,k)
 
-            if (mod(iter, 1) == 0 .or. iter == 1) then
+            if (mod(iter, 50) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
                  iter, " - chisq: " , chisq, " - A_s: ",&
                  fg_amp(100,k,loc,1),  " - beta_s: ",&
@@ -295,11 +227,6 @@ program dust_fit
             if (mod(iter,output_iter) .EQ. 0) then
                 call write_maps(k)
             end if
-
-            ! if (mod(iter,like_iter) .EQ. 0) then
-            !     call likelihood(fg_amp(350,k,2,1),fg_amp(350,k,:,2),beta_s(350,k),k)
-            ! end if
-            
         end do    
     end do
   
@@ -329,6 +256,8 @@ program dust_fit
         real(dp), dimension(:), intent(in) :: params
         real(dp)                           :: y, rj_cmb ! Conversion factor from K_{RJ} -> K_{CMB}
         real(dp)                           :: z, compute_spectrum
+
+        ! Simple function for computing foreground spectra
 
         y = h*(freq*1.0d9) / (k_B*T_CMB)
         rj_cmb = ((exp(y)-1)**2.d0)/(y**2.d0*exp(y))
@@ -402,7 +331,9 @@ program dust_fit
     end function temp_fit
   
     function sample_spec_amp(data,type,noise)
+        !------------------------------------------------------------------------
         ! Samples spectral amplitude (per pixel), following the spectrum of foreground 'type'. Returns a full map of amplitudes.
+        !------------------------------------------------------------------------
         implicit none
   
         real(dp), dimension(0:npix-1,nbands), intent(in)       :: data, noise
@@ -491,9 +422,16 @@ program dust_fit
         real(dp)                                               :: naccept   
         logical                                                :: exist
 
+        !------------------------------------------------------------------------
+        ! Spectral index sampler, using the Metropolis-Hastings approach.
+        !------------------------------------------------------------------------
+
         map2fit = data
         cov     = rmss*rmss
 
+        !------------------------------------------------------------------------
+        ! Load priors for the appropriate spectrum
+        !------------------------------------------------------------------------
         if (trim(type) == 'synch') then 
             prior(1) = beta_s_mu
             prior(2) = beta_s_std
@@ -504,6 +442,11 @@ program dust_fit
             indx     = beta_d
         end if
 
+
+        !------------------------------------------------------------------------
+        ! Check to see if the data nside is the same as the sampling nside
+        ! If not equal, downgrade the data before sampling
+        !------------------------------------------------------------------------
         nside1 = npix2nside(npix)
         if (nside1 == nside2) then
             npix2 = npix
@@ -545,8 +488,11 @@ program dust_fit
         end if
 
         x(1) = 1.d0           
-        write(*,*) indx_low(350,map_n)
 
+        !------------------------------------------------------------------------
+        ! Sampling portion. Determine the log-likelihood, and accept based off of
+        ! the improvement in the fit.
+        !------------------------------------------------------------------------
         do i = 0, npix2-1
             a       = 0.d0
             sol     = indx_low(i,map_n)
@@ -704,9 +650,6 @@ program dust_fit
         else if (trim(type) == 'dust') then 
             beta_d(:,k) = indx_sample
         end if
-        write(*,*) d1
-        write(*,*) indx_sample(350)
-        write(*,*) d2
         deallocate(data_low)
         deallocate(fg_amp_low)
         deallocate(indx_low)
@@ -884,7 +827,7 @@ program dust_fit
     end function sample_T
     ! ------------------------------------------------------------
 
-    subroutine sample_joint_amp(npix, map_n)
+    subroutine sample_joint_amp(npix, map_n, method)
         !------------------------------------------------------------------------
         ! Solving the matrix equation Ab = c                                    |
         !                                                                       |
@@ -901,7 +844,7 @@ program dust_fit
 
         implicit none
         integer(i4b),              intent(in)     :: npix, map_n
-        real(dp), allocatable, dimension(:,:,:,:) :: amp_prop
+        character(len=*),          intent(in)     :: method
         real(dp), allocatable, dimension(:,:,:)   :: T_nu, T_nu_T, covar, A_1, A_2
         real(dp), allocatable, dimension(:,:)     :: A, lower, upper, c_1, dats,Anv
         real(dp), allocatable, dimension(:)       :: b, c, d
@@ -922,14 +865,13 @@ program dust_fit
         y = npix+nbands-nskip
         z = nbands
 
-        allocate(amp_prop(0:x-1,nmaps,z,nfgs))
         allocate(T_nu(x,y,z),T_nu_T(y,x,z),dats(x,z))
         allocate(A_1(y,x,z),A_2(y,y,z))
         allocate(A(y,y),b(y),c(y),d(y), Anv(y,y))
         allocate(lower(y,y),upper(y,y))
         allocate(covar(x,x,z),c_1(y,z))
 
-        amp_prop(:,:,:,:) = 0.d0
+        ! Initialize arrays
         covar(:,:,:)      = 0.d0
         T_nu(:,:,:)       = 0.d0
         A_1(:,:,:)        = 0.d0
@@ -943,13 +885,15 @@ program dust_fit
         upper(:,:)        = 0.d0
         c_1(:,:)          = 0.d0
 
+        ! Fill data and covariance arrays
         do i=1, x
             do j=1,z
-                covar(i,i,j) = 1.d0!/(rmss(i-1,map_n,j)**2)
+                covar(i,i,j) = 1.d0/(rmss(i-1,map_n,j)**2)
                 dats(i,j)    = maps(i-1,map_n,j)
             end do
         end do
 
+        ! Fill template matrix
         do i=1,x
             l = 1
             do j=1, z
@@ -961,6 +905,7 @@ program dust_fit
             end do
         end do
 
+        ! Computing the LHS and RHS of the linear equation
         do j=1, nbands
             T_nu_T(:,:,j) = transpose(T_nu(:,:,j))
             c_1(:,j)      = matmul(T_nu_T(:,:,j),dats(:,j))
@@ -970,23 +915,17 @@ program dust_fit
             c(:)          = c(:) + c_1(:,j)
         end do
 
-        ! do i = 1, y
-        !     write(*,*) sum(A(:,i))
-        ! end do
-        ! stop
+        ! Computation
+        if (trim(method) == 'cholesky') then
+            call cholesky_decomp(A,lower,y)
+            upper = transpose(lower)
+            call forward_sub(lower,d,c)
+            call backward_sub(upper,b,d)
+        else if (trim(method) == 'cg') then
+            call compute_cg(A,b,c,y)
+        end if
 
-        ! Anv = inv(A)
-
-        ! do i = 1, y
-        !     write(*,*) sum(Anv(:,i))
-        ! end do
-
-        ! stop
-
-        call cholesky_decomp(A,lower,y)
-        upper = transpose(lower)
-        call forward_sub(lower,d,c)
-        call backward_sub(upper,b,d)
+        ! Output amplitudes to the appropriate variables
         do i =1, x
             fg_amp(i-1,map_n,loc,1) = b(i)
         end do
@@ -1000,7 +939,6 @@ program dust_fit
             end do
         end do
 
-        deallocate(amp_prop)
         deallocate(A_1)
         deallocate(A_2)
         deallocate(A)
@@ -1058,8 +996,6 @@ program dust_fit
         integer(i4b)                          :: ip
         real(dp)                              :: s
 
-
-        !low(:,:) = 0.d0
         do i = 1, n
             do j = 1, i
                 s = 0
@@ -1072,7 +1008,7 @@ program dust_fit
                     do ip = 1, j-1
                         s = low(ip,i)*low(ip,j)
                     end do
-                     low(j,i) = (mat(j,i)-s)/low(j,j)
+                    low(j,i) = (mat(j,i)-s)/low(j,j)
                 end if
             end do
         end do
@@ -1130,76 +1066,43 @@ program dust_fit
         real(dp), dimension(:), intent(in)   :: b
         real(dp), dimension(:), intent(out)  :: x
         integer(i4b), intent(in)             :: n
-        real(dp), allocatable, dimension(:)  :: r, q, d, x_init
+        real(dp), allocatable, dimension(:)  :: r, q, d
         real(dp)                             :: epsil, alpha, beta, delta_0
         real(dp)                             :: delta_old, delta_new
         integer(i4b)                         :: i_max
 
-        allocate(r(n),q(n),d(n))!,x_init(n))
+        allocate(r(n),q(n),d(n))
 
         x(:) = 0.0d0
         i_max = 10
-
-        ! write(*,*) A
-        ! write(*,*) ''
-        ! write(*,*) b
-        ! write(*,*) ''
-        ! write(*,*) x_init
-        ! stop
 
         i = 0
         epsil = 1.0d-16
 
         r = b - matmul(A,x)
-        ! write(*,*) 'r_0',r
         d = r
-        ! write(*,*) d
-        ! stop
         delta_new = sum(r*r)
-        ! write(*,*) delta_new
-        ! stop
         delta_0   = delta_new
-        ! write(*,*) 'delta_0', delta_0
-        ! write(*,*) '---------------------'
-        ! write(*,*) ''
 
         do while( (i .lt. i_max) .and. (delta_new .gt. (epsil**2)*delta_0))
             q = matmul(A,d)
-            ! write(*,*) q
-            ! stop
             alpha = delta_new/(sum(d*q))
-            ! write(*,*) 'alpha', alpha
-            ! stop
             x = x + alpha*d
-            ! write(*,*) x
-            ! stop
             if (mod(i,50) == 0) then
                 r = b - matmul(A,x)
             else
                 r = r - alpha*q
             end if
-            ! r = b - matmul(A,x)
-            ! write(*,*) 'b-Ax', b - matmul(A,x)
-            ! write(*,*) 'r',r
-            ! write(*,*) ''
-            ! stop
             delta_old = delta_new
             delta_new = sum(r*r)
             beta = delta_new/delta_old
-            ! write(*,*) 'beta', beta
             d = r + beta*d
-            ! write(*,*) 'd', d
             i = i + 1
-            ! write(*,*) 'x',x
-            ! write(*,*) 'delta_new', delta_new
-            ! write(*,*) ''
         end do
-        ! stop
 
         deallocate(r)
         deallocate(q)
         deallocate(d)
-        deallocate(x_init)
 
     end subroutine compute_cg
 
