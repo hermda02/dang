@@ -168,8 +168,8 @@ program dust_fit
     !   100 = 0.132910864952*dust_353
     !   200 = 0.402910396102*dust_353
     !   353 = 1.00000000*dust_353
-    temp_norm_01 = maxval(template_01(:,:))
-    template_01  = template_01/temp_norm_01
+    ! temp_norm_01 = maxval(template_01(:,:))
+    ! template_01  = template_01/temp_norm_01
 
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
@@ -198,6 +198,16 @@ program dust_fit
 
             write(*,*) 'Chisq = ', chisq
 
+            ! 2x2 test
+            ! mat_test(1,1) = 2
+            ! mat_test(1,2) = -1
+            ! mat_test(2,1) = -1
+            ! mat_test(2,2) = 2
+
+            ! b(1) = 1
+            ! b(2) = 0
+
+            ! 3x3 test
             ! mat_test(1,1) = 4
             ! mat_test(1,2) = 12
             ! mat_test(1,3) = -16
@@ -212,9 +222,9 @@ program dust_fit
             ! b(2) = 6
             ! b(3) = 39
 
-            ! ! x(1) = 1
-            ! ! x(2) = 1
-            ! ! x(3) = 1
+            ! x(1) = 1
+            ! x(2) = 1
+            ! x(3) = 1
 
             ! ! write(*,*) matmul(mat_test,x)
             ! ! write(*,*) b
@@ -874,7 +884,6 @@ program dust_fit
     end function sample_T
     ! ------------------------------------------------------------
 
-
     subroutine sample_joint_amp(npix, map_n)
         !------------------------------------------------------------------------
         ! Solving the matrix equation Ab = c                                    |
@@ -1126,10 +1135,10 @@ program dust_fit
         real(dp)                             :: delta_old, delta_new
         integer(i4b)                         :: i_max
 
-        allocate(r(n),q(n),d(n),x_init(n))
+        allocate(r(n),q(n),d(n))!,x_init(n))
 
-        x_init(:) = 1.01d0
-        i_max = 20
+        x(:) = 0.0d0
+        i_max = 10
 
         ! write(*,*) A
         ! write(*,*) ''
@@ -1141,8 +1150,8 @@ program dust_fit
         i = 0
         epsil = 1.0d-16
 
-        r = b - matmul(A,x_init)
-        write(*,*) 'r_0',r
+        r = b - matmul(A,x)
+        ! write(*,*) 'r_0',r
         d = r
         ! write(*,*) d
         ! stop
@@ -1150,40 +1159,42 @@ program dust_fit
         ! write(*,*) delta_new
         ! stop
         delta_0   = delta_new
-        write(*,*) 'delta_0', delta_0
-        write(*,*) '---------------------'
-        write(*,*) ''
+        ! write(*,*) 'delta_0', delta_0
+        ! write(*,*) '---------------------'
+        ! write(*,*) ''
 
         do while( (i .lt. i_max) .and. (delta_new .gt. (epsil**2)*delta_0))
             q = matmul(A,d)
             ! write(*,*) q
             ! stop
             alpha = delta_new/(sum(d*q))
-            ! write(*,*) alpha
+            ! write(*,*) 'alpha', alpha
             ! stop
-            x = x_init + alpha*d
+            x = x + alpha*d
             ! write(*,*) x
             ! stop
-            ! if (mod(i,50) == 0) then
-            !     r = b - matmul(A,x)
-            ! else
-            !     r = r - alpha*q
-            ! end if
-            r = b - matmul(A,x)
+            if (mod(i,50) == 0) then
+                r = b - matmul(A,x)
+            else
+                r = r - alpha*q
+            end if
+            ! r = b - matmul(A,x)
             ! write(*,*) 'b-Ax', b - matmul(A,x)
-            write(*,*) 'r',r
+            ! write(*,*) 'r',r
             ! write(*,*) ''
             ! stop
             delta_old = delta_new
             delta_new = sum(r*r)
             beta = delta_new/delta_old
+            ! write(*,*) 'beta', beta
             d = r + beta*d
+            ! write(*,*) 'd', d
             i = i + 1
-            write(*,*) 'x',x
-            write(*,*) 'delta_new', delta_new
-            write(*,*) ''
+            ! write(*,*) 'x',x
+            ! write(*,*) 'delta_new', delta_new
+            ! write(*,*) ''
         end do
-        stop
+        ! stop
 
         deallocate(r)
         deallocate(q)
