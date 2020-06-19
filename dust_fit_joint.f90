@@ -34,18 +34,18 @@ program dust_fit
     real(dp)           :: missval = -1.6375d30
     logical(lgt)       :: anynull, double_precision, test, exist, output_fg
   
-    character(len=128) :: dust_file, mask_file, arg1, synch_file
+    character(len=128) :: template_file_01, template_file_02, mask_file, arg1
     character(len=128) :: mapfile, title, direct
   
     real(dp), allocatable, dimension(:,:,:,:)    :: fg_amp
     real(dp), allocatable, dimension(:,:,:)      :: maps, rmss, model, res
     real(dp), allocatable, dimension(:,:,:)      :: synch_map, dust_map, cmb_map, nodust
-    real(dp), allocatable, dimension(:,:)        :: dust_temp, synch_temp, map, rms
+    real(dp), allocatable, dimension(:,:)        :: template_01, template_02, map, rms
     real(dp), allocatable, dimension(:,:)        :: beta_s, T_d, beta_d, chi_map, mask, HI
     real(dp), allocatable, dimension(:)          :: nuz, chi, tump, accept, prob, par, dust_amps
     real(dp)                                     :: nu_ref_s, beta_s_std, beta_s_mu
     real(dp)                                     :: nu_ref_d, beta_d_std, beta_d_mu, T_d_mu
-    real(dp)                                     :: chisq
+    real(dp)                                     :: chisq, temp_norm_01
     character(len=80), dimension(180)            :: header
     character(len=80), dimension(3)              :: tqu
     character(len=80), allocatable, dimension(:) :: bands
@@ -56,13 +56,13 @@ program dust_fit
     real(dp), allocatable, dimension(:)          :: x, b, d
 
     !----------------------------------------------------------------------------------------------------------
-    dust_file         = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
+    template_file_01  = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
+    template_file_02  = 'data/temp_synch_030_n0004.fits'
     mask_file         = 'data/mask_fullsky_n0004.fits'
-    synch_file        = 'data/temp_synch_030_n0004.fits'
     tqu(1)            = 'T'
     tqu(2)            = 'Q'
     tqu(3)            = 'U'
-    i                 = getsize_fits(dust_file, nside=nside, ordering=ordering, nmaps=nmaps)
+    i                 = getsize_fits(template_file_01, nside=nside, ordering=ordering, nmaps=nmaps)
     npix              = nside2npix(nside) 
     nbands            = 6
     nfgs              = 2
@@ -86,7 +86,7 @@ program dust_fit
     direct = arg1
 
     !----------------------------------------------------------------------------------------------------------
-    allocate(dust_temp(0:npix-1,nmaps), synch_temp(0:npix-1,nmaps), dust_amps(nbands),j_corr(nbands))
+    allocate(template_01(0:npix-1,nmaps), template_02(0:npix-1,nmaps), dust_amps(nbands),j_corr(nbands))
     allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands), nodust(0:npix-1,nmaps,nbands))!, model(0:npix-1,nmaps,nbands))
     allocate(mask(0:npix-1,1), res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps))
     allocate(fg_amp(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
@@ -128,9 +128,9 @@ program dust_fit
 
     deallocate(map,rms)
 
-    call read_bintab(dust_file,dust_temp,npix,nmaps,nullval,anynull,header=header)
+    call read_bintab(template_file_01,template_01,npix,nmaps,nullval,anynull,header=header)
     call read_bintab(mask_file,mask,npix,1,nullval,anynull,header=header)
-    call read_bintab(synch_file,synch_temp,npix,nmaps,nullval,anynull,header=header)
+    call read_bintab(template_file_02,template_02,npix,nmaps,nullval,anynull,header=header)
 
     !----------------------------------------------------------------------------------------------------------
     ! Choose which bands for fitting templates
@@ -147,7 +147,7 @@ program dust_fit
 
     !----------------------------------------------------------------------------------------------------------
     ! sim_data details
-    ! fg_amp(:,:,loc,1) = synch_temp
+    ! fg_amp(:,:,loc,1) = template_02
 
     ! fg_amp(:,1,1,2) = 1.644429d-2
     ! fg_amp(:,1,2,2) = 8.39923d-3
@@ -156,7 +156,7 @@ program dust_fit
     ! fg_amp(:,1,5,2) = 2.9665593d-1
 
     ! do j = 1, nbands
-    !     dust_map(:,1,j) = fg_amp(:,1,j,2)*dust_temp(:,1)
+    !     dust_map(:,1,j) = fg_amp(:,1,j,2)*template_01(:,1)
     ! end do
 
     ! norm_pol details
@@ -168,6 +168,8 @@ program dust_fit
     !   100 = 0.132910864952*dust_353
     !   200 = 0.402910396102*dust_353
     !   353 = 1.00000000*dust_353
+    temp_norm_01 = maxval(template_01(:,:))
+    template_01  = template_01/temp_norm_01
 
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
@@ -196,42 +198,42 @@ program dust_fit
 
             write(*,*) 'Chisq = ', chisq
 
-            mat_test(1,1) = 4
-            mat_test(1,2) = 12
-            mat_test(1,3) = -16
-            mat_test(2,1) = 12
-            mat_test(2,2) = 37
-            mat_test(2,3) = -43
-            mat_test(3,1) = -16
-            mat_test(3,2) = -43
-            mat_test(3,3) = 98
+            ! mat_test(1,1) = 4
+            ! mat_test(1,2) = 12
+            ! mat_test(1,3) = -16
+            ! mat_test(2,1) = 12
+            ! mat_test(2,2) = 37
+            ! mat_test(2,3) = -43
+            ! mat_test(3,1) = -16
+            ! mat_test(3,2) = -43
+            ! mat_test(3,3) = 98
 
-            b(1) = 0
-            b(2) = 6
-            b(3) = 39
+            ! b(1) = 0
+            ! b(2) = 6
+            ! b(3) = 39
 
-            ! x(1) = 1
-            ! x(2) = 1
-            ! x(3) = 1
+            ! ! x(1) = 1
+            ! ! x(2) = 1
+            ! ! x(3) = 1
 
-            ! write(*,*) matmul(mat_test,x)
-            ! write(*,*) b
+            ! ! write(*,*) matmul(mat_test,x)
+            ! ! write(*,*) b
+            ! ! stop
+
+            ! call cholesky_decomp(mat_test, mat_l, 3)
+            ! ! write(*,*) mat_l
+            ! mat_u = transpose(mat_l)
+            ! call forward_sub(mat_l,d,b)
+            ! call backward_sub(mat_u,x,d)
+
+            ! write(*,*) x
+            ! write(*,*) ''
+            ! ! stop
+
+            ! call compute_cg(mat_test,x,b,3)
+
+            ! write(*,*) x
             ! stop
-
-            call cholesky_decomp(mat_test, mat_l, 3)
-            ! write(*,*) mat_l
-            mat_u = transpose(mat_l)
-            call forward_sub(mat_l,d,b)
-            call backward_sub(mat_u,x,d)
-
-            write(*,*) x
-            write(*,*) ''
-            ! stop
-
-            call compute_cg(mat_test,x,b,3)
-
-            write(*,*) x
-            stop
 
 
             write(*,*) 'Jointly Sampling Amplitudes' 
@@ -251,7 +253,7 @@ program dust_fit
             ! -------------------------------------------------------------------------------------------------------------------
             ! Applying A_d to make dust maps
             do j = 1, nbands
-                dust_map(:,k,j) = fg_amp(:,k,j,2)*dust_temp(:,k)
+                dust_map(:,k,j) = fg_amp(:,k,j,2)*template_01(:,k)
             end do
             ! -------------------------------------------------------------------------------------------------------------------
 
@@ -944,7 +946,7 @@ program dust_fit
             do j=1, z
                 T_nu(i,i,j) = (nuz(j)/nu_ref_s)**beta_s(i-1,map_n)
                 if (j_corr(j) .eqv. .true.) then
-                    T_nu(i,x+l,j) = dust_temp(i-1,map_n)
+                    T_nu(i,x+l,j) = template_01(i-1,map_n)
                     l = l + 1
                 end if
             end do
@@ -958,6 +960,11 @@ program dust_fit
             A(:,:)        = A(:,:) + A_2(:,:,j)
             c(:)          = c(:) + c_1(:,j)
         end do
+
+        ! do i = 1, y
+        !     write(*,*) sum(A(:,i))
+        ! end do
+        ! stop
 
         ! Anv = inv(A)
 
@@ -1032,7 +1039,7 @@ program dust_fit
         if (info /= 0) then
            stop 'Matrix inversion failed!'
         end if
-      end function inv
+    end function inv
   
     subroutine cholesky_decomp(mat,low,n)
         implicit none
@@ -1301,7 +1308,7 @@ program dust_fit
       do i = 0, npix-1
         do j = 1, nbands
             s = 0.d0
-            signal = amp(i,map_n,j,1)*mask(i,1) + amp(i,map_n,j,2)*dust_temp(i,map_n)*mask(i,1)
+            signal = amp(i,map_n,j,1)*mask(i,1) + amp(i,map_n,j,2)*template_01(i,map_n)*mask(i,1)
             s = s + signal
             chisq = chisq + (((maps(i,map_n,j) - s)**2))/(rmss(i,map_n,j)**2)*mask(i,1)
         end do
@@ -1335,7 +1342,7 @@ program dust_fit
         do x = 1, 200
             signal = 0.d0
             do z = 1, nbands
-                signal    = A_s(x)*compute_spectrum('synch',nuz(j),pars) + fg_amp(100,map_n,z,2)*dust_temp(100,map_n)
+                signal    = A_s(x)*compute_spectrum('synch',nuz(j),pars) + fg_amp(100,map_n,z,2)*template_01(100,map_n)
                 A_s_ln(x) = A_s_ln(x) + (((maps(100,map_n,z) - signal)**2.d0)/(rmss(100,map_n,z)**2))
             end do
             A_s_like(x) = exp((-0.5d0)*A_s_ln(x))
@@ -1385,7 +1392,7 @@ program dust_fit
                 signal = 0.d0
                 do y = 0, npix-1
                     pars(1) = beta_s(y,map_n)
-                    signal    = fg_amp(y,map_n,loc,map_n)*compute_spectrum('synch',nuz(j),pars) + A_d(x)*dust_temp(y,map_n)
+                    signal    = fg_amp(y,map_n,loc,map_n)*compute_spectrum('synch',nuz(j),pars) + A_d(x)*template_01(y,map_n)
                     A_d_ln(x) = A_d_ln(x) + (((maps(y,map_n,z) - signal)**2.d0)/(rmss(y,map_n,z)**2))
                 end do
                 A_d_like(x) = exp((-0.5d0)*A_d_ln(x))
