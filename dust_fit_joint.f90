@@ -29,7 +29,7 @@ program dust_fit
   
     integer(i4b)       :: i, j, k, l, iter, npix, nside, nmaps, ordering, loc
     integer(i4b)       :: beta_samp_nside, nlheader, niter, nbands, nfgs, iterations
-    integer(i4b)       :: output_iter, like_iter
+    integer(i4b)       :: output_iter, like_iter, m
     real(dp)           :: nullval
     real(dp)           :: missval = -1.6375d30
     logical(lgt)       :: anynull, double_precision, test, exist, output_fg
@@ -70,9 +70,9 @@ program dust_fit
     nlheader          = size(header)
     nmaps             = 1
 
-    niter             = 1000       ! # of MC-MC iterations
+    niter             = 5          ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
-    output_iter       = 100        ! Output maps every <- # of iterations
+    output_iter       = 1          ! Output maps every <- # of iterations
     like_iter         = 1000       ! Output likelihood test every <- # of iterations
     nu_ref_s          = 45.0d0     ! Synchrotron reference frequency
     nu_ref_d          = 353.d0     ! Dust reference frequency
@@ -99,7 +99,7 @@ program dust_fit
     allocate(rms(0:npix-1,nmaps))
     allocate(mat_test(3,3), mat_l(3,3), mat_u(3,3), x(3), b(3), d(3))
     !----------------------------------------------------------------------------------------------------------
-    beta_s     = -3.095d0    ! Synchrotron beta initial guess
+    beta_s     = -3.10d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
 
     bands(1)   = ('norm_pol_020_')
@@ -169,7 +169,7 @@ program dust_fit
 
         call compute_chisq(fg_amp,k)
 
-        write(*,*) 'Chisq = ', chisq
+        write(*,*) 'Initial Chisq = ', chisq
 
         do iter = 1, niter
         
@@ -202,21 +202,21 @@ program dust_fit
             nodust = maps-dust_map
             ! write(*,*) 'Sampling Beta at nside ', beta_samp_nside
             ! -------------------------------------------------------------------------------------------------------------------
-            call sample_index(nodust,'synch',beta_samp_nside,k)
-            do i = 0, npix-1
-               par(1) = beta_s(i,k)
-               do j = 1, nbands
-                   fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
-               end do
-            end do
-            synch_map(:,k,:)        = fg_amp(:,k,:,1)
+            ! call sample_index(nodust,'synch',beta_samp_nside,k)
+            ! do i = 0, npix-1
+            !    par(1) = beta_s(i,k)
+            !    do j = 1, nbands
+            !        fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
+            !    end do
+            ! end do
+            ! synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
 
             call compute_chisq(fg_amp,k)
 
-            if (mod(iter, 50) == 0 .or. iter == 1) then
+            if (mod(iter, 1) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
                  iter, " - chisq: " , chisq, " - A_s: ",&
                  fg_amp(100,k,loc,1),  " - beta_s: ",&
@@ -917,12 +917,25 @@ program dust_fit
 
         ! Computation
         if (trim(method) == 'cholesky') then
+            if (mod(iter,output_iter) .EQ. 0) then
+                write(*,*) 'Joint sampling using Cholesky Decomp'
+            end if
             call cholesky_decomp(A,lower,y)
             upper = transpose(lower)
             call forward_sub(lower,d,c)
             call backward_sub(upper,b,d)
         else if (trim(method) == 'cg') then
+            if (mod(iter,output_iter) .EQ. 0) then
+                write(*,*) 'Joint sampling using CG'
+            end if
             call compute_cg(A,b,c,y)
+        else if (trim(method) == 'LU') then
+            if (mod(iter,output_iter) .EQ. 0) then
+                write(*,*) 'Joint sampling using LU Decomp'
+            end if
+            call LUDecomp(A,lower,upper,y)
+            call forward_sub(lower,d,c)
+            call backward_sub(upper,b,d)
         end if
 
         ! Output amplitudes to the appropriate variables
@@ -1034,6 +1047,48 @@ program dust_fit
         end do
 
     end subroutine forward_sub
+
+    subroutine LUDecomp(A,L,U,n)
+        
+        ! Using Doolittle's method for LU decomposition of matrix A
+        ! L and U can then be used to solve the matrix equation Ax = b by solving
+        ! Lv = b (using forward substitution), Ux = v (backwards substitution).
+        
+        implicit none        
+        real(dp), dimension(:,:), intent(in)  :: A
+        real(dp), dimension(:,:), intent(out) :: L
+        real(dp), dimension(:,:), intent(out) :: U
+        integer(i4b), intent(in)              :: n
+        real(dp)                              :: sum
+
+        L = 0.d0
+        U = 0.d0
+
+        do i = 1, n
+            do m = i, n
+                sum = 0
+                do j = 1, i
+                    sum = sum + (L(i,j) * U(j,m))
+                U(i,m) = A(i,m) - sum
+                end do
+            end do
+            do m = i, n
+                if (i == m) then
+                    L(i,i) = 1
+                else
+                    sum = 0
+                    do j = 1, i
+                        sum = sum + (L(m,j)*U(j,i))
+                    end do
+                    L(m,i) = (A(m,i) - sum)/U(i,i)
+                end if
+            end do
+        end do
+
+        L = transpose(L)
+        U = transpose(U)
+
+    end subroutine LUDecomp
 
     subroutine backward_sub(U,xb,bb)
         ! Backward substitution to solve the matrix equation Ux=b
