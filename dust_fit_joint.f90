@@ -890,7 +890,7 @@ program dust_fit
         ! Fill data and covariance arrays
         do i=1, x
             do j=1,z
-                covar(i,i,j) = 1.d0/(rmss(i-1,map_n,j)**2)
+                covar(i,i,j) = rmss(i-1,map_n,j)**2
                 dats(i,j)    = maps(i-1,map_n,j)
             end do
         end do
@@ -911,7 +911,7 @@ program dust_fit
         do j=1, nbands
             T_nu_T(:,:,j) = transpose(T_nu(:,:,j))
             c_1(:,j)      = matmul(T_nu_T(:,:,j),dats(:,j))
-            A_1(:,:,j)    = matmul(T_nu_T(:,:,j),covar(:,:,j))
+            A_1(:,:,j)    = matmul(T_nu_T(:,:,j),inv(covar(:,:,j)))
             A_2(:,:,j)    = matmul(A_1(:,:,j),T_nu(:,:,j)) 
             A(:,:)        = A(:,:) + A_2(:,:,j)
             c(:)          = c(:) + c_1(:,j)
