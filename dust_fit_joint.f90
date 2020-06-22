@@ -179,8 +179,6 @@ program dust_fit
 
 
             ! write(*,*) 'Jointly Sampling Amplitudes' 
-            write(*,*) rmss(0,1,:)
-            stop
             call sample_joint_amp(npix,k,'cg')
             dust_amps = fg_amp(0,k,:,2)
 
