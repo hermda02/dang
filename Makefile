@@ -9,7 +9,7 @@ HEALPIX = -L/usr/local/src/Healpix_3.50/lib -lhealpix
 HEALINC = -I/usr/local/src/Healpix_3.50/include
 OUTPUT  = fit_dust
 
-OBJS    = dust_fit_joint_tester.o
+OBJS    = dust_fit_joint.o
 
 fit_ame: $(OBJS)
 	$(FC) $(OBJS) $(HEALPIX) $(FITSDIR) $(LAPACK) -fopenmp -o $(OUTPUT)

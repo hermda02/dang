@@ -124,7 +124,7 @@ program dust_fit
         call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'rms_n0004.fits',&
         rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
-        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'n0004.fits', &
+        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'noise_n0004.fits', &
         map,npix,nmaps,nullval,anynull,header=header)
         maps(:,:,j) = map
     end do
@@ -179,6 +179,8 @@ program dust_fit
 
 
             ! write(*,*) 'Jointly Sampling Amplitudes' 
+            write(*,*) rmss(0,1,:)
+            stop
             call sample_joint_amp(npix,k,'cg')
             dust_amps = fg_amp(0,k,:,2)
 
