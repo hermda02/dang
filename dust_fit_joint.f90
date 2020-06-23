@@ -124,7 +124,7 @@ program dust_fit
         call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'rms_n0004.fits',&
         rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
-        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'noise_n0004.fits', &
+        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'n0004.fits', &
         map,npix,nmaps,nullval,anynull,header=header)
         maps(:,:,j) = map
     end do
@@ -179,7 +179,7 @@ program dust_fit
 
 
             ! write(*,*) 'Jointly Sampling Amplitudes' 
-            call sample_joint_amp(npix,k,'cg')
+            call sample_joint_amp(npix,k,'LU')
             dust_amps = fg_amp(0,k,:,2)
 
             ! -------------------------------------------------------------------------------------------------------------------
@@ -846,7 +846,7 @@ program dust_fit
         integer(i4b),              intent(in)     :: npix, map_n
         character(len=*),          intent(in)     :: method
         real(dp), allocatable, dimension(:,:,:)   :: T_nu, T_nu_T, covar, A_1, A_2
-        real(dp), allocatable, dimension(:,:)     :: A, lower, upper, c_1, dats,Anv
+        real(dp), allocatable, dimension(:,:)     :: A, lower, upper, c_1, c_2, dats
         real(dp), allocatable, dimension(:)       :: b, c, d
         real(dp)                                  :: chi0, chi_prop
         integer(i4b)                              :: x, y, z, nskip
@@ -867,9 +867,9 @@ program dust_fit
 
         allocate(T_nu(x,y,z),T_nu_T(y,x,z),dats(x,z))
         allocate(A_1(y,x,z),A_2(y,y,z))
-        allocate(A(y,y),b(y),c(y),d(y), Anv(y,y))
+        allocate(A(y,y),b(y),c(y),d(y))
         allocate(lower(y,y),upper(y,y))
-        allocate(covar(x,x,z),c_1(y,z))
+        allocate(covar(x,x,z),c_1(x,z),c_2(y,z))
 
         ! Initialize arrays
         covar(:,:,:)      = 0.d0
@@ -884,6 +884,7 @@ program dust_fit
         lower(:,:)        = 0.d0
         upper(:,:)        = 0.d0
         c_1(:,:)          = 0.d0
+        c_2(:,:)          = 0.d0
 
         ! Fill data and covariance arrays
         do i=1, x
@@ -908,7 +909,8 @@ program dust_fit
         ! Computing the LHS and RHS of the linear equation
         do j=1, nbands
             T_nu_T(:,:,j) = transpose(T_nu(:,:,j))
-            c_1(:,j)      = matmul(T_nu_T(:,:,j),dats(:,j))
+            c_1(:,j)      = matmul(inv(covar(:,:,j)),dats(:,j))
+            c_2(:,j)      = matmul(T_nu_T(:,:,j),c_1(:,j))
             A_1(:,:,j)    = matmul(T_nu_T(:,:,j),inv(covar(:,:,j)))
             A_2(:,:,j)    = matmul(A_1(:,:,j),T_nu(:,:,j)) 
             A(:,:)        = A(:,:) + A_2(:,:,j)
