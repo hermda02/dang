@@ -179,7 +179,7 @@ program dust_fit
 
 
             ! write(*,*) 'Jointly Sampling Amplitudes' 
-            call sample_joint_amp(npix,k,'LU')
+            call sample_joint_amp(npix,k,'LU')  ! Method possibilities are 'cg', 'LU', and 'cholesky'
             dust_amps = fg_amp(0,k,:,2)
 
             ! -------------------------------------------------------------------------------------------------------------------
@@ -915,7 +915,7 @@ program dust_fit
             A_1(:,:,j)    = matmul(T_nu_T(:,:,j),inv(covar(:,:,j)))
             A_2(:,:,j)    = matmul(A_1(:,:,j),T_nu(:,:,j)) 
             A(:,:)        = A(:,:) + A_2(:,:,j)
-            c(:)          = c(:) + c_1(:,j)
+            c(:)          = c(:) + c_2(:,j)
         end do
 
         ! Computation
@@ -924,8 +924,8 @@ program dust_fit
                 write(*,*) 'Joint sampling using Cholesky Decomp'
             end if
             call cholesky_decomp(A,mat_l,mat_d,y)
-            mat_u = transpose(mat_l)
-            mat_du = matmul(mat_d,mat_l)
+            mat_u  = transpose(mat_l)
+            mat_du = matmul(mat_d,mat_u)
             call forward_sub(mat_l,d,c)
             call backward_sub(mat_du,b,d)
         else if (trim(method) == 'cg') then
