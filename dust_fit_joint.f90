@@ -846,8 +846,9 @@ program dust_fit
         integer(i4b),              intent(in)     :: npix, map_n
         character(len=*),          intent(in)     :: method
         real(dp), allocatable, dimension(:,:,:)   :: T_nu, T_nu_T, covar, A_1, A_2
-        real(dp), allocatable, dimension(:,:)     :: A, mat_l, mat_u, c_1, c_2, dats, mat_d, mat_du
-        real(dp), allocatable, dimension(:)       :: b, c, d
+        real(dp), allocatable, dimension(:,:)     :: A, c_1, c_2, dats, norm, d12
+        real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u,mat_d, mat_du
+        real(dp), allocatable, dimension(:)       :: b, c, d, samp, rand
         real(dp)                                  :: chi0, chi_prop
         integer(i4b)                              :: x, y, z, nskip
 
@@ -869,8 +870,10 @@ program dust_fit
         allocate(A_1(y,x,z),A_2(y,y,z))
         allocate(A(y,y),b(y),c(y),d(y))
         allocate(mat_l(y,y),mat_u(y,y))
+        allocate(d12(y,y),norm(y,y))
         allocate(mat_d(y,y),mat_du(y,y))
         allocate(covar(x,x,z),c_1(x,z),c_2(y,z))
+        allocate(samp(y),rand(y))
 
         ! Initialize arrays
         covar(:,:,:)      = 0.d0
@@ -941,6 +944,27 @@ program dust_fit
             call forward_sub(mat_l,d,c)
             call backward_sub(mat_u,b,d)
         end if
+
+        ! Draw a sample by cholesky decompsing A, taking the sqrt of D, and
+        ! multiplying A^(1/2) by a vector of random numbers
+        if (trim(method) == 'cholesky') then
+            exit
+        else if
+            call cholesky_decomp(A,mat_l,mat_d,y)
+        end if
+
+        d12 = sqrt(mat_d)
+        norm = matmul(mat_l,matmul(d12,mat_u))
+        do i = 1, y
+            rand(i) = rand_normal(0,1)
+        end do
+
+        samp = matmul(norm,rand)
+
+        write(*,*) samp
+        stop
+
+
 
         ! Output amplitudes to the appropriate variables
         do i =1, x
