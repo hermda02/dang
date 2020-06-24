@@ -947,9 +947,9 @@ program dust_fit
 
         ! Draw a sample by cholesky decompsing A, taking the sqrt of D, and
         ! multiplying A^(1/2) by a vector of random numbers
-        if (trim(method) == 'cholesky') then
-            exit
-        else if
+        if (trim(method) /= 'cholesky') then
+        !     exit
+        ! else if
             call cholesky_decomp(A,mat_l,mat_d,y)
         end if
 
