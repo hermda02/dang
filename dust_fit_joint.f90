@@ -292,14 +292,14 @@ program dust_fit
         cov = noise*2
 
         ! Uncertainty, used for sampling.
-        norm  = sum(cov(:)*template(:)**2.d0)/sum(t_mask)
+        norm  = sum((template(:)**2.d0)/cov(:))/sum(t_mask)
         
         sum1 = 0.d0
         sum2 = 0.d0
     
         do i=0,npix-1
-            sum1   = sum1 + (data(i)*template(i))*cov(i)*t_mask(i)
-            sum2   = sum2 + template(i)**2.d0*cov(i)*t_mask(i)
+            sum1   = sum1 + (data(i)*template(i))/cov(i)*t_mask(i)
+            sum2   = sum2 + template(i)**2.d0/cov(i)*t_mask(i)
         end do
 
         ! Don't allow negative amplitudes, if negative, set to 0.d0.
@@ -361,9 +361,9 @@ program dust_fit
             sum2 = 0.0d0
             do j = 1, nbands
                 spec          = compute_spectrum(type,nuz(j),pars)
-                sum1          = sum1 + (data(i,j)*spec)*cov(i,j)
-                sum2          = sum2 + (spec)**2.d0*cov(i,j)
-                norm(i)       = norm(i) + cov(i,j)*(spec)**2.d0
+                sum1          = sum1 + (data(i,j)*spec)/cov(i,j)
+                sum2          = sum2 + (spec)**2.d0/cov(i,j)
+                norm(i)       = norm(i) + ((spec)**2.d0)/cov(i,j)
             end do
             norm(i)           = norm(i)/nbands
             amp               = sum1/sum2
@@ -832,7 +832,7 @@ program dust_fit
         ! Solving the matrix equation Ab = c                                    |
         !                                                                       |
         ! For this purpose, we solve the equation:                              |
-        !         sum_nu ((T_nu)^T N^-1 T_nu)amp = sum_nu ((T_nu)^T d_nu)       |
+        !         sum_nu ((T_nu)^T N^-1 T_nu)amp = sum_nu ((T_nu)^T N^-1 d_nu)  |
         !                                                                       |
         ! where T_nu and a are defined below, and d_nu is the data at band nu.  |
         !                                                                       |
@@ -846,7 +846,7 @@ program dust_fit
         integer(i4b),              intent(in)     :: npix, map_n
         character(len=*),          intent(in)     :: method
         real(dp), allocatable, dimension(:,:,:)   :: T_nu, T_nu_T, covar, A_1, A_2
-        real(dp), allocatable, dimension(:,:)     :: A, lower, upper, c_1, c_2, dats
+        real(dp), allocatable, dimension(:,:)     :: A, mat_l, mat_u, c_1, c_2, dats, mat_d, mat_du
         real(dp), allocatable, dimension(:)       :: b, c, d
         real(dp)                                  :: chi0, chi_prop
         integer(i4b)                              :: x, y, z, nskip
@@ -868,7 +868,8 @@ program dust_fit
         allocate(T_nu(x,y,z),T_nu_T(y,x,z),dats(x,z))
         allocate(A_1(y,x,z),A_2(y,y,z))
         allocate(A(y,y),b(y),c(y),d(y))
-        allocate(lower(y,y),upper(y,y))
+        allocate(mat_l(y,y),mat_u(y,y))
+        allocate(mat_d(y,y),mat_du(y,y))
         allocate(covar(x,x,z),c_1(x,z),c_2(y,z))
 
         ! Initialize arrays
@@ -881,8 +882,8 @@ program dust_fit
         c(:)              = 0.d0
         d(:)              = 0.d0
         dats(:,:)         = 0.d0
-        lower(:,:)        = 0.d0
-        upper(:,:)        = 0.d0
+        mat_l(:,:)        = 0.d0
+        mat_u(:,:)        = 0.d0
         c_1(:,:)          = 0.d0
         c_2(:,:)          = 0.d0
 
@@ -922,10 +923,11 @@ program dust_fit
             if (mod(iter,output_iter) .EQ. 0) then
                 write(*,*) 'Joint sampling using Cholesky Decomp'
             end if
-            call cholesky_decomp(A,lower,y)
-            upper = transpose(lower)
-            call forward_sub(lower,d,c)
-            call backward_sub(upper,b,d)
+            call cholesky_decomp(A,mat_l,mat_d,y)
+            mat_u = transpose(mat_l)
+            mat_du = matmul(mat_d,mat_l)
+            call forward_sub(mat_l,d,c)
+            call backward_sub(mat_du,b,d)
         else if (trim(method) == 'cg') then
             if (mod(iter,output_iter) .EQ. 0) then
                 write(*,*) 'Joint sampling using CG'
@@ -935,9 +937,9 @@ program dust_fit
             if (mod(iter,output_iter) .EQ. 0) then
                 write(*,*) 'Joint sampling using LU Decomp'
             end if
-            call LUDecomp(A,lower,upper,y)
-            call forward_sub(lower,d,c)
-            call backward_sub(upper,b,d)
+            call LUDecomp(A,mat_l,mat_u,y)
+            call forward_sub(mat_l,d,c)
+            call backward_sub(mat_u,b,d)
         end if
 
         ! Output amplitudes to the appropriate variables
@@ -960,15 +962,59 @@ program dust_fit
         deallocate(b)
         deallocate(c)
         deallocate(c_1)
+        deallocate(c_2)
         deallocate(covar)
         deallocate(dats)
         deallocate(d)
-        deallocate(lower)
+        deallocate(mat_l)
         deallocate(T_nu)
         deallocate(T_nu_T)
-        deallocate(upper)
+        deallocate(mat_u)
 
     end subroutine sample_joint_amp
+
+    subroutine cholesky_decomp(mat,low,diag,n)
+        implicit none
+        real(dp), dimension(:,:), intent(in)  :: mat
+        real(dp), dimension(:,:), intent(out) :: low, diag
+        real(dp), allocatable, dimension(:,:) :: mat_s
+        integer(i4b),             intent(in)  :: n
+        integer(i4b)                          :: ip
+        real(dp)                              :: s
+
+        allocate(mat_s(n,n))
+
+        low(:,:)   = 0.d0
+        diag(:,:)  = 0.d0
+        mat_s(:,:) = 0.d0
+
+        do i = 1, n
+            do j = 1, i
+                s = 0
+                if (j == i) then
+                    do ip = 1, j-1
+                        s = s + (low(j,ip))**2
+                    end do
+                    low(j,j) = sqrt(mat(j,j)-s)
+                else
+                    do ip = 1, j-1
+                        s = low(i,ip)*low(j,ip)
+                    end do
+                     low(i,j) = (mat(i,j)-s)/low(j,j)
+                end if
+            end do
+        end do
+
+        do i = 1, n
+            mat_s(i,i) = low(i,i)
+        end do
+
+        low  = matmul(low,inv(mat_s))
+        diag = mat_s**2
+
+        deallocate(mat_s)
+
+    end subroutine cholesky_decomp
 
     function inv(A) result(Ainv)
         real(dp), dimension(:,:), intent(in) :: A
@@ -1002,53 +1048,6 @@ program dust_fit
            stop 'Matrix inversion failed!'
         end if
     end function inv
-  
-    subroutine cholesky_decomp(mat,low,n)
-        implicit none
-        real(dp), dimension(:,:), intent(in)  :: mat
-        real(dp), dimension(:,:), intent(out) :: low
-        integer(i4b),             intent(in)  :: n
-        integer(i4b)                          :: ip
-        real(dp)                              :: s
-
-        do i = 1, n
-            do j = 1, i
-                s = 0
-                if (j == i) then
-                    do ip = 1, j-1
-                        s = s + (low(ip,j))**2
-                    end do
-                    low(j,j) = sqrt(mat(j,j)-s)
-                else
-                    do ip = 1, j-1
-                        s = low(ip,i)*low(ip,j)
-                    end do
-                    low(j,i) = (mat(j,i)-s)/low(j,j)
-                end if
-            end do
-        end do
-        
-    end subroutine cholesky_decomp
-
-    subroutine forward_sub(L,xf,bf)
-        ! Forward substitution to solve the matrix equation Lx=b
-        implicit none
-        real(dp), dimension(:,:), intent(in)  :: L
-        real(dp), dimension(:),   intent(in)  :: bf
-        real(dp), dimension(:),   intent(out) :: xf
-        integer(i4b)                          :: n,m
-
-        n = size(bf)
-
-        do i = 1, n
-            xf(i) = bf(i)
-            do m = 1, i-1
-                xf(i) = xf(i)-l(m,i)*xf(m) 
-            end do
-            xf(i) = xf(i)/L(i,i)
-        end do
-
-    end subroutine forward_sub
 
     subroutine LUDecomp(A,L,U,n)
         
@@ -1087,10 +1086,27 @@ program dust_fit
             end do
         end do
 
-        L = transpose(L)
-        U = transpose(U)
-
     end subroutine LUDecomp
+
+    subroutine forward_sub(L,xf,bf)
+        ! Forward substitution to solve the matrix equation Lx=b
+        implicit none
+        real(dp), dimension(:,:), intent(in)  :: L
+        real(dp), dimension(:),   intent(in)  :: bf
+        real(dp), dimension(:),   intent(out) :: xf
+        integer(i4b)                          :: n,m
+
+        n = size(bf)
+
+        do i = 1, n
+            xf(i) = bf(i)
+            do m = 1, i-1
+                xf(i) = xf(i)-l(i,m)*xf(m) 
+            end do
+            xf(i) = xf(i)/L(i,i)
+        end do
+
+    end subroutine forward_sub
 
     subroutine backward_sub(U,xb,bb)
         ! Backward substitution to solve the matrix equation Ux=b
@@ -1106,10 +1122,11 @@ program dust_fit
         do i = n-1, 1, -1
             xb(i) = bb(i)
             do m = n, i+1, -1
-                xb(i) = xb(i) - U(m,i)*xb(m)
+                xb(i) = xb(i) - U(i,m)*xb(m)
             end do
             xb(i) = xb(i)/U(i,i)
         end do
+
     end subroutine backward_sub
 
     subroutine compute_cg(A,x,b,n)
