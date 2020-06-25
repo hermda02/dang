@@ -12,7 +12,7 @@ mpl.rcParams['text.usetex'] = True
 missval = -1.6375e30
 
 # For beautiful maps
-planck  = np.loadtxt('/home/daniel/graduate_school/masters_thesis/tools/Planck_color.txt')/255.
+planck  = np.loadtxt('/home/daniel/graduate_school/masters/tools/Planck_color.txt')/255.
 pl_cmap = colors.LinearSegmentedColormap.from_list('planck',planck)
 
 accept = np.loadtxt('accept.dat')

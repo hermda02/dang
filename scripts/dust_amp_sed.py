@@ -21,7 +21,7 @@ dust_U = np.loadtxt(direct+'dust_U_amplitudes.dat')
 
 freq = [28.4, 44.1, 70.1, 70.1, 70.1, 22.8, 33.0, 40.6, 40.6, 60.8, 60.8]#, 143.0]   
 
-print("Data files have "+str(np.shape(dust_Q)[0])+" iterations.")
+print(f"Data files have {np.shape(dust_Q)[0]} + iterations.")
 iter = input("Which iteration would you like to plot? ")
 num = int(iter)-1
 

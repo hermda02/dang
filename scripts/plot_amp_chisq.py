@@ -10,7 +10,7 @@ from scipy import stats
 plt.rc('text', usetex=True)
 
 # For beautiful maps
-planck  = np.loadtxt('/home/daniel/graduate_school/masters_thesis/tools/Planck_color.txt')/255.
+planck  = np.loadtxt('/home/daniel/graduate_school/masters/tools/Planck_color.txt')/255.
 pl_cmap = colors.LinearSegmentedColormap.from_list('planck',planck)
 
 a_s = np.loadtxt('pixel_150_A_s.dat')
