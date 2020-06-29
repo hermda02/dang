@@ -70,9 +70,9 @@ program dust_fit
     nlheader          = size(header)
     nmaps             = 1
 
-    niter             = 5          ! # of MC-MC iterations
+    niter             = 1000       ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
-    output_iter       = 1          ! Output maps every <- # of iterations
+    output_iter       = 100        ! Output maps every <- # of iterations
     like_iter         = 1000       ! Output likelihood test every <- # of iterations
     nu_ref_s          = 45.0d0     ! Synchrotron reference frequency
     nu_ref_d          = 353.d0     ! Dust reference frequency
@@ -97,9 +97,8 @@ program dust_fit
     allocate(nuz(nbands), bands(nbands), par(2))
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
-    allocate(mat_test(3,3), mat_l(3,3), mat_u(3,3), x(3), b(3), d(3))
     !----------------------------------------------------------------------------------------------------------
-    beta_s     = -3.10d0    ! Synchrotron beta initial guess
+    beta_s     = -3.00d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
 
     bands(1)   = ('norm_pol_020_')
@@ -149,7 +148,8 @@ program dust_fit
     ! Metropolis-Hastings testing things
     allocate(chi(iterations*niter+1), tump(iterations*niter+1), accept(iterations*niter+1), prob(iterations*niter+1))
     !----------------------------------------------------------------------------------------------------------
-
+    temp_norm_01 = maxval(template_01)
+    template_01 = template_01/temp_norm_01
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
@@ -179,8 +179,12 @@ program dust_fit
 
 
             ! write(*,*) 'Jointly Sampling Amplitudes' 
-            call sample_joint_amp(npix,k,'LU')  ! Method possibilities are 'cg', 'LU', and 'cholesky'
+            call sample_joint_amp(npix,k,'cholesky')  ! Method possibilities are 'cg', 'LU', and 'cholesky'
             dust_amps = fg_amp(0,k,:,2)
+
+            call compute_chisq(fg_amp,k)
+
+            write(*,fmt='(i6, a, f10.3)') iter, ' - chisq: ' , chisq
 
             ! -------------------------------------------------------------------------------------------------------------------
             ! Extrapolating A_synch to bands
@@ -200,16 +204,15 @@ program dust_fit
             ! -------------------------------------------------------------------------------------------------------------------
 
             nodust = maps-dust_map
-            ! write(*,*) 'Sampling Beta at nside ', beta_samp_nside
             ! -------------------------------------------------------------------------------------------------------------------
-            ! call sample_index(nodust,'synch',beta_samp_nside,k)
-            ! do i = 0, npix-1
-            !    par(1) = beta_s(i,k)
-            !    do j = 1, nbands
-            !        fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
-            !    end do
-            ! end do
-            ! synch_map(:,k,:)        = fg_amp(:,k,:,1)
+            call sample_index(nodust,'synch',beta_samp_nside,k)
+            do i = 0, npix-1
+               par(1) = beta_s(i,k)
+               do j = 1, nbands
+                   fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
+               end do
+            end do
+            synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
@@ -220,7 +223,7 @@ program dust_fit
                 write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
                  iter, " - chisq: " , chisq, " - A_s: ",&
                  fg_amp(100,k,loc,1),  " - beta_s: ",&
-                 sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps
+                 sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps/temp_norm_01
             end if
 
             call write_data
@@ -442,6 +445,10 @@ program dust_fit
             indx     = beta_d
         end if
 
+
+        if (mod(iter,output_iter) .EQ. 0) then
+           write(*,*) 'Sampling ' // trim(type) // ' beta at nside', beta_samp_nside
+        end if
 
         !------------------------------------------------------------------------
         ! Check to see if the data nside is the same as the sampling nside
@@ -846,8 +853,8 @@ program dust_fit
         integer(i4b),              intent(in)     :: npix, map_n
         character(len=*),          intent(in)     :: method
         real(dp), allocatable, dimension(:,:,:)   :: T_nu, T_nu_T, covar, A_1, A_2
-        real(dp), allocatable, dimension(:,:)     :: A, c_1, c_2, dats, norm, d12
-        real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u,mat_d, mat_du
+        real(dp), allocatable, dimension(:,:)     :: A, c_1, c_2, dats, norm, A_inv
+        real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u, samp_test
         real(dp), allocatable, dimension(:)       :: b, c, d, samp, rand
         real(dp)                                  :: chi0, chi_prop
         integer(i4b)                              :: x, y, z, nskip
@@ -870,10 +877,8 @@ program dust_fit
         allocate(A_1(y,x,z),A_2(y,y,z))
         allocate(A(y,y),b(y),c(y),d(y))
         allocate(mat_l(y,y),mat_u(y,y))
-        allocate(d12(y,y),norm(y,y))
-        allocate(mat_d(y,y),mat_du(y,y))
+        allocate(samp(y),rand(y), norm(y,y))
         allocate(covar(x,x,z),c_1(x,z),c_2(y,z))
-        allocate(samp(y),rand(y))
 
         ! Initialize arrays
         covar(:,:,:)      = 0.d0
@@ -881,9 +886,13 @@ program dust_fit
         A_1(:,:,:)        = 0.d0
         A_2(:,:,:)        = 0.d0
         A(:,:)            = 0.d0
+        A_inv(:,:)        = 0.d0
         b(:)              = 0.d0
         c(:)              = 0.d0
         d(:)              = 0.d0
+        rand(:)           = 0.d0
+        samp(:)           = 0.d0
+        norm(:,:)         = 0.d0
         dats(:,:)         = 0.d0
         mat_l(:,:)        = 0.d0
         mat_u(:,:)        = 0.d0
@@ -926,11 +935,10 @@ program dust_fit
             if (mod(iter,output_iter) .EQ. 0) then
                 write(*,*) 'Joint sampling using Cholesky Decomp'
             end if
-            call cholesky_decomp(A,mat_l,mat_d,y)
+            call cholesky_decomp(A,mat_l,y)
             mat_u  = transpose(mat_l)
-            mat_du = matmul(mat_d,mat_u)
             call forward_sub(mat_l,d,c)
-            call backward_sub(mat_du,b,d)
+            call backward_sub(mat_u,b,d)
         else if (trim(method) == 'cg') then
             if (mod(iter,output_iter) .EQ. 0) then
                 write(*,*) 'Joint sampling using CG'
@@ -945,26 +953,18 @@ program dust_fit
             call backward_sub(mat_u,b,d)
         end if
 
-        ! Draw a sample by cholesky decompsing A, taking the sqrt of D, and
-        ! multiplying A^(1/2) by a vector of random numbers
-        if (trim(method) /= 'cholesky') then
-        !     exit
-        ! else if
-            call cholesky_decomp(A,mat_l,mat_d,y)
-        end if
+        ! Draw a sample by cholesky decompsing A^-1, and multiplying 
+        ! the subsequent lower triangular by a vector of random numbers
+        A_inv = inv(A)
+        call cholesky_decomp(A_inv,norm,y)
 
-        d12 = sqrt(mat_d)
-        norm = matmul(mat_l,matmul(d12,mat_u))
         do i = 1, y
-            rand(i) = rand_normal(0,1)
+            rand(i) = rand_normal(0.d0,1.d0)
         end do
 
-        samp = matmul(norm,rand)
+        samp  = matmul(norm,rand) !matmul(norm,rand)
 
-        write(*,*) samp
-        stop
-
-
+        b = b + samp
 
         ! Output amplitudes to the appropriate variables
         do i =1, x
@@ -980,9 +980,11 @@ program dust_fit
             end do
         end do
 
+        ! Sure to deallocate all arrays here to free up memory
         deallocate(A_1)
         deallocate(A_2)
         deallocate(A)
+        deallocate(A_inv)
         deallocate(b)
         deallocate(c)
         deallocate(c_1)
@@ -990,53 +992,44 @@ program dust_fit
         deallocate(covar)
         deallocate(dats)
         deallocate(d)
+        deallocate(norm)
         deallocate(mat_l)
+        deallocate(mat_u)
+        deallocate(rand)
+        deallocate(samp)
         deallocate(T_nu)
         deallocate(T_nu_T)
-        deallocate(mat_u)
 
     end subroutine sample_joint_amp
 
-    subroutine cholesky_decomp(mat,low,diag,n)
+    subroutine cholesky_decomp(mat,low,n)
         implicit none
         real(dp), dimension(:,:), intent(in)  :: mat
-        real(dp), dimension(:,:), intent(out) :: low, diag
-        real(dp), allocatable, dimension(:,:) :: mat_s
+        real(dp), dimension(:,:), intent(out) :: low
         integer(i4b),             intent(in)  :: n
         integer(i4b)                          :: ip
         real(dp)                              :: s
 
-        allocate(mat_s(n,n))
-
         low(:,:)   = 0.d0
-        diag(:,:)  = 0.d0
-        mat_s(:,:) = 0.d0
 
         do i = 1, n
-            do j = 1, i
-                s = 0
-                if (j == i) then
-                    do ip = 1, j-1
-                        s = s + (low(j,ip))**2
-                    end do
-                    low(j,j) = sqrt(mat(j,j)-s)
-                else
-                    do ip = 1, j-1
-                        s = low(i,ip)*low(j,ip)
-                    end do
-                     low(i,j) = (mat(i,j)-s)/low(j,j)
-                end if
-            end do
+           low(i,i) = sqrt(mat(i,i) - dot_product(low(i,1:i-1),low(i,1:i-1)) )
+           do j = i+1, n
+              low(j,i) = (mat(j,i) - dot_product(low(j,1:i-1),low(i,1:i-1)))/low(i,i)
+           end do
         end do
 
-        do i = 1, n
-            mat_s(i,i) = low(i,i)
-        end do
+        ! This code would be used for the LDU decomp:
+        ! -------------------------------------------
+        ! do i = 1, n
+        !     mat_s(i,i) = low(i,i)
+        ! end do
 
-        low  = matmul(low,inv(mat_s))
-        diag = mat_s**2
+        ! low  = matmul(low,inv(mat_s))
+        ! diag = mat_s**2
 
-        deallocate(mat_s)
+        ! deallocate(mat_s)
+        ! -------------------------------------------
 
     end subroutine cholesky_decomp
 
