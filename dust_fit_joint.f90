@@ -98,7 +98,7 @@ program dust_fit
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
-    beta_s     = -3.10d0    ! Synchrotron beta initial guess
+    beta_s     = -3.00d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
 
     bands(1)   = ('norm_pol_020_')
@@ -203,16 +203,16 @@ program dust_fit
             end do
             ! -------------------------------------------------------------------------------------------------------------------
 
-            ! nodust = maps-dust_map
+            nodust = maps-dust_map
             ! -------------------------------------------------------------------------------------------------------------------
-            ! call sample_index(nodust,'synch',beta_samp_nside,k)
-            ! do i = 0, npix-1
-            !    par(1) = beta_s(i,k)
-            !    do j = 1, nbands
-            !        fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
-            !    end do
-            ! end do
-            ! synch_map(:,k,:)        = fg_amp(:,k,:,1)
+            call sample_index(nodust,'synch',beta_samp_nside,k)
+            do i = 0, npix-1
+               par(1) = beta_s(i,k)
+               do j = 1, nbands
+                   fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
+               end do
+            end do
+            synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
@@ -223,7 +223,7 @@ program dust_fit
                 write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
                  iter, " - chisq: " , chisq, " - A_s: ",&
                  fg_amp(100,k,loc,1),  " - beta_s: ",&
-                 sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps*temp_norm_01
+                 sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps/temp_norm_01
             end if
 
             call write_data
