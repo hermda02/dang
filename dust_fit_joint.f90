@@ -70,9 +70,9 @@ program dust_fit
     nlheader          = size(header)
     nmaps             = 1
 
-    niter             = 5          ! # of MC-MC iterations
+    niter             = 20         ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
-    output_iter       = 1          ! Output maps every <- # of iterations
+    output_iter       = 5          ! Output maps every <- # of iterations
     like_iter         = 1000       ! Output likelihood test every <- # of iterations
     nu_ref_s          = 45.0d0     ! Synchrotron reference frequency
     nu_ref_d          = 353.d0     ! Dust reference frequency
@@ -200,16 +200,16 @@ program dust_fit
             ! -------------------------------------------------------------------------------------------------------------------
 
             nodust = maps-dust_map
-            ! write(*,*) 'Sampling Beta at nside ', beta_samp_nside
+            write(*,*) 'Sampling Beta at nside ', beta_samp_nside
             ! -------------------------------------------------------------------------------------------------------------------
-            ! call sample_index(nodust,'synch',beta_samp_nside,k)
-            ! do i = 0, npix-1
-            !    par(1) = beta_s(i,k)
-            !    do j = 1, nbands
-            !        fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
-            !    end do
-            ! end do
-            ! synch_map(:,k,:)        = fg_amp(:,k,:,1)
+            call sample_index(nodust,'synch',beta_samp_nside,k)
+            do i = 0, npix-1
+               par(1) = beta_s(i,k)
+               do j = 1, nbands
+                   fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
+               end do
+            end do
+            synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
@@ -948,23 +948,24 @@ program dust_fit
         ! Draw a sample by cholesky decompsing A, taking the sqrt of D, and
         ! multiplying A^(1/2) by a vector of random numbers
         if (trim(method) /= 'cholesky') then
-        !     exit
-        ! else if
             call cholesky_decomp(A,mat_l,mat_d,y)
+            mat_u = transpose(mat_l)
         end if
 
-        d12 = sqrt(mat_d)
+        d12  = sqrt(mat_d)!inv(sqrt(mat_d))
         norm = matmul(mat_l,matmul(d12,mat_u))
         do i = 1, y
-            rand(i) = rand_normal(0,1)
+            rand(i) = rand_normal(0.d0,1.d0)
         end do
 
-        samp = matmul(norm,rand)
+        samp  = matmul(inv(norm),rand) !matmul(norm,rand)
 
-        write(*,*) samp
-        stop
+!        do i = 1, y
+!           write(*,*) b(i), samp(i)
+!        end do
+!        stop
 
-
+        b = b + samp
 
         ! Output amplitudes to the appropriate variables
         do i =1, x
@@ -980,6 +981,7 @@ program dust_fit
             end do
         end do
 
+        ! Sure to deallocate all arrays here to free up memory
         deallocate(A_1)
         deallocate(A_2)
         deallocate(A)
@@ -990,10 +992,15 @@ program dust_fit
         deallocate(covar)
         deallocate(dats)
         deallocate(d)
+        deallocate(d12)
         deallocate(mat_l)
+        deallocate(mat_u)
+        deallocate(mat_d)
+        deallocate(mat_du)
+        deallocate(rand)
+        deallocate(samp)
         deallocate(T_nu)
         deallocate(T_nu_T)
-        deallocate(mat_u)
 
     end subroutine sample_joint_amp
 
