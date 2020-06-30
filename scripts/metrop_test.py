@@ -15,14 +15,13 @@ missval = -1.6375e30
 planck  = np.loadtxt('/home/daniel/graduate_school/masters/tools/Planck_color.txt')/255.
 pl_cmap = colors.LinearSegmentedColormap.from_list('planck',planck)
 
-accept = np.loadtxt('accept.dat')
-prob   = np.loadtxt('prob.dat')
-chisq  = np.loadtxt('chi.dat')
-beta   = np.loadtxt('temps.dat')
+files  = ['accept.dat'. 'prob.dat', 'chi.dat', 'temps.dat']
 
 #-----------------------------------------
 
 def plot_accept():
+
+    accept = np.loadtxt(files[0])
 
     niter = np.linspace(1,len(accept),len(accept))
 
@@ -32,9 +31,10 @@ def plot_accept():
     plt.ylabel(r'$N_{accept}/N_{\rm iter}$',size=20)
     plt.savefig('accept_trace',dpi=300,bbox_inches='tight')
     plt.close()
-    # plt.show()
 
 def plot_prob():
+
+    prob = np.loadtxt(files[1])
 
     niter = np.linspace(1,len(prob),len(prob))
 
@@ -44,9 +44,11 @@ def plot_prob():
     plt.ylabel('Probability',size=20)
     plt.savefig('accept_prob',dpi=300,bbox_inches='tight')
     plt.close()
-    # plt.show()
     
 def trace_beta():
+
+    beta = np.loadtxt(files[3])
+
     niter = np.linspace(1,len(beta),len(beta))
 
     plt.plot(niter,beta,color='orange')
@@ -55,9 +57,10 @@ def trace_beta():
     plt.ylabel(r'$\beta_s$',size=20)
     plt.savefig('beta_trace',dpi=300,bbox_inches='tight')
     plt.close()
-    # plt.show()
 
 def trace_chisq():
+
+    chisq = np.loadtxt(files[2])
 
     niter = np.linspace(1,len(chisq),len(chisq))
 
@@ -68,9 +71,24 @@ def trace_chisq():
     plt.ylabel(r'$\chi^2$',size=20)
     plt.savefig('chisq_trace',dpi=300,bbox_inches='tight')
     plt.close()
-    # plt.show()
 
-plot_prob()
-trace_chisq()
-trace_beta()
-plot_accept()
+USAGE = f"Usage: python3 {sys.argv[0]} [--help] |  -accept -beta -chisq -prob"
+
+def plot() -> None:
+    commander = sys.argv[1:]
+    if not command:
+        raise SystemExit(USAGE)
+
+    for i in command:
+        if (i == '--help'):
+            SystemExit(USAGE)
+        if (i == '-accept'):
+            plot_accept()
+        if (i == '-beta'):
+            trace_beta()
+        if (i == '-chisq'):
+            trace_chisq()
+        if (i == '-prob'):
+            plot_prob()
+        else:
+            SystemExit(USAGE)
