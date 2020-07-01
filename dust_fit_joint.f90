@@ -65,16 +65,16 @@ program dust_fit
     tqu(3)            = 'U'
     i                 = getsize_fits(template_file_01, nside=nside, ordering=ordering, nmaps=nmaps)
     npix              = nside2npix(nside) 
-    nbands            = 6
+    nbands            = 5
     nfgs              = 2
     nlheader          = size(header)
     nmaps             = 1
 
-    niter             = 1000       ! # of MC-MC iterations
+    niter             = 50       ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
-    output_iter       = 100        ! Output maps every <- # of iterations
+    output_iter       = 5        ! Output maps every <- # of iterations
     like_iter         = 1000       ! Output likelihood test every <- # of iterations
-    nu_ref_s          = 45.0d0     ! Synchrotron reference frequency
+    nu_ref_s          = 30.0d0     ! Synchrotron reference frequency
     nu_ref_d          = 353.d0     ! Dust reference frequency
     beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
     beta_s_std        = 0.1d0      ! \beta_synch Gaussian prior std
@@ -98,32 +98,30 @@ program dust_fit
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
-    beta_s     = -3.00d0    ! Synchrotron beta initial guess
+    beta_s     = -3.10d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
 
-    bands(1)   = ('norm_pol_020_')
-    bands(2)   = ('norm_pol_045_')
-    bands(3)   = ('norm_pol_070_')
-    bands(4)   = ('norm_pol_100_')
-    bands(5)   = ('norm_pol_200_')
-    bands(6)   = ('norm_pol_353_')
+    bands(1)   = ('ame_pol_020_')
+    bands(2)   = ('ame_pol_030_')
+    bands(3)   = ('ame_pol_045_')
+    bands(4)   = ('ame_pol_070_')
+    bands(5)   = ('ame_pol_100_')
 
     nuz(1)     = 20.0d0
-    nuz(2)     = 45.0d0
-    nuz(3)     = 70.0d0
-    nuz(4)     = 100.0d0
-    nuz(5)     = 200.0d0
-    nuz(6)     = 353.0d0
+    nuz(2)     = 30.0d0
+    nuz(3)     = 45.0d0
+    nuz(4)     = 70.0d0
+    nuz(5)     = 100.0d0
 
     loc        = minloc(abs(nuz-nu_ref_s),1)
     !----------------------------------------------------------------------------------------------------------
     ! Read maps
 
     do j = 1, nbands
-        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'rms_n0004.fits',&
+        call read_bintab('data/test_data/ame_pol/' // trim(bands(j)) // 'rms_n0004.fits',&
         rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
-        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)) // 'noised_n0004.fits', &
+        call read_bintab('data/test_data/ame_pol/' // trim(bands(j)) // 'noised_n0004.fits', &
         map,npix,nmaps,nullval,anynull,header=header)
         maps(:,:,j) = map
     end do
@@ -137,19 +135,19 @@ program dust_fit
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Choose which bands for fitting templates
-    j_corr(1) = .false.
+    j_corr(1) = .true.
     j_corr(2) = .true.
     j_corr(3) = .true.
     j_corr(4) = .true.
-    j_corr(5) = .true.
-    j_corr(6) = .true.      
+    j_corr(5) = .false.
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Metropolis-Hastings testing things
     allocate(chi(iterations*niter+1), tump(iterations*niter+1), accept(iterations*niter+1), prob(iterations*niter+1))
     !----------------------------------------------------------------------------------------------------------
+    ! Normalize template to avoid large values in the matrix equation
     temp_norm_01 = maxval(template_01)
-    template_01 = template_01/temp_norm_01
+    template_01  = template_01/temp_norm_01
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
@@ -172,19 +170,9 @@ program dust_fit
         write(*,*) 'Initial Chisq = ', chisq
 
         do iter = 1, niter
-        
-            ! write(*,*) 'Iteration', iter
-            ! write(*,*) '-----------------------'
-            ! write(*,*) ''
 
-
-            ! write(*,*) 'Jointly Sampling Amplitudes' 
-            call sample_joint_amp(npix,k,'cholesky')  ! Method possibilities are 'cg', 'LU', and 'cholesky'
+            call sample_joint_amp(npix,k,'cg')  ! Method possibilities are 'cg', 'lu', and 'cholesky'
             dust_amps = fg_amp(0,k,:,2)
-
-            call compute_chisq(fg_amp,k)
-
-            write(*,fmt='(i6, a, f10.3)') iter, ' - chisq: ' , chisq
 
             ! -------------------------------------------------------------------------------------------------------------------
             ! Extrapolating A_synch to bands
@@ -205,14 +193,14 @@ program dust_fit
 
             nodust = maps-dust_map
             ! -------------------------------------------------------------------------------------------------------------------
-            call sample_index(nodust,'synch',beta_samp_nside,k)
-            do i = 0, npix-1
-               par(1) = beta_s(i,k)
-               do j = 1, nbands
-                   fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
-               end do
-            end do
-            synch_map(:,k,:)        = fg_amp(:,k,:,1)
+            !call sample_index(nodust,'synch',beta_samp_nside,k)
+            !do i = 0, npix-1
+            !   par(1) = beta_s(i,k)
+            !   do j = 1, nbands
+            !       fg_amp(i,k,j,1) = fg_amp(i,k,loc,1)*compute_spectrum('synch',nuz(j),par)
+            !   end do
+            !end do
+            !synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
@@ -906,7 +894,6 @@ program dust_fit
                 dats(i,j)    = maps(i-1,map_n,j)
             end do
         end do
-
         ! Fill template matrix
         do i=1,x
             l = 1
@@ -944,7 +931,7 @@ program dust_fit
                 write(*,*) 'Joint sampling using CG'
             end if
             call compute_cg(A,b,c,y)
-        else if (trim(method) == 'LU') then
+        else if (trim(method) == 'lu') then
             if (mod(iter,output_iter) .EQ. 0) then
                 write(*,*) 'Joint sampling using LU Decomp'
             end if
@@ -963,6 +950,10 @@ program dust_fit
         end do
 
         samp  = matmul(norm,rand) !matmul(norm,rand)
+
+        do i = 1+x, y
+           write(*,*) b(i)/temp_norm_01, samp(i)/temp_norm_01
+        end do
 
         b = b + samp
 
