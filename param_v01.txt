@@ -1,0 +1,76 @@
+# First attempt at a dust_fit_joint parameter file
+
+    !----------------------------------------------------------------------------------------------------------
+    ! General paramters
+    template_file_01  = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
+    template_file_02  = 'data/temp_synch_030_n0004.fits'
+    mask_file         = 'data/mask_fullsky_n0004.fits'
+    tqu(1)            = 'T'
+    tqu(2)            = 'Q'
+    tqu(3)            = 'U'
+    i                 = getsize_fits(template_file_01, nside=nside, ordering=ordering, nmaps=nmaps)
+    npix              = nside2npix(nside) 
+    nbands            = 7
+    nfgs              = 2
+    nlheader          = size(header)
+    nmaps             = 1
+
+    niter             = 50       ! # of MC-MC iterations
+    iterations        = 100        ! # of iterations in the samplers
+    output_iter       = 5        ! Output maps every <- # of iterations
+    like_iter         = 1000       ! Output likelihood test every <- # of iterations
+    nu_ref_s          = 30.0d0     ! Synchrotron reference frequency
+    nu_ref_d          = 353.d0     ! Dust reference frequency
+    beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
+    beta_s_std        = 0.1d0      ! \beta_synch Gaussian prior std
+    beta_samp_nside   = 4          ! \beta_synch nside sampling
+    output_fg         = .true.     ! Option for outputting foregrounds for all bands
+    test              = .true.     ! Testing Metropolis-Hasting apparatus
+    !----------------------------------------------------------------------------------------------------------
+
+    beta_s     = -3.10d0    ! Synchrotron beta initial guess
+    beta_d     = 1.60d0     ! Dust beta initial guess
+
+# Foreground Information
+FG_LABEL_01          = 'synch'
+FG_TYPE_01           = 'power-law'
+DEFAULT_PARAM01_01   = -3.10
+REFERENCE_FREQ_01    = 45.0 
+
+PARAM01_GAUSS_MEAN01 = -3.10
+PARAM01_GAUSS_STD01  = 0.01
+PARAM01_REGION01     = 'single_pix'
+PARAM01_SAMP_NSIDE01 = 4
+
+JOINT_SAMPLE_GROUP01 = 'synch', 'template01'
+
+
+# Band 01 Information
+BAND_LABEL_01  = 'ame_pol_020'
+BAND_FILE_01   = 'ame_pol_020_noised_n0004.fits'
+BAND_RMS_01    = 'ame_pol_020_rms_n0004.fits'
+BAND_FREQ_01   = 20.0    # In GHz
+
+# Band 02 Information
+BAND_LABEL_02  = 'ame_pol_030'
+BAND_FILE_02   = 'ame_pol_030_noised_n0004.fits'
+BAND_RMS_02    = 'ame_pol_030_rms_n0004.fits'
+BAND_FREQ_02   = 30.0    # In GHz
+
+# Band 03 Information
+BAND_LABEL_03  = 'ame_pol_045'
+BAND_FILE_03   = 'ame_pol_045_noised_n0004.fits'
+BAND_RMS_03    = 'ame_pol_045_rms_n0004.fits'
+BAND_FREQ_03   = 45.0    # In GHz
+
+# Band 04 Information
+BAND_LABEL_04  = 'ame_pol_070'
+BAND_FILE_04   = 'ame_pol_070_noised_n0004.fits'
+BAND_RMS_04    = 'ame_pol_070_rms_n0004.fits'
+BAND_FREQ_04   = 70.0    # In GHz
+
+# Band 05 Information
+BAND_LABEL_05  = 'ame_pol_100'
+BAND_FILE_05   = 'ame_pol_100_noised_n0004.fits'
+BAND_RMS_05    = 'ame_pol_100_rms_n0004.fits'
+BAND_FREQ_05   = 100.0    # In GHz
