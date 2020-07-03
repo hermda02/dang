@@ -7,13 +7,13 @@ module foreground_mod
   private
   type, public          :: fg_comp
     !// Internal variables for this type
-    real(dp)            :: nu_ref      ! Foreground reference frequency
-    integer             :: loc         ! Reference frequency band (nearest)
-    real(dp)            :: p(2)        ! Foreground Parameters
-    real(dp)            :: gauss_mean  ! Parameter sampling mean
-    real(dp)            :: gauss_std   ! Parameter sampling standard dev
-    real(dp)            :: uni_min     ! Uniform minimum (won't accept samples below this value)
-    real(dp)            :: uni_max     ! Uniform maximum (won't accept samples above this value)
+    real(dp)            :: nu_ref        ! Foreground reference frequency
+    integer             :: loc           ! Reference frequency band (nearest)
+    real(dp)            :: p(2)          ! Foreground Parameters
+    real(dp)            :: gauss_mean(2) ! Parameter sampling mean
+    real(dp)            :: gauss_std(2)  ! Parameter sampling standard dev
+    real(dp)            :: uni_min(2)    ! Uniform minimum (won't accept samples below this value)
+    real(dp)            :: uni_max(2)    ! Uniform maximum (won't accept samples above this value)
     character(len=255)  :: type
   contains
     !// the procedures to load data, to write data to the screen,

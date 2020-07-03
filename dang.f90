@@ -1,4 +1,4 @@
-program dust_fit
+program dang
     use healpix_types
     use pix_tools
     use fitstools
@@ -10,15 +10,18 @@ program dust_fit
     implicit none
   
     !------------------------------------------------------------------------------------------------------
-    ! Daniel Herman 2020                                                                                  |
+    ! This program was designed to fit the Planck (NPIPE) 353 GHz dust map to LFI bands to set constraints|
+    ! on the level of polarized emission from Anomalous Microwave Emission in the LFI bands. It has grown |
+    ! into a more full Gibbs sampler, thus inpsiring the new name:                                        |
     !                                                                                                     |  
-    ! This program fits the Planck (NPIPE) 353 GHz dust map to LFI bands to set constraints on the level  |
-    ! of polarized emission from Anomalous Microwave Emission in the LFI bands.                           |
-    !                                                                                                     |  
+    !\                          Daniel's Amazing New Gibbs sampler (DANG)                                /|
+    ! \                                                                                                 / |
+    !  \                                    Daniel Herman 2020                                         /  |
+    !   \                                                                                             /   |  
     !-----------------------------------------------------------------------------------------------------|  
   
     !-----------------------------------------------------------------------------------------------------|  
-    ! What we want here: we are taking a joint fit of CMB, synchrotron, and dust emission. In order to do |
+    ! What we want here: tale a joint fit of CMB, synchrotron, and dust emission. In order to do this     |
     ! effectively, this will be a mulit-frequency Gibbs sampler. Using the BeyondPlanck LFI maps, along   |
     ! side the WMAP data, we iteratively fit CMB (per pixel), synchrotron (per pixel), and dust (global). |
     ! Once this has been done, estimates to the level of AME polarization will be made using the lowest   |
@@ -40,9 +43,7 @@ program dust_fit
     real(dp), allocatable, dimension(:,:,:)      :: synch_map, dust_map, cmb_map, nodust
     real(dp), allocatable, dimension(:,:)        :: template_01, template_02, map, rms
     real(dp), allocatable, dimension(:,:)        :: beta_s, T_d, beta_d, chi_map, mask, HI
-    real(dp), allocatable, dimension(:)          :: nuz, chi, tump, accept, prob, par, dust_amps
-    real(dp)                                     :: nu_ref_s, beta_s_std, beta_s_mu
-    real(dp)                                     :: nu_ref_d, beta_d_std, beta_d_mu, T_d_mu
+    real(dp), allocatable, dimension(:)          :: nuz, par, dust_amps
     real(dp)                                     :: chisq, temp_norm_01, temp_norm_02
     character(len=80), dimension(180)            :: header
     character(len=80), dimension(3)              :: tqu
@@ -54,7 +55,7 @@ program dust_fit
     real(dp), allocatable, dimension(:)          :: x, b, d
 
     ! Object Orient
-    type(fg_comp)      :: frgrnd(3)
+    type(fg_comp)      :: fgs(2)
     type(band)         :: bands(6) 
 
     !----------------------------------------------------------------------------------------------------------
@@ -76,13 +77,8 @@ program dust_fit
     iterations        = 100        ! # of iterations in the samplers
     output_iter       = 1        ! Output maps every <- # of iterations
     like_iter         = 1000       ! Output likelihood test every <- # of iterations
-    nu_ref_s          = 45.0d0     ! Synchrotron reference frequency
-    nu_ref_d          = 353.d0     ! Dust reference frequency
-    beta_s_mu         = -3.10d0    ! \beta_synch Gaussian prior mean
-    beta_s_std        = 0.1d0      ! \beta_synch Gaussian prior std
     beta_samp_nside   = 4          ! \beta_synch nside sampling
     output_fg         = .true.     ! Option for outputting foregrounds for all bands
-    test              = .true.     ! Testing Metropolis-Hasting apparatus
     !----------------------------------------------------------------------------------------------------------
 
     call getarg(1,arg1)
@@ -94,7 +90,7 @@ program dust_fit
     allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands), nodust(0:npix-1,nmaps,nbands))
     allocate(mask(0:npix-1,1), res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps))
     allocate(fg_amp(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
-    allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps), HI(0:npix-1,nmaps))
+    allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps))
     allocate(cmb_map(0:npix-1,nmaps,nbands), dust_map(0:npix-1,nmaps,nbands), synch_map(0:npix-1,nmaps,nbands))
     allocate(dust_amps(nbands))
     allocate(map(0:npix-1,nmaps))
@@ -133,13 +129,25 @@ program dust_fit
     call bands(6)%get_label('norm_pol_353')
     
     ! Load foreground info
-    frgrnd(1)%type       = 'synch'
-    frgrnd(1)%nu_ref     = 45.d0
-    frgrnd(1)%gauss_mean = -3.10d0
-    frgrnd(1)%gauss_std  = 0.1d0
-    frgrnd(1)%uni_min    = -4.5d0
-    frgrnd(1)%uni_max    = -1.5d0
-    frgrnd(1)%loc        = minloc(abs(bands%nu-nu_ref_s),1)
+    fgs(1)%type          = 'synch'
+    fgs(1)%nu_ref        = 45.d0
+    fgs(1)%gauss_mean(1) = -3.10d0
+    fgs(1)%gauss_std(1)  = 0.1d0
+    fgs(1)%uni_min(1)    = -4.5d0
+    fgs(1)%uni_max(1)    = -1.5d0
+    fgs(1)%loc           = minloc(abs(bands%nu-fgs(1)%nu_ref),1)
+
+    fgs(2)%type          = 'dust'
+    fgs(2)%nu_ref        = 353.d0
+    fgs(2)%gauss_mean(1) = 1.60d0
+    fgs(2)%gauss_std(1)  = 0.1d0
+    fgs(2)%uni_min(1)    = 1.2d0
+    fgs(2)%uni_max(1)    = 2.0d0
+    fgs(2)%gauss_mean(2) = 19.60d0
+    fgs(2)%gauss_std(2)  = 0.1d0
+    fgs(2)%uni_min(2)    = 15.0d0
+    fgs(2)%uni_max(2)    = 25.0d0
+    fgs(2)%loc           = minloc(abs(bands%nu-fgs(2)%nu_ref),1)
 
     !----------------------------------------------------------------------------------------------------------
     ! Read maps
@@ -175,9 +183,6 @@ program dust_fit
     j_corr02(5) = .true.
     j_corr02(6) = .true.
     !----------------------------------------------------------------------------------------------------------
-    !----------------------------------------------------------------------------------------------------------
-    ! Metropolis-Hastings testing things
-    allocate(chi(iterations*niter+1), tump(iterations*niter+1), accept(iterations*niter+1), prob(iterations*niter+1))
     !----------------------------------------------------------------------------------------------------------
     ! Normalize template to avoid large values in the matrix equation
     temp_norm_01 = maxval(template_01)
@@ -215,9 +220,9 @@ program dust_fit
             ! Extrapolating A_synch to bands
             if (ANY(joint_comps=='synch')) then
                 do i = 0, npix-1
-                    frgrnd(1)%p(1) = beta_s(i,k)
+                    fgs(1)%p(1) = beta_s(i,k)
                     do j = 1, nbands
-                        fg_amp(i,k,j,1) = fg_amp(i,k,frgrnd(1)%loc,1)*compute_spectrum(frgrnd(1),bands(j)%nu)
+                        fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),bands(j)%nu)
                     end do
                 end do
                 synch_map(:,k,:)        = fg_amp(:,k,:,1)
@@ -227,10 +232,10 @@ program dust_fit
             if (ANY(joint_comps=='dust')) then
                 write(*,*) 'works, dust'
                 do i = 0, npix-1
-                    frgrnd(3)%p(1) = beta_d(i,k)
-                    frgrnd(3)%p(2) = T_d(i,k)
+                    fgs(2)%p(1) = beta_d(i,k)
+                    fgs(2)%p(2) = T_d(i,k)
                     do j = 1, nbands
-                        fg_amp(i,k,j,3) = fg_amp(i,k,frgrnd(3)%loc,3)*compute_spectrum(frgrnd(3),bands(j)%nu)
+                        fg_amp(i,k,j,3) = fg_amp(i,k,fgs(2)%loc,3)*compute_spectrum(fgs(2),bands(j)%nu)
                     end do
                 end do
                 dust_map(:,k,:)         = fg_amp(:,k,:,3)
@@ -249,7 +254,7 @@ program dust_fit
             !do i = 0, npix-1
             !   par(1) = beta_s(i,k)
             !   do j = 1, nbands
-            !       fg_amp(i,k,j,1) = fg_amp(i,k,frgrnd(1)%loc,1)*compute_spectrum('synch',nuz(j),par)
+            !       fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum('synch',nuz(j),par)
             !   end do
             !end do
             !synch_map(:,k,:)        = fg_amp(:,k,:,1)
@@ -262,7 +267,7 @@ program dust_fit
             if (mod(iter, 1) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
                  iter, " - chisq: " , chisq, " - A_s: ",&
-                 fg_amp(100,k,frgrnd(1)%loc,1),  " - beta_s: ",&
+                 fg_amp(100,k,fgs(1)%loc,1),  " - beta_s: ",&
                  sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps/temp_norm_01
             end if
 
@@ -291,7 +296,7 @@ program dust_fit
       end if
     end function
 
-    function compute_spectrum(self, freq)! result(spectrum)
+    function compute_spectrum(self, freq)
         implicit none
         class(fg_comp)                 :: self
         real(dp),           intent(in) :: freq
@@ -352,14 +357,14 @@ program dust_fit
   
     end function temp_fit
   
-    function sample_spec_amp(data,type,noise)
+    function sample_spec_amp(self,data,noise)
         !------------------------------------------------------------------------
         ! Samples spectral amplitude (per pixel), following the spectrum of foreground 'type'. Returns a full map of amplitudes.
         !------------------------------------------------------------------------
         implicit none
   
+        class(fg_comp)                                         :: self
         real(dp), dimension(0:npix-1,nbands), intent(in)       :: data, noise
-        character(len=*),                     intent(in)       :: type
         real(dp)                                               :: sum1, sum2, spec
         real(dp)                                               :: chi, chi_0, chi_00, p
         real(dp)                                               :: amp, num, t, sam
@@ -372,16 +377,16 @@ program dust_fit
         cov = noise*2
 
         do i = 0, npix-1
-            if (trim(type) == 'synch') then 
-                pars(1) = beta_s(i,k)
-            else if (trim(type) == 'dust') then
-                pars(1) = beta_d(i,k)
-                pars(2) = T_d(i,k)
+            if (trim(self%type) == 'synch') then 
+                self%p(1) = beta_s(i,k)
+            else if (trim(self%type) == 'dust') then
+                self%p(1) = beta_d(i,k)
+                self%p(2) = T_d(i,k)
             end if
             sum1 = 0.0d0
             sum2 = 0.0d0
             do j = 1, nbands
-                spec          = compute_spectrum(frgrnd(1),nuz(j))
+                spec          = compute_spectrum(self,nuz(j))
                 sum1           = sum1 + (data(i,j)*spec)/cov(i,j)
                 sum2           = sum2 + (spec)**2.d0/cov(i,j)
                 norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,j)
@@ -393,11 +398,11 @@ program dust_fit
 
     end function sample_spec_amp
   
-    subroutine sample_index(data, type, nside2, map_n)
+    subroutine sample_index(self, data, nside2, map_n)
         implicit none
   
+        class(fg_comp)                                         :: self
         integer(i4b),                               intent(in) :: map_n, nside2
-        character(len=*),                           intent(in) :: type
         real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data
         integer(i4b)                                           :: nside1, npix2
         real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov
@@ -424,19 +429,15 @@ program dust_fit
         !------------------------------------------------------------------------
         ! Load priors for the appropriate spectrum
         !------------------------------------------------------------------------
-        if (trim(type) == 'synch') then 
-            prior(1) = beta_s_mu
-            prior(2) = beta_s_std
+        if (trim(self%type) == 'synch') then 
             indx     = beta_s
-        else if (trim(type) == 'dust') then 
-            prior(1) = beta_d_mu
-            prior(2) = beta_d_std
+        else if (trim(self%type) == 'dust') then 
             indx     = beta_d
         end if
 
 
         if (mod(iter,output_iter) .EQ. 0) then
-           write(*,*) 'Sampling ' // trim(type) // ' beta at nside', beta_samp_nside
+           write(*,*) 'Sampling ' // trim(self%type) // ' beta at nside', beta_samp_nside
         end if
 
         !------------------------------------------------------------------------
@@ -490,143 +491,46 @@ program dust_fit
         ! the improvement in the fit.
         !------------------------------------------------------------------------
         do i = 0, npix2-1
-            a       = 0.d0
-            sol     = indx_low(i,map_n)
-            pars(1) = indx_low(i,map_n)
+            a         = 0.d0
+            sol       = indx_low(i,map_n)
+            self%p(1) = indx_low(i,map_n)
 
             ! Chi-square from the most recent Gibbs chain update
             do j = 1, nbands
-                a = a + (((fg_amp_low(i,map_n,frgrnd(1)%loc) * compute_spectrum(frgrnd(1),nuz(j))) &
+                a = a + (((fg_amp_low(i,map_n,fgs(1)%loc) * compute_spectrum(fgs(1),nuz(j))) &
                       - data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
             end do
             c = a
-            if (test .eqv. .true.) then
-                if (i == 350) then
-                    d1        = a
-                    prob(1)   = 1.d0
-                    chi(1)    = a
-                    tump(1)   = sol
-                    accept(1) = 0.d0
-                    naccept   = 0
-                end if
-            end if
 
             do l = 1, iterations
 
                 ! Sampling from the prior
-                t       = rand_normal(prior(1), prior(2))
-                pars(1) = t
-                b       = 0.d0
+                t         = rand_normal(self%gauss_mean(1), self%gauss_std(1))
+                self%p(1) = t
+                b         = 0.d0
 
                 do j = 1, nbands
-                    tmp(j) = fg_amp_low(i,map_n,frgrnd(1)%loc)*compute_spectrum(frgrnd(1),nuz(j))
+                    tmp(j) = fg_amp_low(i,map_n,fgs(1)%loc)*compute_spectrum(fgs(1),nuz(j))
                     b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
                 end do
                 b = b
 
-                if (b < c .and. t .lt. -2.5 .and. t .gt. -3.5) then
+                if (b < c .and. t .lt. self%uni_max(1) .and. t .gt. self%uni_min(1)) then
                     sam = t
                     c   = b
-                    if (test .eqv. .true.) then
-                        if (i == 350) then
-                            naccept  = naccept + 1
-                            prob(l+1)= 1
-                        end if
-                    end if
                 else
                     x(2) = exp(0.5d0*(c-b))
                     p = minval(x)
                     call RANDOM_NUMBER(num)
                     if (num < p) then
-                        if (t .lt. -2.5 .and. t .gt. -3.5) then
+                        if (t .lt. self%uni_max(1) .and. t .gt. self%uni_min(1)) then
                             sam = t
                             c   = b
-                            if (test .eqv. .true.) then
-                                if (i == 350) then
-                                    naccept = naccept + 1
-                                end if
-                            end if
-                        end if
-                    end if
-                    ! Metropolis testing apparatus
-                    !-----------------------------
-                    if (test .eqv. .true.) then
-                        if (i == 350) then
-                            prob(l+1)   = p
                         end if
                     end if
                 end if
-                if (test .eqv. .true.) then
-                    if (i == 350) then 
-                        chi(l+1)    = c
-                        tump(l+1)   = sam
-                        accept(l+1) = naccept/l
-                    end if
-                end if
-                !-----------------------------
             end do
-            if (c < a) then
-                sol = sam
-            else
-                sol = indx_low(i,map_n)
-            end if
-
-            ! Metropolis testing apparatus
-            !-----------------------------
-            if (test .eqv. .true.) then
-                if (i == 350) then
-                    inquire(file=trim(direct) // trim(tqu(k)) // '_prob.dat',exist=exist)
-                    if (exist) then
-                        open(40,file = trim(direct) // trim(tqu(k)) // '_prob.dat',&
-                                       status="old", position="append", action="write")
-                    else
-                        open(40,file = trim(direct) // trim(tqu(k)) // '_prob.dat',&
-                                       status="new", action="write")
-                    endif
-    
-                    inquire(file=trim(direct) // trim(tqu(k)) // '_chi.dat',exist=exist)
-                    if (exist) then
-                        open(41,file = trim(direct) // trim(tqu(k)) // '_chi.dat',&
-                                       status="old", position="append", action="write")
-                    else
-                        open(41,file = trim(direct) // trim(tqu(k)) // '_chi.dat',&
-                                       status="new", action="write")
-                    endif
-    
-                    inquire(file=trim(direct) // trim(tqu(k)) // '_temps.dat',exist=exist)
-                    if (exist) then
-                        open(42,file = trim(direct) // trim(tqu(k)) // '_temps.dat',&
-                                       status="old", position="append", action="write")
-                    else
-                        open(42,file = trim(direct) // trim(tqu(k)) // '_temps.dat',&
-                                       status="new", action="write")
-                    endif
-    
-                    inquire(file=trim(direct) // trim(tqu(k)) // '_accept.dat',exist=exist)
-                    if (exist) then
-                        open(43,file = trim(direct) // trim(tqu(k)) // '_accept.dat',&
-                                       status="old", position="append", action="write")
-                    else
-                        open(43,file = trim(direct) // trim(tqu(k)) // '_accept.dat',&
-                                       status="new", action="write")
-                    endif
-    
-                    do l = 1, iterations+1
-                        write(40,*) prob(l)
-                        write(41,*) chi(l)
-                        write(42,*) tump(l)
-                        write(43,*) accept(l)
-                    end do
-                    close(40)
-                    close(41)
-                    close(42)
-                    close(43)
-                end if
-            end if
-            !-----------------------------
-            if (i == 350) then
-               d2 = c
-            end if
+            sol = sam
             indx_sample_low(i) = sol
         end do
 
@@ -641,9 +545,9 @@ program dust_fit
             indx_sample = indx_sample_low
         end if
 
-        if (trim(type) == 'synch') then 
+        if (trim(self%type) == 'synch') then 
             beta_s(:,k) = indx_sample
-        else if (trim(type) == 'dust') then 
+        else if (trim(self%type) == 'dust') then 
             beta_d(:,k) = indx_sample
         end if
         deallocate(data_low)
@@ -656,20 +560,21 @@ program dust_fit
 
 
     ! This architecture of this function has not been modified yet
-    function sample_T(band, npix, map_n, sigma, T_map, nside2)
+    function sample_HI_T(self, band, npix, map_n, sigma, T_map, nside2)
         implicit none
   
+        class(fg_comp)                                         :: self
         integer(i4b), intent(in)                               :: npix, map_n, nside2
         integer(i4b)                                           :: nside1, npix2
         real(dp), intent(in)                                   :: sigma
         real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: band
         real(dp), dimension(0:npix-1,nmaps), intent(in)        :: T_map
-        real(dp), dimension(0:npix-1)                          :: sample_T
+        real(dp), dimension(0:npix-1)                          :: sample_hi_T
         real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov
         real(dp), dimension(0:npix-1,nmaps)                    :: te
         real(dp), allocatable, dimension(:,:,:)                :: band_low, fg_amp_low, rms_low
         real(dp), allocatable, dimension(:,:)                  :: T_low
-        real(dp), allocatable, dimension(:)                    ::  sample_T_low
+        real(dp), allocatable, dimension(:)                    :: sample_T_low
         real(dp), dimension(nbands)                            :: signal, tmp
         real(dp), dimension(2)                                 :: x
         real(dp)                                               :: a, b, c, num, sam, t, p, sol, naccept_t_d
@@ -733,20 +638,10 @@ program dust_fit
                         - band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2
                 end do
                 c   = a
-                sam = T_d_mu
-                if (test .eqv. .true. .and. iter .eq. 1) then
-                    if (i == 350) then
-                        prob(1)     = 1.d0
-                        chi(1)      = a
-                        tump(1)     = sol
-                        accept(1)   = 0.d0
-                        naccept_t_d = 0
-                    end if
-                end if
 
                 do l = 1, iterations
                     ! Begin sampling from the prior
-                    t = rand_normal(sam, sigma)
+                    t = rand_normal(self%gauss_mean(2), self%gauss_std(2))
                     b = 0.d0
                     do j = 1, nbands
                         tmp(j) = fg_amp_low(i,map_n,j)*HI(i,1)*planck(nuz(j)*1.d9,t)
@@ -757,12 +652,6 @@ program dust_fit
                     if (b < c .and. t .lt. 35.d0 .and. t .gt. 10.d0) then
                         sam = t
                         c   = b
-                        if (test .eqv. .true.) then
-                            if (i == 350) then
-                                naccept_t_d  = naccept_t_d + 1
-                                prob((iter-1)*100+l+1)= 1
-                            end if
-                        end if
                     else
                         x(2) = exp(0.5d0*(c-b))
                         p = minval(x)
@@ -771,29 +660,9 @@ program dust_fit
                             if (t .lt. 35.d0 .and. t .gt. 10.d0) then
                                 sam = t
                                 c   = b
-                                if (test .eqv. .true.) then
-                                    if (i == 350) then
-                                        naccept_t_d = naccept_t_d + 1
-                                    end if
-                                end if
-                            end if
-                        end if
-                        ! Metropolis testing apparatus
-                        !-----------------------------
-                        if (test .eqv. .true.) then
-                            if (i == 350) then
-                                prob((iter-1)*100+l+1)   = p
                             end if
                         end if
                     end if
-                    if (test .eqv. .true.) then
-                        if (i == 350) then 
-                            chi((iter-1)*100+l+1)    = c
-                            tump((iter-1)*100+l+1)   = sam
-                            accept((iter-1)*100+l+1) = naccept_t_d/((iter-1)*100+l+1)
-                        end if
-                    end if
-                    !-----------------------------
                 end do
                 if (c < a) then
                     sol = sam
@@ -805,13 +674,13 @@ program dust_fit
         end do
         if (nside1 /= nside2) then
             if (ordering == 1) then
-                call udgrade_ring(sample_T_low,nside2, sample_T,nside1)
+                call udgrade_ring(sample_T_low,nside2, sample_hi_T,nside1)
                 call convert_nest2ring(nside2, sample_T_low)
             else
-                call udgrade_nest(sample_T_low,nside2, sample_T,nside1)
+                call udgrade_nest(sample_T_low,nside2, sample_hi_T,nside1)
             end if
         else
-             sample_T =  sample_T_low
+             sample_HI_T =  sample_T_low
         end if
 
         deallocate(band_low)
@@ -820,7 +689,7 @@ program dust_fit
         deallocate(rms_low)
         deallocate(sample_T_low)
 
-    end function sample_T
+    end function sample_HI_T
     ! ------------------------------------------------------------
 
     subroutine sample_joint_amp(npix, map_n, method)
@@ -920,9 +789,9 @@ program dust_fit
         do m = 1, size(joint_comps)
             if (joint_comps(m) == 'synch') then
                 do i = 1, x
-                    frgrnd(1)%p(1) = beta_s(i-1,map_n)
+                    fgs(1)%p(1) = beta_s(i-1,map_n)
                     do j = 1, z
-                        T_nu(i,w+i,j) = compute_spectrum(frgrnd(1),bands(j)%nu)
+                        T_nu(i,w+i,j) = compute_spectrum(fgs(1),bands(j)%nu)
                         if (i == 1) then
                             
                         end if
@@ -931,10 +800,10 @@ program dust_fit
                 w = w + x
             else if (joint_comps(m) == 'dust') then
                 do i = 1, x
-                    frgrnd(3)%p(1) = beta_d(i-1,map_n)
-                    frgrnd(3)%p(2) = T_d(i-1,map_n)
+                    fgs(2)%p(1) = beta_d(i-1,map_n)
+                    fgs(2)%p(2) = T_d(i-1,map_n)
                     do j = 1, z
-                        T_nu(i,w+i,j) = compute_spectrum(frgrnd(3),bands(j)%nu)
+                        T_nu(i,w+i,j) = compute_spectrum(fgs(2),bands(j)%nu)
                     end do
                 end do
                 w = w + x
@@ -958,7 +827,7 @@ program dust_fit
                     l = 1
                     do j = 1, z
                         if (j_corr02(j) .eqv. .true.) then
-                            T_nu(i,w+l,j) = template_01(i-1,map_n)
+                            T_nu(i,w+l,j) = template_02(i-1,map_n)
                             l = l + 1
                         end if
                     end do
@@ -1015,12 +884,12 @@ program dust_fit
         do m = 1, size(joint_comps)
             if (joint_comps(m) == 'synch') then
                 do i = 1, x
-                    fg_amp(i-1,map_n,frgrnd(1)%loc,1) = b(i)
+                    fg_amp(i-1,map_n,fgs(1)%loc,1) = b(i)
                 end do
                 b = b(x+1:)
             else if (joint_comps(m) == 'dust') then
                 do i = 1, x
-                    fg_amp(i-1,map_n,frgrnd(3)%loc,3) = b(i)
+                    fg_amp(i-1,map_n,fgs(2)%loc,3) = b(i)
                 end do
                 b = b(x+1:)
             end if
@@ -1092,9 +961,9 @@ program dust_fit
                 call write_bintab(map,npix,1, header, nlheader, trim(title))
             end do
         else 
-            title = trim(direct) // trim(bands(frgrnd(1)%loc)%label) // '_synch_amplitude_' //  trim(tqu(nm)) &
+            title = trim(direct) // trim(bands(fgs(1)%loc)%label) // '_synch_amplitude_' //  trim(tqu(nm)) &
                     // '_' // trim(iter_str) // '.fits'
-            map(:,1)   = fg_amp(:,nm,frgrnd(1)%loc,1)
+            map(:,1)   = fg_amp(:,nm,fgs(1)%loc,1)
             call write_bintab(map,npix,1, header, nlheader, trim(title))
         end if
         do j = 1, nbands
@@ -1130,7 +999,7 @@ program dust_fit
         else
             open(30,file=title, status="new", action="write")
         endif
-        write(30,*) dust_map(100,k,frgrnd(1)%loc)
+        write(30,*) dust_map(100,k,fgs(1)%loc)
         close(30)
 
         title = trim(direct) // 'pixel_100_A_s.dat'
@@ -1140,7 +1009,7 @@ program dust_fit
         else
             open(31,file=title, status="new", action="write")
         endif
-        write(31,*) fg_amp(100,k,frgrnd(1)%loc,1)
+        write(31,*) fg_amp(100,k,fgs(1)%loc,1)
         close(31)
 
         title = trim(direct) // 'pixel_100_beta_s.dat'
@@ -1198,4 +1067,4 @@ program dust_fit
       chisq = chisq/(sum(mask(:,1))+nbands+3) ! n-1 dof, npix + nbands + A_s + A_dust + A_cmb + \beta_s
     end subroutine compute_chisq
 
-  end program dust_fit
+  end program dang
