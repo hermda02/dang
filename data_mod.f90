@@ -1,4 +1,3 @@
-
 module data_mod
   use healpix_types
   use init_mod
