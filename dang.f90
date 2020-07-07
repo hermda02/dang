@@ -43,11 +43,12 @@ program dang
     real(dp), allocatable, dimension(:,:,:)      :: synch_map, dust_map, cmb_map, nodust
     real(dp), allocatable, dimension(:,:)        :: template_01, template_02, map, rms
     real(dp), allocatable, dimension(:,:)        :: beta_s, T_d, beta_d, chi_map, mask, HI
-    real(dp), allocatable, dimension(:)          :: nuz, par, dust_amps
+    real(dp), allocatable, dimension(:)          :: par, dust_amps
     real(dp)                                     :: chisq, temp_norm_01, temp_norm_02
     character(len=80), dimension(180)            :: header
     character(len=80), dimension(3)              :: tqu
     character(len=80), allocatable, dimension(:) :: joint_comps
+    character(len=10)                            :: solver
     character(len=5)                             :: iter_str
     logical(lgt), allocatable, dimension(:)      :: j_corr01, j_corr02
 
@@ -68,14 +69,14 @@ program dang
     tqu(3)            = 'U'
     i                 = getsize_fits(template_file_01, nside=nside, ordering=ordering, nmaps=nmaps)
     npix              = nside2npix(nside) 
-    nbands            = 6
+    nbands            = 5
     nfgs              = 2
     nlheader          = size(header)
     nmaps             = 1
 
-    niter             = 1       ! # of MC-MC iterations
+    niter             = 100       ! # of MC-MC iterations
     iterations        = 100        ! # of iterations in the samplers
-    output_iter       = 1        ! Output maps every <- # of iterations
+    output_iter       = 5        ! Output maps every <- # of iterations
     like_iter         = 1000       ! Output likelihood test every <- # of iterations
     beta_samp_nside   = 4          ! \beta_synch nside sampling
     output_fg         = .true.     ! Option for outputting foregrounds for all bands
@@ -100,39 +101,35 @@ program dang
     beta_d     = 1.60d0     ! Dust beta initial guess
 
     ! Load band info
-    call bands(1)%get_map('norm_pol_020_n0004.fits')
-    call bands(2)%get_map('norm_pol_045_n0004.fits')
-    call bands(3)%get_map('norm_pol_070_n0004.fits')
-    call bands(4)%get_map('norm_pol_100_n0004.fits')
-    call bands(5)%get_map('norm_pol_200_n0004.fits')
-    call bands(6)%get_map('norm_pol_353_n0004.fits')
+    call bands(1)%get_map('ame_pol_020_n0004.fits')
+    call bands(2)%get_map('ame_pol_030_n0004.fits')
+    call bands(3)%get_map('ame_pol_045_n0004.fits')
+    call bands(4)%get_map('ame_pol_070_n0004.fits')
+    call bands(5)%get_map('ame_pol_100_n0004.fits')
 
-    call bands(1)%get_rms('norm_pol_020_rms_n0004.fits')
-    call bands(2)%get_rms('norm_pol_045_rms_n0004.fits')
-    call bands(3)%get_rms('norm_pol_070_rms_n0004.fits')
-    call bands(4)%get_rms('norm_pol_100_rms_n0004.fits')
-    call bands(5)%get_rms('norm_pol_200_rms_n0004.fits')
-    call bands(6)%get_rms('norm_pol_353_rms_n0004.fits')
+    call bands(1)%get_rms('ame_pol_020_rms_n0004.fits')
+    call bands(2)%get_rms('ame_pol_030_rms_n0004.fits')
+    call bands(3)%get_rms('ame_pol_045_rms_n0004.fits')
+    call bands(4)%get_rms('ame_pol_070_rms_n0004.fits')
+    call bands(5)%get_rms('ame_pol_100_rms_n0004.fits')
 
     call bands(1)%get_nu(20.d0)
-    call bands(2)%get_nu(45.d0)
-    call bands(3)%get_nu(70.d0)
-    call bands(4)%get_nu(100.d0)
-    call bands(5)%get_nu(200.d0)
-    call bands(6)%get_nu(353.d0)
+    call bands(2)%get_nu(30.d0)
+    call bands(3)%get_nu(45.d0)
+    call bands(4)%get_nu(70.d0)
+    call bands(5)%get_nu(100.d0)
 
-    call bands(1)%get_label('norm_pol_020')
-    call bands(2)%get_label('norm_pol_045')
-    call bands(3)%get_label('norm_pol_070')
-    call bands(4)%get_label('norm_pol_100')
-    call bands(5)%get_label('norm_pol_200')
-    call bands(6)%get_label('norm_pol_353')
+    call bands(1)%get_label('ame_pol_020')
+    call bands(2)%get_label('ame_pol_030')
+    call bands(3)%get_label('ame_pol_045')
+    call bands(4)%get_label('ame_pol_070')
+    call bands(5)%get_label('ame_pol_100')
     
     ! Load foreground info
     fgs(1)%type          = 'synch'
     fgs(1)%nu_ref        = 45.d0
     fgs(1)%gauss_mean(1) = -3.10d0
-    fgs(1)%gauss_std(1)  = 0.1d0
+    fgs(1)%gauss_std(1)  = 0.05d0
     fgs(1)%uni_min(1)    = -4.5d0
     fgs(1)%uni_max(1)    = -1.5d0
     fgs(1)%loc           = minloc(abs(bands%nu-fgs(1)%nu_ref),1)
@@ -153,10 +150,10 @@ program dang
     ! Read maps
 
     do j = 1, nbands
-        call read_bintab('data/test_data/norm_pol/' // trim(bands(j)%rms_map), &
+        call read_bintab('data/test_data/ame_pol/' // trim(bands(j)%rms_map), &
         rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
-        call read_bintab('data/test_data/norm_pol/' // bands(j)%sig_map, &
+        call read_bintab('data/test_data/ame_pol/' // trim(bands(j)%sig_map), &
         map,npix,nmaps,nullval,anynull,header=header)
         maps(:,:,j) = map
     end do
@@ -170,18 +167,17 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Choose which bands for fitting templates
-    j_corr01(1) = .false.
+    j_corr01(1) = .true.
     j_corr01(2) = .true.
     j_corr01(3) = .true.
     j_corr01(4) = .true.
-    j_corr01(5) = .true.
-    j_corr01(6) = .true.
+    j_corr01(5) = .false.
+
     j_corr02(1) = .false.
-    j_corr02(2) = .true.
-    j_corr02(3) = .true.
-    j_corr02(4) = .true.
-    j_corr02(5) = .true.
-    j_corr02(6) = .true.
+    j_corr02(2) = .false.
+    j_corr02(3) = .false.
+    j_corr02(4) = .false.
+    j_corr02(5) = .false.
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Normalize template to avoid large values in the matrix equation
@@ -190,10 +186,18 @@ program dang
     temp_norm_02 = maxval(template_02)
     template_02  = template_02/temp_norm_02
     !----------------------------------------------------------------------------------------------------------
-    ! Calculation portion
-    !----------------------------------------------------------------------------------------------------------
+    ! Joint Sampler Info
 
     allocate(joint_comps(2))
+
+    joint_comps(1) = 'synch'
+    joint_comps(2) = 'template01'
+
+    solver = 'lu' ! Method possibilities are 'cg', 'lu', and 'cholesky'
+    !----------------------------------------------------------------------------------------------------------
+    !----------------------------------------------------------------------------------------------------------
+    ! Calculation portion
+    !----------------------------------------------------------------------------------------------------------
 
     do k = 1, nmaps
         
@@ -209,11 +213,8 @@ program dang
         end if 
 
         do iter = 1, niter
-
-            joint_comps(1) = 'synch'
-            joint_comps(2) = 'template01'
     
-            call sample_joint_amp(npix,k,'lu')  ! Method possibilities are 'cg', 'lu', and 'cholesky'
+            call sample_joint_amp(npix,k,trim(solver))  
             dust_amps = fg_amp(0,k,:,2)
 
             ! -------------------------------------------------------------------------------------------------------------------
@@ -250,14 +251,14 @@ program dang
 
             nodust = maps-dust_map
             ! -------------------------------------------------------------------------------------------------------------------
-            !call sample_index(nodust,'synch',beta_samp_nside,k)
-            !do i = 0, npix-1
-            !   par(1) = beta_s(i,k)
-            !   do j = 1, nbands
-            !       fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum('synch',nuz(j),par)
-            !   end do
-            !end do
-            !synch_map(:,k,:)        = fg_amp(:,k,:,1)
+            call sample_index(fgs(1),nodust,beta_samp_nside,k)
+            do i = 0, npix-1
+               fgs(1)%p(1) = beta_s(i,k)
+               do j = 1, nbands
+                  fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),bands(j)%nu)
+               end do
+            end do
+            synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
@@ -386,7 +387,7 @@ program dang
             sum1 = 0.0d0
             sum2 = 0.0d0
             do j = 1, nbands
-                spec          = compute_spectrum(self,nuz(j))
+                spec          = compute_spectrum(self,bands(j)%nu)
                 sum1           = sum1 + (data(i,j)*spec)/cov(i,j)
                 sum2           = sum2 + (spec)**2.d0/cov(i,j)
                 norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,j)
@@ -497,7 +498,7 @@ program dang
 
             ! Chi-square from the most recent Gibbs chain update
             do j = 1, nbands
-                a = a + (((fg_amp_low(i,map_n,fgs(1)%loc) * compute_spectrum(fgs(1),nuz(j))) &
+                a = a + (((fg_amp_low(i,map_n,fgs(1)%loc) * compute_spectrum(fgs(1),bands(j)%nu)) &
                       - data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
             end do
             c = a
@@ -510,7 +511,7 @@ program dang
                 b         = 0.d0
 
                 do j = 1, nbands
-                    tmp(j) = fg_amp_low(i,map_n,fgs(1)%loc)*compute_spectrum(fgs(1),nuz(j))
+                    tmp(j) = fg_amp_low(i,map_n,fgs(1)%loc)*compute_spectrum(fgs(1),bands(j)%nu)
                     b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
                 end do
                 b = b
@@ -634,7 +635,7 @@ program dang
 
                 ! Chi-square from the most recent Gibbs chain update
                 do j = 1, nbands
-                    a = a + (((fg_amp_low(i,map_n,j) * HI(i,1)*planck(nuz(j)*1.d9,sol)) &
+                    a = a + (((fg_amp_low(i,map_n,j) * HI(i,1)*planck(bands(j)%nu*1.d9,sol)) &
                         - band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2
                 end do
                 c   = a
@@ -644,7 +645,7 @@ program dang
                     t = rand_normal(self%gauss_mean(2), self%gauss_std(2))
                     b = 0.d0
                     do j = 1, nbands
-                        tmp(j) = fg_amp_low(i,map_n,j)*HI(i,1)*planck(nuz(j)*1.d9,t)
+                        tmp(j) = fg_amp_low(i,map_n,j)*HI(i,1)*planck(bands(j)%nu*1.d9,t)
                         b      = b + ((tmp(j)-band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
                     end do
                     b = b
@@ -878,7 +879,7 @@ program dang
             rand(i) = rand_normal(0.d0,1.d0)
         end do
         samp  = matmul(norm,rand)
-        b     = b!  + samp
+        b     = b  + samp
 
         ! Output amplitudes to the appropriate variables
         do m = 1, size(joint_comps)
