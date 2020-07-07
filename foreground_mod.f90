@@ -27,39 +27,59 @@ module foreground_mod
   end type fg_comp
 
 contains
-    subroutine get_comp_nu_ref(self, freq)
-      class(fg_comp)            :: self
-      real(dp), intent(in)      :: freq
+  subroutine get_comp_nu_ref(self, freq)
+    class(fg_comp)            :: self
+    real(dp), intent(in)      :: freq
 
-      self%nu_ref = freq
-    end subroutine get_comp_nu_ref
+    self%nu_ref = freq
+  end subroutine get_comp_nu_ref
 
-    subroutine get_comp_type(self, typ)
-      class(fg_comp)               :: self
-      character(len=*), intent(in) :: typ
+  subroutine get_comp_type(self, typ)
+    class(fg_comp)               :: self
+    character(len=*), intent(in) :: typ
 
-      self%type = typ
-    end subroutine get_comp_type
+    self%type = typ
+  end subroutine get_comp_type
 
-    subroutine get_comp_params(self,params)
-      class(fg_comp)               :: self
-      real(dp), intent(in)         :: params(:)
+  subroutine get_comp_params(self,params)
+    class(fg_comp)               :: self
+    real(dp), intent(in)         :: params(:)
 
-      self%p = params
-    end subroutine get_comp_params
+    self%p = params
+  end subroutine get_comp_params
 
-    subroutine get_comp_gauss_mean(self,gmean)
-      class(fg_comp)             :: self
-      real(dp), intent(in)       :: gmean
+  subroutine get_comp_gauss_mean(self,gmean)
+    class(fg_comp)             :: self
+    real(dp), intent(in)       :: gmean
 
-      self%gauss_mean = gmean
-    end subroutine get_comp_gauss_mean
+    self%gauss_mean = gmean
+  end subroutine get_comp_gauss_mean
 
-    subroutine get_comp_gauss_std(self,gstd)
-      class(fg_comp)             :: self
-      real(dp), intent(in)       :: gstd
+  subroutine get_comp_gauss_std(self,gstd)
+    class(fg_comp)             :: self
+    real(dp), intent(in)       :: gstd
 
-      self%gauss_std = gstd
-    end subroutine get_comp_gauss_std
+    self%gauss_std = gstd
+  end subroutine get_comp_gauss_std
 
-  end module foreground_mod
+  ! function compute_spectrum(self, freq) result(spectrum)
+  !   implicit none
+  !   class(fg_comp)                 :: self
+  !   real(dp),           intent(in) :: freq
+  !   real(dp)                       :: y, rj_cmb ! Conversion factor from K_{RJ} -> K_{CMB}
+  !   real(dp)                       :: z!, compute_spectrum
+  !   real(dp)                       :: spectrum
+
+  !   y = h*(freq*1.0d9) / (k_B*T_CMB)
+  !   rj_cmb = ((exp(y)-1)**2.d0)/(y**2.d0*exp(y))
+
+  !   if (trim(self%type) == 'synch') then
+  !     spectrum = (freq/self%nu_ref)**self%p(1) !*rj_cmb
+  !   else if (trim(self%type) == 'dust') then
+  !     z = h / (k_B*self%p(2))
+  !     spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / (exp(z*freq*1d9)-1.d0) * (freq/self%nu_ref)**(self%p(1)+1.d0)!*rj_cmb
+  !   end if
+
+  ! end function compute_spectrum
+
+end module foreground_mod
