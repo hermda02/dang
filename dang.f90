@@ -4,6 +4,7 @@ program dang
     use fitstools
     use udgrade_nr
     use init_mod
+    use param_mod
     use linalg_mod
     use foreground_mod
     use data_mod
@@ -28,7 +29,7 @@ program dang
     ! frequency bands used here.                                                                          |
     !-----------------------------------------------------------------------------------------------------|  
       
-    integer(i4b)       :: i, j, k, l, iter, npix, nside, nmaps, ordering
+    integer(i4b)       :: i, j, k, l, iter, npix, nside, nmaps, ordering, ln
     integer(i4b)       :: beta_samp_nside, nlheader, niter, nfgs, iterations
     integer(i4b)       :: output_iter, like_iter, m
     real(dp)           :: nullval
@@ -58,6 +59,7 @@ program dang
     ! Object Orient
     type(fg_comp)      :: fgs(2)
     type(band)         :: bands(6) 
+    type(params)       :: parameters
 
     !----------------------------------------------------------------------------------------------------------
     ! General paramters
@@ -82,7 +84,7 @@ program dang
     output_fg         = .true.     ! Option for outputting foregrounds for all bands
     !----------------------------------------------------------------------------------------------------------
 
-    call getarg(1,arg1)
+    call getarg(2,arg1)
     direct = arg1
 
     !----------------------------------------------------------------------------------------------------------
@@ -99,6 +101,9 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     beta_s     = -3.10d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
+
+    call read_param_file(parameters)
+    stop
 
     ! Load band info
     call bands(1)%get_map('ame_pol_020_n0004.fits')

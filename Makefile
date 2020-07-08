@@ -7,12 +7,19 @@ FITSDIR = -L/usr/lib -lcfitsio
 LAPACK  = -L/usr/lib -llapack -lblas
 HEALPIX = -L/usr/local/src/Healpix_3.50/lib -lhealpix
 HEALINC = -I/usr/local/src/Healpix_3.50/include
-OUTPUT  = fit_dust
+OUTPUT  = dang
 
-OBJS    = dust_fit_joint.o
+OBJS    = init_mod.o hashtbl.o param_mod.o linalg_mod.o foreground_mod.o data_mod.o dang.o
 
-fit_ame: $(OBJS)
+dang: $(OBJS)
 	$(FC) $(OBJS) $(HEALPIX) $(FITSDIR) $(LAPACK) -fopenmp -o $(OUTPUT)
+
+# Dependencies
+linalg_mod.o           : init_mod.o
+data_mod.o             : init_mod.o
+foreground_mod.o       : init_mod.o
+param_mod.o            : init_mod.o hashtbl.o
+dang.o : init_mod.o param_mod.o linalg_mod.o data_mod.o foreground_mod.o
 
 # Compilation stage
 %.o : %.f90
@@ -21,4 +28,4 @@ fit_ame: $(OBJS)
 # Cleaning command
 .PHONY: clean
 clean:
-	rm *.o *~ fit_dust
+	rm *.o *.mod *~ dang
