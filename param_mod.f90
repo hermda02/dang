@@ -1,14 +1,35 @@
 module param_mod
     use healpix_types
     use init_mod
+    use utility_mod
     use hashtbl
     implicit none
 
     type params
+
+        ! Global parameters
+        integer(i4b)       :: ngibbs
+        integer(i4b)       :: nsample  ! For things like the metrop-hast alg
+        integer(i4b)       :: iter_out ! Out put maps every <- iterations
+        logical(lgt)       :: output_fg
+        character(len=512) :: outdir
+
+        ! Data parameters
         integer(i4b)   :: numband
-        integer(i4b)   :: ncomp
-        integer(i4b)   :: ngibbs
         character(len=512) :: datadir
+        character(len=512), allocatable, dimension(:)   :: dat_label
+        character(len=512), allocatable, dimension(:)   :: dat_mapfile
+        character(len=512), allocatable, dimension(:)   :: dat_noisefile
+        real(dp),           allocatable, dimension(:)   :: dat_nu
+
+        ! Component parameters
+        integer(i4b)   :: ncomp
+        logical(lgt), allocatable, dimension(:)           :: fg_inc
+        character(len=512), allocatable, dimension(:)     :: fg_label
+        character(len=512), allocatable, dimension(:)     :: fg_type
+        real(dp),           allocatable, dimension(:)     :: fg_nu_ref
+        real(dp),           allocatable, dimension(:,:,:) :: fg_gauss
+        real(dp),           allocatable, dimension(:,:,:) :: fg_uni
     end type params
 
 contains
@@ -78,8 +99,10 @@ contains
         ! Put the parameter file into the hash table                                                     
         call put_ascii_into_hashtable(parfile_cache,htable)
         deallocate(parfile_cache)
-    
-        
+
+        call read_data_params(htable,par)
+        call read_comp_params(htable,par)
+        call read_global_params(htable,par)    
 
     end subroutine read_param_file
 
@@ -120,7 +143,7 @@ contains
                 write(paramfile_cache(line_nr),fmt="(a)") line
             end if
             cycle
-1           close(units(depth))
+        1   close(units(depth))
             depth = depth-1
         end do
         return
@@ -151,18 +174,189 @@ contains
         stop
     
     end subroutine put_ascii_into_hashtable
-    
-    ! subroutine read_global_params
 
-    ! end subroutine read_global_params
+      ! read parameter from input argument or hash table                                                 
+    subroutine get_parameter_hashtable(htbl, parname, len_itext, par_int, par_char, &
+        & par_string, par_sp, par_dp, par_lgt, par_present, desc)
+        implicit none
+        type(hash_tbl_sll), intent(in) :: htbl 
+        character(len=*),   intent(in) :: parname
+        integer(i4b),         optional :: len_itext
+        integer(i4b),         optional :: par_int
+        character(len=*),     optional :: par_char
+        character(len=*),     optional :: par_string
+        real(sp),             optional :: par_sp
+        real(dp),             optional :: par_dp
+        logical(lgt),         optional :: par_lgt
+        logical(lgt),         optional :: par_present
+        character(len=*),     optional :: desc
 
-    ! subroutine read_data_params
+        ! logical(lgt)               :: found
 
-    ! end subroutine read_data_params
+        ! found = .false.
+        ! call get_parameter_arg(parname, par_int, par_char, par_string, par_sp, par_dp, par_lgt, found, desc)
+        ! if(found) then
+        !     if(present(par_present)) par_present = .true.
+        ! else
+        call get_parameter_from_hash(htbl, parname, len_itext, par_int, &
+            & par_char, par_string, par_sp, par_dp, par_lgt, par_present, desc)
+        ! end if
+    end subroutine get_parameter_hashtable
 
-    ! subroutine read_comp_params
+      ! getting parameter value from hash table                                                          
+    subroutine get_parameter_from_hash(htbl, parname, len_itext, par_int, par_char, &
+        & par_string, par_sp, par_dp, par_lgt, par_present, desc)
+        implicit none
+        type(hash_tbl_sll), intent(in) :: htbl
+        character(len=*),   intent(in) :: parname
+        integer(i4b),     optional :: len_itext
+        integer(i4b),     optional :: par_int
+        character(len=*), optional :: par_char
+        character(len=*), optional :: par_string
+        real(sp),         optional :: par_sp
+        real(dp),         optional :: par_dp
+        logical(lgt),     optional :: par_lgt
+        logical(lgt),     optional :: par_present
+        character(len=*), optional :: desc
+        character(len=256)         :: key
+        character(len=:), ALLOCATABLE   :: itext,jtext
+        CHARACTER(len=:), ALLOCATABLE   :: val,val2,val3
+        integer(i4b)                    :: i,j
 
-    ! end subroutine read_comp_params
+        key=trim(parname)
+        call tolower(key)
+        call get_hash_tbl_sll(htbl,trim(key),val)
+        if (.not. allocated(val)) then
+            goto 1
+            if (.not. present(len_itext)) goto 1
+            allocate(character(len=len_itext) :: itext,jtext)
+            itext=key(len(trim(key))-(len_itext-1):len(trim(key)))
+            call get_hash_tbl_sll(htbl,'band_default_params'//trim(itext),val2)
+            if (allocated(val2)) then
+               read(val2,*) j
+               if (j /= 0) then
+                  call int2string(j, jtext)
+                  call get_hash_tbl_sll(htbl,'band_default_params'//trim(jtext),val3)
+                  if (allocated(val3)) then
+                     read(val3,*) i
+                     if (i /= 0) goto 2
+                  end if
+                  call get_hash_tbl_sll(htbl,key(1:len(trim(key))-len_itext)//trim(jtext),val)
+                  if (.not. allocated(val)) goto 3
+               else
+                  goto 1
+               end if
+            else
+               goto 1
+            end if
+            deallocate(itext,jtext)
+        end if
+     
+        if (present(par_int)) then
+            read(val,*) par_int
+        elseif (present(par_char)) then
+            read(val,*) par_char
+        elseif (present(par_string)) then
+            read(val,*) par_string
+        elseif (present(par_sp)) then
+            read(val,*) par_sp
+        elseif (present(par_dp)) then
+            read(val,*) par_dp
+        elseif (present(par_lgt)) then
+            read(val,*) par_lgt
+        else
+            write(*,*) "get_parameter: Reached unreachable point!"
+        end if
+        
+        deallocate(val)
+        return
+        
+        !if (cpar%myid == cpar%root) then                                                                
+         
+    1   write(*,*) "Error: Could not find parameter '" // trim(parname) // "'"
+        write(*,*) ""
+        stop
+         
+         
+    2   write(*,*) "Error: Recursive default parameters, bands " // &
+            & trim(jtext) // " and " //trim(itext)
+        write(*,*) ""
+        stop
+         
+    3   write(*,*) "Error: Could not find parameter '" // trim(parname) // &
+            & "' from default '"//key(1:len(trim(key))-len_itext)//trim(jtext)//"'"
+        write(*,*) ""
+        stop
+         
+    end subroutine get_parameter_from_hash
+   
+    subroutine read_global_params(htbl,par)
+        implicit none
+
+        type(hash_tbl_sll), intent(in)    :: htbl
+        type(params),       intent(inout) :: par
+
+        integer(i4b)     :: i, j, n, len_itext
+        character(len=2) :: itext
+        character(len=2) :: jtext
+
+        call get_parameter_hashtable(htbl, 'OUTPUT_DIRECTORY', par_string=par%outdir)
+        call get_parameter_hashtable(htbl, 'NUMGIBBS', par_int=par%ngibbs)
+        call get_parameter_hashtable(htbl, 'NUMSAMPLE', par_int=par%nsample)
+        call get_parameter_hashtable(htbl, 'OUTPUT_ITER', par_int=par%iter_out)
+        call get_parameter_hashtable(htbl, 'OUTPUT_COMPS', par_lgt=par%output_fg)
+        
+        par%outdir = trim(par%outdir) // '/'
+
+    end subroutine read_global_params
+
+    subroutine read_data_params(htbl,par)
+        implicit none
+
+        type(hash_tbl_sll), intent(in)    :: htbl
+        type(params),       intent(inout) :: par
+
+        integer(i4b)     :: i, j, n, len_itext
+        character(len=2) :: itext
+        character(len=2) :: jtext
+
+        len_itext = len(trim(itext))
+
+        call get_parameter_hashtable(htbl, 'NUMBAND',    par_int=par%numband)
+        call get_parameter_hashtable(htbl, 'DATA_DIRECTORY', par_string=par%datadir)
+        
+        n = par%numband
+
+        allocate(par%dat_mapfile(n),par%dat_label(n))
+        allocate(par%dat_noisefile(n),par%dat_nu(n))
+
+        do i = 1, n
+            call int2string(i, itext)
+            call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%dat_label(i))
+            call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%dat_mapfile(i))
+            call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%dat_noisefile(i))
+            call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%dat_nu(i))
+        end do
+
+    end subroutine read_data_params
+
+    subroutine read_comp_params(htbl,par)
+        implicit none
+
+        type(hash_tbl_sll), intent(in)    :: htbl
+        type(params),       intent(inout) :: par
+
+        integer(i4b)     :: i, j, n, len_itext
+        character(len=2) :: itext
+        character(len=2) :: jtext
+
+        len_itext = len(trim(itext))
+
+        call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
+
+        n = par%ncomp
+
+    end subroutine read_comp_params
 
     function get_token(string, sep, num, group, allow_empty) result(res)
         implicit none

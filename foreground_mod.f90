@@ -1,6 +1,7 @@
 module foreground_mod
   use healpix_types
   use init_mod
+  use utility_mod
   implicit none
   !// Make everything not specified as public invisible from outside the
   !// module

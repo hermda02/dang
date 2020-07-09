@@ -4,6 +4,7 @@ program dang
     use fitstools
     use udgrade_nr
     use init_mod
+    use utility_mod
     use param_mod
     use linalg_mod
     use foreground_mod
@@ -44,7 +45,7 @@ program dang
     real(dp), allocatable, dimension(:,:,:)      :: synch_map, dust_map, cmb_map, nodust
     real(dp), allocatable, dimension(:,:)        :: template_01, template_02, map, rms
     real(dp), allocatable, dimension(:,:)        :: beta_s, T_d, beta_d, chi_map, mask, HI
-    real(dp), allocatable, dimension(:)          :: par, dust_amps
+    real(dp), allocatable, dimension(:)          :: dust_amps
     real(dp)                                     :: chisq, temp_norm_01, temp_norm_02
     character(len=80), dimension(180)            :: header
     character(len=80), dimension(3)              :: tqu
@@ -58,8 +59,10 @@ program dang
 
     ! Object Orient
     type(fg_comp)      :: fgs(2)
-    type(band)         :: bands(6) 
-    type(params)       :: parameters
+    ! type(band)         :: bands(6) 
+    type(params)       :: par
+
+    call read_param_file(par)
 
     !----------------------------------------------------------------------------------------------------------
     ! General paramters
@@ -71,21 +74,18 @@ program dang
     tqu(3)            = 'U'
     i                 = getsize_fits(template_file_01, nside=nside, ordering=ordering, nmaps=nmaps)
     npix              = nside2npix(nside) 
-    nbands            = 5
-    nfgs              = 2
+    nbands            = par%numband
+    nfgs              = par%ncomp
     nlheader          = size(header)
     nmaps             = 1
 
-    niter             = 100       ! # of MC-MC iterations
-    iterations        = 100        ! # of iterations in the samplers
-    output_iter       = 5        ! Output maps every <- # of iterations
-    like_iter         = 1000       ! Output likelihood test every <- # of iterations
+    niter             = par%ngibbs       ! # of MC-MC iterations
+    iterations        = par%nsample      ! # of iterations in the samplers
+    output_iter       = par%iter_out     ! Output maps every <- # of iterations
+    output_fg         = par%output_fg    ! Option for outputting foregrounds for all bands
+    direct            = par%outdir       ! Output directory name
     beta_samp_nside   = 4          ! \beta_synch nside sampling
-    output_fg         = .true.     ! Option for outputting foregrounds for all bands
     !----------------------------------------------------------------------------------------------------------
-
-    call getarg(2,arg1)
-    direct = arg1
 
     !----------------------------------------------------------------------------------------------------------
     ! Array allocation
@@ -102,34 +102,6 @@ program dang
     beta_s     = -3.10d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
 
-    call read_param_file(parameters)
-    stop
-
-    ! Load band info
-    call bands(1)%get_map('ame_pol_020_n0004.fits')
-    call bands(2)%get_map('ame_pol_030_n0004.fits')
-    call bands(3)%get_map('ame_pol_045_n0004.fits')
-    call bands(4)%get_map('ame_pol_070_n0004.fits')
-    call bands(5)%get_map('ame_pol_100_n0004.fits')
-
-    call bands(1)%get_rms('ame_pol_020_rms_n0004.fits')
-    call bands(2)%get_rms('ame_pol_030_rms_n0004.fits')
-    call bands(3)%get_rms('ame_pol_045_rms_n0004.fits')
-    call bands(4)%get_rms('ame_pol_070_rms_n0004.fits')
-    call bands(5)%get_rms('ame_pol_100_rms_n0004.fits')
-
-    call bands(1)%get_nu(20.d0)
-    call bands(2)%get_nu(30.d0)
-    call bands(3)%get_nu(45.d0)
-    call bands(4)%get_nu(70.d0)
-    call bands(5)%get_nu(100.d0)
-
-    call bands(1)%get_label('ame_pol_020')
-    call bands(2)%get_label('ame_pol_030')
-    call bands(3)%get_label('ame_pol_045')
-    call bands(4)%get_label('ame_pol_070')
-    call bands(5)%get_label('ame_pol_100')
-    
     ! Load foreground info
     fgs(1)%type          = 'synch'
     fgs(1)%nu_ref        = 45.d0
@@ -137,7 +109,7 @@ program dang
     fgs(1)%gauss_std(1)  = 0.05d0
     fgs(1)%uni_min(1)    = -4.5d0
     fgs(1)%uni_max(1)    = -1.5d0
-    fgs(1)%loc           = minloc(abs(bands%nu-fgs(1)%nu_ref),1)
+    fgs(1)%loc           = minloc(abs(par%dat_nu-fgs(1)%nu_ref),1)
 
     fgs(2)%type          = 'dust'
     fgs(2)%nu_ref        = 353.d0
@@ -149,16 +121,16 @@ program dang
     fgs(2)%gauss_std(2)  = 0.1d0
     fgs(2)%uni_min(2)    = 15.0d0
     fgs(2)%uni_max(2)    = 25.0d0
-    fgs(2)%loc           = minloc(abs(bands%nu-fgs(2)%nu_ref),1)
+    fgs(2)%loc           = minloc(abs(par%dat_nu-fgs(2)%nu_ref),1)
 
     !----------------------------------------------------------------------------------------------------------
     ! Read maps
 
     do j = 1, nbands
-        call read_bintab('data/test_data/ame_pol/' // trim(bands(j)%rms_map), &
+        call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
         rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
-        call read_bintab('data/test_data/ame_pol/' // trim(bands(j)%sig_map), &
+        call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
         map,npix,nmaps,nullval,anynull,header=header)
         maps(:,:,j) = map
     end do
@@ -228,7 +200,7 @@ program dang
                 do i = 0, npix-1
                     fgs(1)%p(1) = beta_s(i,k)
                     do j = 1, nbands
-                        fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),bands(j)%nu)
+                        fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),par%dat_nu(j))
                     end do
                 end do
                 synch_map(:,k,:)        = fg_amp(:,k,:,1)
@@ -236,12 +208,11 @@ program dang
 
             ! Extrapolating A_dust to bands
             if (ANY(joint_comps=='dust')) then
-                write(*,*) 'works, dust'
                 do i = 0, npix-1
                     fgs(2)%p(1) = beta_d(i,k)
                     fgs(2)%p(2) = T_d(i,k)
                     do j = 1, nbands
-                        fg_amp(i,k,j,3) = fg_amp(i,k,fgs(2)%loc,3)*compute_spectrum(fgs(2),bands(j)%nu)
+                        fg_amp(i,k,j,3) = fg_amp(i,k,fgs(2)%loc,3)*compute_spectrum(fgs(2),par%dat_nu(j))
                     end do
                 end do
                 dust_map(:,k,:)         = fg_amp(:,k,:,3)
@@ -260,7 +231,7 @@ program dang
             do i = 0, npix-1
                fgs(1)%p(1) = beta_s(i,k)
                do j = 1, nbands
-                  fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),bands(j)%nu)
+                  fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),par%dat_nu(j))
                end do
             end do
             synch_map(:,k,:)        = fg_amp(:,k,:,1)
@@ -392,7 +363,7 @@ program dang
             sum1 = 0.0d0
             sum2 = 0.0d0
             do j = 1, nbands
-                spec          = compute_spectrum(self,bands(j)%nu)
+                spec          = compute_spectrum(self,par%dat_nu(j))
                 sum1           = sum1 + (data(i,j)*spec)/cov(i,j)
                 sum2           = sum2 + (spec)**2.d0/cov(i,j)
                 norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,j)
@@ -503,7 +474,7 @@ program dang
 
             ! Chi-square from the most recent Gibbs chain update
             do j = 1, nbands
-                a = a + (((fg_amp_low(i,map_n,fgs(1)%loc) * compute_spectrum(fgs(1),bands(j)%nu)) &
+                a = a + (((fg_amp_low(i,map_n,fgs(1)%loc) * compute_spectrum(fgs(1),par%dat_nu(j))) &
                       - data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
             end do
             c = a
@@ -516,7 +487,7 @@ program dang
                 b         = 0.d0
 
                 do j = 1, nbands
-                    tmp(j) = fg_amp_low(i,map_n,fgs(1)%loc)*compute_spectrum(fgs(1),bands(j)%nu)
+                    tmp(j) = fg_amp_low(i,map_n,fgs(1)%loc)*compute_spectrum(fgs(1),par%dat_nu(j))
                     b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
                 end do
                 b = b
@@ -640,7 +611,7 @@ program dang
 
                 ! Chi-square from the most recent Gibbs chain update
                 do j = 1, nbands
-                    a = a + (((fg_amp_low(i,map_n,j) * HI(i,1)*planck(bands(j)%nu*1.d9,sol)) &
+                    a = a + (((fg_amp_low(i,map_n,j) * HI(i,1)*planck(par%dat_nu(j)*1.d9,sol)) &
                         - band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2
                 end do
                 c   = a
@@ -650,7 +621,7 @@ program dang
                     t = rand_normal(self%gauss_mean(2), self%gauss_std(2))
                     b = 0.d0
                     do j = 1, nbands
-                        tmp(j) = fg_amp_low(i,map_n,j)*HI(i,1)*planck(bands(j)%nu*1.d9,t)
+                        tmp(j) = fg_amp_low(i,map_n,j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,t)
                         b      = b + ((tmp(j)-band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
                     end do
                     b = b
@@ -797,7 +768,7 @@ program dang
                 do i = 1, x
                     fgs(1)%p(1) = beta_s(i-1,map_n)
                     do j = 1, z
-                        T_nu(i,w+i,j) = compute_spectrum(fgs(1),bands(j)%nu)
+                        T_nu(i,w+i,j) = compute_spectrum(fgs(1),par%dat_nu(j))
                         if (i == 1) then
                             
                         end if
@@ -809,7 +780,7 @@ program dang
                     fgs(2)%p(1) = beta_d(i-1,map_n)
                     fgs(2)%p(2) = T_d(i-1,map_n)
                     do j = 1, z
-                        T_nu(i,w+i,j) = compute_spectrum(fgs(2),bands(j)%nu)
+                        T_nu(i,w+i,j) = compute_spectrum(fgs(2),par%dat_nu(j))
                     end do
                 end do
                 w = w + x
@@ -957,23 +928,23 @@ program dang
         write(iter_str, '(i0.5)') iter
         if (output_fg .eqv. .true.) then
             do j = 1, nbands
-                title = trim(direct) // trim(bands(j)%label) // '_dust_fit_'// trim(tqu(nm)) & 
+                title = trim(direct) // trim(par%dat_label(j)) // '_dust_fit_'// trim(tqu(nm)) & 
                         // '_' // trim(iter_str) // '.fits'
                 map(:,1)   = dust_map(:,nm,j)
                 call write_bintab(map,npix,1, header, nlheader, trim(title))
-                title = trim(direct) // trim(bands(j)%label) // '_synch_amplitude_' //  trim(tqu(nm)) &
+                title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
                         // '_' // trim(iter_str) // '.fits'
                 map(:,1)   = fg_amp(:,nm,j,1)
                 call write_bintab(map,npix,1, header, nlheader, trim(title))
             end do
         else 
-            title = trim(direct) // trim(bands(fgs(1)%loc)%label) // '_synch_amplitude_' //  trim(tqu(nm)) &
+            title = trim(direct) // trim(par%dat_label(fgs(1)%loc)) // '_synch_amplitude_' //  trim(tqu(nm)) &
                     // '_' // trim(iter_str) // '.fits'
             map(:,1)   = fg_amp(:,nm,fgs(1)%loc,1)
             call write_bintab(map,npix,1, header, nlheader, trim(title))
         end if
         do j = 1, nbands
-            title = trim(direct) // trim(bands(j)%label) // '_residual_' // trim(tqu(nm)) & 
+            title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
                     // '_' // trim(iter_str) // '.fits'
             map(:,1)   = res(:,nm,j)
             call write_bintab(map,npix,1, header, nlheader, trim(title))
