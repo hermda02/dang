@@ -33,7 +33,8 @@ program dang
     integer(i4b)       :: i, j, k, l, iter, npix, nside, nmaps, ordering, ln
     integer(i4b)       :: beta_samp_nside, nlheader, niter, nfgs, iterations
     integer(i4b)       :: output_iter, like_iter, m
-    real(dp)           :: nullval
+    integer(i4b)       :: ierr, rank, numprocs
+    real(dp)           :: nullval, t0
     real(dp)           :: missval = -1.6375d30
     logical(lgt)       :: anynull, double_precision, test, exist, output_fg
   
@@ -57,16 +58,26 @@ program dang
     real(dp), allocatable, dimension(:,:)        :: mat_test, mat_l, mat_u
     real(dp), allocatable, dimension(:)          :: x, b, d
 
-    ! Object Orient
+    ! Objects
     type(fg_comp)      :: fgs(2)
-    ! type(band)         :: bands(6) 
     type(params)       :: par
+
+!    call wall_time(t0)
+!q    call mpi_init(ierr)
+!    call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)
+!    call mpi_comm_size(MPI_COMM_WORLD, numprocs, ierr)
+!    if (rank == 0) then
+!       write(*,'(a,i8)') ' The number of processors available = ', numprocs
+!    end if
+!    call mpi_finalize(ierr)
+!    stop
 
     call read_param_file(par)
 
     !----------------------------------------------------------------------------------------------------------
     ! General paramters
-    template_file_01  = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
+!    template_file_01  = 'data/npipe6v20_353_map_QUADCOR_ZODICOR_n0064_60arcmin_uK.fits'
+    template_file_01  = 'data/npipe6v20_353_map_Q_n0004.fits'
     template_file_02  = 'data/temp_synch_030_n0004.fits'
     mask_file         = 'data/mask_fullsky_n0004.fits'
     tqu(1)            = 'T'
@@ -77,14 +88,13 @@ program dang
     nbands            = par%numband
     nfgs              = par%ncomp
     nlheader          = size(header)
-    nmaps             = 1
 
     niter             = par%ngibbs       ! # of MC-MC iterations
     iterations        = par%nsample      ! # of iterations in the samplers
     output_iter       = par%iter_out     ! Output maps every <- # of iterations
     output_fg         = par%output_fg    ! Option for outputting foregrounds for all bands
     direct            = par%outdir       ! Output directory name
-    beta_samp_nside   = 4          ! \beta_synch nside sampling
+    beta_samp_nside   = 4                ! \beta_synch nside sampling
     !----------------------------------------------------------------------------------------------------------
 
     !----------------------------------------------------------------------------------------------------------
@@ -101,6 +111,7 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     beta_s     = -3.10d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
+    mask       = 1.d0
 
     ! Load foreground info
     fgs(1)%type          = 'synch'
@@ -127,19 +138,20 @@ program dang
     ! Read maps
 
     do j = 1, nbands
-        call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
-        rms,npix,nmaps,nullval,anynull,header=header)
-        rmss(:,:,j) = rms
-        call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
-        map,npix,nmaps,nullval,anynull,header=header)
-        maps(:,:,j) = map
+!       write(*,*) 'Loading map ', trim(par%dat_mapfile(j))
+       call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
+       rms,npix,nmaps,nullval,anynull,header=header)
+       rmss(:,:,j) = rms
+       call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
+       map,npix,nmaps,nullval,anynull,header=header)
+       maps(:,:,j) = map
     end do
 
     deallocate(map,rms)
 
     call read_bintab(template_file_01,template_01,npix,nmaps,nullval,anynull,header=header)
-    call read_bintab(mask_file,mask,npix,1,nullval,anynull,header=header)
-    call read_bintab(template_file_02,template_02,npix,nmaps,nullval,anynull,header=header)
+    !call read_bintab(mask_file,mask,npix,1,nullval,anynull,header=header)
+    !call read_bintab(template_file_02,template_02,npix,nmaps,nullval,anynull,header=header)
 
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
@@ -149,6 +161,7 @@ program dang
     j_corr01(3) = .true.
     j_corr01(4) = .true.
     j_corr01(5) = .false.
+!    j_corr01(6) = .true.
 
     j_corr02(1) = .false.
     j_corr02(2) = .false.
@@ -160,8 +173,8 @@ program dang
     ! Normalize template to avoid large values in the matrix equation
     temp_norm_01 = maxval(template_01)
     template_01  = template_01/temp_norm_01
-    temp_norm_02 = maxval(template_02)
-    template_02  = template_02/temp_norm_02
+    !temp_norm_02 = maxval(template_02)
+    !template_02  = template_02/temp_norm_02
     !----------------------------------------------------------------------------------------------------------
     ! Joint Sampler Info
 
@@ -178,13 +191,13 @@ program dang
 
     do k = 1, nmaps
         
-        ! if (k == 1) then
-        !     write(*,*) 'Sampling Temperature'
-        !     write(*,*) '-----------------------'
         if (k == 1) then
-            write(*,*) 'Stokes Q'
+            write(*,*) 'Sampling Temperature'
             write(*,*) '-----------------------'
         else if (k == 2) then
+            write(*,*) 'Stokes Q'
+            write(*,*) '-----------------------'
+        else if (k == 3) then
             write(*,*) 'Stokes U'
             write(*,*) '-----------------------'
         end if 
@@ -254,7 +267,7 @@ program dang
             end if
         end do    
     end do
-  
+!    call mpi_finalize(ierr)
   contains
 
     !----------------------------------------------------------------------------------------------------------
@@ -700,7 +713,7 @@ program dang
         z = nbands
 
         do i = 1, size(joint_comps)
-            if (joint_comps(i) == 'synch') then
+            if      (joint_comps(i) == 'synch') then
                 y = y + npix
             else if (joint_comps(i) == 'dust') then
                 y = y + npix
@@ -735,25 +748,29 @@ program dang
         allocate(covar(x,x,z),c_1(x,z),c_2(y,z))
 
         ! Initialize arrays
-        covar(:,:,:)      = 0.d0
-        T_nu(:,:,:)       = 0.d0
-        A_1(:,:,:)        = 0.d0
-        A_2(:,:,:)        = 0.d0
-        A(:,:)            = 0.d0
-        A_inv(:,:)        = 0.d0
-        b(:)              = 0.d0
-        c(:)              = 0.d0
-        d(:)              = 0.d0
-        rand(:)           = 0.d0
-        samp(:)           = 0.d0
-        norm(:,:)         = 0.d0
-        dats(:,:)         = 0.d0
-        mat_l(:,:)        = 0.d0
-        mat_u(:,:)        = 0.d0
-        c_1(:,:)          = 0.d0
-        c_2(:,:)          = 0.d0
+        covar      = 0.d0
+        T_nu       = 0.d0
+        T_nu_T     = 0.d0
+        A_1        = 0.d0
+        A_2        = 0.d0
+        A          = 0.d0
+        b          = 0.d0
+        c          = 0.d0
+        d          = 0.d0
+        dats       = 0.d0
+        c_1        = 0.d0
+        c_2        = 0.d0
+
+        mat_l      = 0.d0
+        mat_u      = 0.d0
+
+        A_inv      = 0.d0
+        rand       = 0.d0
+        samp       = 0.d0
+        norm       = 0.d0
 
         ! Fill data and covariance arrays
+        write(*,*) 'Filling data and cov arrays.'
         do i=1, x
             do j=1,z
                 covar(i,i,j) = rmss(i-1,map_n,j)**2
@@ -762,6 +779,7 @@ program dang
         end do
 
         ! Fill template matrix
+        write(*,*) 'Filling Template Matrix.'
         w = 0 
         do m = 1, size(joint_comps)
             if (joint_comps(m) == 'synch') then
@@ -786,6 +804,7 @@ program dang
                 w = w + x
             end if
         end do
+        write(*,*) 'Diffuse comps filled.'
 
         do m = 1, size(joint_comps)
             if (joint_comps(m) == 'template01') then
@@ -813,7 +832,9 @@ program dang
             end if
         end do
 
-        ! Computing the LHS and RHS of the linear equation
+!        write(*,*) 'Template filled.'
+!        write(*,*) 'Computing LHS and RHS.'
+       ! Computing the LHS and RHS of the linear equation
         do j=1, nbands
             T_nu_T(:,:,j) = transpose(T_nu(:,:,j))
             c_1(:,j)      = matmul(inv(covar(:,:,j)),dats(:,j))
@@ -823,6 +844,8 @@ program dang
             A(:,:)        = A(:,:) + A_2(:,:,j)
             c(:)          = c(:) + c_2(:,j)
         end do
+
+        write(*,*) 'Done.'
 
         ! Computation
         if (trim(method) == 'cholesky') then
@@ -849,6 +872,7 @@ program dang
 
         ! Draw a sample by cholesky decompsing A^-1, and multiplying 
         ! the subsequent lower triangular by a vector of random numbers
+
         A_inv = inv(A)
         call cholesky_decomp(A_inv,norm,y)
         do i = 1, y
@@ -897,11 +921,17 @@ program dang
             end if
         end do
 
-        ! Sure to deallocate all arrays here to free up memory
+        deallocate(A_inv)
+
         deallocate(A_1)
         deallocate(A_2)
+        deallocate(T_nu)
+        deallocate(T_nu_T)
+
+        ! Sure to deallocate all arrays here to free up memory
+!        deallocate(A_1)
+!        deallocate(A_2)
         deallocate(A)
-        deallocate(A_inv)
         ! deallocate(b)
         deallocate(c)
         deallocate(c_1)
@@ -914,8 +944,6 @@ program dang
         deallocate(mat_u)
         deallocate(rand)
         deallocate(samp)
-        deallocate(T_nu)
-        deallocate(T_nu_T)
 
     end subroutine sample_joint_amp
 
