@@ -23,13 +23,16 @@ module param_mod
         real(dp),           allocatable, dimension(:)   :: dat_nu
 
         ! Component parameters
-        integer(i4b)   :: ncomp
-        logical(lgt), allocatable, dimension(:)           :: fg_inc
-        character(len=512), allocatable, dimension(:)     :: fg_label
-        character(len=512), allocatable, dimension(:)     :: fg_type
-        real(dp),           allocatable, dimension(:)     :: fg_nu_ref
-        real(dp),           allocatable, dimension(:,:,:) :: fg_gauss
-        real(dp),           allocatable, dimension(:,:,:) :: fg_uni
+        integer(i4b)   :: ncomp                                             ! # of foregrounds
+        logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
+        logical(lgt),       allocatable, dimension(:,:)   :: fg_sample_spec ! Logical - sample spec params
+        logical(lgt),       allocatable, dimension(:)     :: fg_sample_amp  ! Logical - sample amplitude
+        character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
+        character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
+        real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
+        integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
+        real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
+        real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
     end type params
 
 contains
@@ -89,7 +92,6 @@ contains
 
         call getarg(1,paramfile)
 
-        ! write(*,*) paramfile
         call get_file_length(paramfile,parfile_len)
         allocate(parfile_cache(parfile_len))
         call read_paramfile_to_ascii(paramfile,parfile_cache)
@@ -99,10 +101,10 @@ contains
         ! Put the parameter file into the hash table                                                     
         call put_ascii_into_hashtable(parfile_cache,htable)
         deallocate(parfile_cache)
-
+ 
+        call read_global_params(htable,par)    
         call read_data_params(htable,par)
         call read_comp_params(htable,par)
-        call read_global_params(htable,par)    
 
     end subroutine read_param_file
 
@@ -353,8 +355,48 @@ contains
         len_itext = len(trim(itext))
 
         call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
-
         n = par%ncomp
+
+        allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
+        allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_sample_amp(n))
+        allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
+
+        do i = 1, n
+            call int2string(i, itext)
+            call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
+            call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i))
+            call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
+            call get_parameter_hashtable(htbl, 'COMP_INCLUDE'//itext, len_itext=len_itext, par_lgt=par%fg_inc(i))
+
+            if (trim(par%fg_type(i)) == 'power-law') then
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_gauss(i,1,1))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_gauss(i,1,2))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_uni(i,1,1))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_uni(i,1,2))
+            else if (trim(par%fg_type(i)) == 'mbb') then
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_gauss(i,1,1))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_gauss(i,1,2))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_uni(i,1,1))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_uni(i,1,2))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_T_MEAN'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_gauss(i,2,1))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_T_STD'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_gauss(i,2,2))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_LOW'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_uni(i,2,1))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_HIGH'//itext, len_itext=len_itext,&
+                    par_dp=par%fg_uni(i,2,2))
+            end if
+            par%fg_ref_loc(i) = minloc(abs(par%dat_nu-par%fg_nu_ref(i)),1)
+        end do
 
     end subroutine read_comp_params
 
