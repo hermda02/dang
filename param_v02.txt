@@ -43,30 +43,30 @@ JOINT_SAMPLE_GROUP01 = 'synch', 'template01'
 
 # Band 01 Information
 BAND_LABEL01  = 'ame_pol_020'
-BAND_FILE01   = 'ame_pol_020_noised_n0004.fits'
+BAND_FILE01   = 'ame_pol_020_n0004.fits'
 BAND_RMS01    = 'ame_pol_020_rms_n0004.fits'
 BAND_FREQ01   = 20.0    # In GHz
 
 # Band 02 Information
 BAND_LABEL02  = 'ame_pol_030'
-BAND_FILE02   = 'ame_pol_030_noised_n0004.fits'
+BAND_FILE02   = 'ame_pol_030_n0004.fits'
 BAND_RMS02    = 'ame_pol_030_rms_n0004.fits'
 BAND_FREQ02   = 30.0    # In GHz
 
 # Band 03 Information
 BAND_LABEL03  = 'ame_pol_045'
-BAND_FILE03   = 'ame_pol_045_noised_n0004.fits'
+BAND_FILE03   = 'ame_pol_045_n0004.fits'
 BAND_RMS03    = 'ame_pol_045_rms_n0004.fits'
 BAND_FREQ03   = 45.0    # In GHz
 
 # Band 04 Information
 BAND_LABEL04  = 'ame_pol_070'
-BAND_FILE04   = 'ame_pol_070_noised_n0004.fits'
+BAND_FILE04   = 'ame_pol_070_n0004.fits'
 BAND_RMS04    = 'ame_pol_070_rms_n0004.fits'
 BAND_FREQ04   = 70.0    # In GHz
 
 # Band 05 Information
 BAND_LABEL05  = 'ame_pol_100'
-BAND_FILE05   = 'ame_pol_100_noised_n0004.fits'
+BAND_FILE05   = 'ame_pol_100_n0004.fits'
 BAND_RMS05    = 'ame_pol_100_rms_n0004.fits'
 BAND_FREQ05   = 100.0    # In GHz

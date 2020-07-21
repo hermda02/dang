@@ -93,7 +93,7 @@ contains
                 sum = 0
                 do j = 1, i
                     sum = sum + (L(i,j) * U(j,m))
-                U(i,m) = A(i,m) - sum
+                    U(i,m) = A(i,m) - sum
                 end do
             end do
             do m = i, n

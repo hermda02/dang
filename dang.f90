@@ -227,14 +227,14 @@ program dang
 
             nodust = maps-dust_map
             ! -------------------------------------------------------------------------------------------------------------------
-            call sample_index(fgs(1),nodust,beta_samp_nside,k)
-            do i = 0, npix-1
-               fgs(1)%p(1) = beta_s(i,k)
-               do j = 1, nbands
-                  fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),par%dat_nu(j))
-               end do
-            end do
-            synch_map(:,k,:)        = fg_amp(:,k,:,1)
+!            call sample_index(fgs(1),nodust,beta_samp_nside,k)
+!            do i = 0, npix-1
+!               fgs(1)%p(1) = beta_s(i,k)
+!               do j = 1, nbands
+!                  fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),par%dat_nu(j))
+!               end do
+!            end do
+!            synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
@@ -812,6 +812,8 @@ program dang
                 w = w + l
             end if
         end do
+
+        write(*,*) T_nu(:,x+1,1)
 
         ! Computing the LHS and RHS of the linear equation
         do j=1, nbands

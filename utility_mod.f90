@@ -1,6 +1,7 @@
 module utility_mod
     use healpix_types
     implicit none
+    include 'mpif.h'
 
 contains 
 
