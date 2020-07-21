@@ -843,8 +843,6 @@ program dang
                     do j= 1, z
                         if (j_corr01(j) .eqv. .true.) then
                             fg_amp(:,map_n,j,2) = b(l)
-                            write(*,*) j
-                            write(*,*) b(l)
                             l = l + 1
                         else
                            fg_amp(:,map_n,j,2) = 0.d0
@@ -865,9 +863,6 @@ program dang
                 b = b(l+nfit2:)
             end if
         end do
-        write(*,*) ''
-        write(*,*) fg_amp(1,map_n,:,2)
-
 
         ! Sure to deallocate all arrays here to free up memory
         deallocate(A_1)
