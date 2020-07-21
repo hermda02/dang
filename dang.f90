@@ -7,7 +7,6 @@ program dang
     use utility_mod
     use param_mod
     use linalg_mod
-    use foreground_mod
     use data_mod
     implicit none
   
@@ -58,8 +57,6 @@ program dang
     real(dp), allocatable, dimension(:)          :: x, b, d
 
     ! Object Orient
-    type(fg_comp)      :: fgs(2)
-    ! type(band)         :: bands(6) 
     type(params)       :: par
 
     call read_param_file(par)
@@ -102,35 +99,14 @@ program dang
     beta_s     = -3.10d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
 
-    ! Load foreground info
-    fgs(1)%type          = 'synch'
-    fgs(1)%nu_ref        = 45.d0
-    fgs(1)%gauss_mean(1) = -3.10d0
-    fgs(1)%gauss_std(1)  = 0.05d0
-    fgs(1)%uni_min(1)    = -4.5d0
-    fgs(1)%uni_max(1)    = -1.5d0
-    fgs(1)%loc           = minloc(abs(par%dat_nu-fgs(1)%nu_ref),1)
-
-    fgs(2)%type          = 'dust'
-    fgs(2)%nu_ref        = 353.d0
-    fgs(2)%gauss_mean(1) = 1.60d0
-    fgs(2)%gauss_std(1)  = 0.1d0
-    fgs(2)%uni_min(1)    = 1.2d0
-    fgs(2)%uni_max(1)    = 2.0d0
-    fgs(2)%gauss_mean(2) = 19.60d0
-    fgs(2)%gauss_std(2)  = 0.1d0
-    fgs(2)%uni_min(2)    = 15.0d0
-    fgs(2)%uni_max(2)    = 25.0d0
-    fgs(2)%loc           = minloc(abs(par%dat_nu-fgs(2)%nu_ref),1)
-
     !----------------------------------------------------------------------------------------------------------
     ! Read maps
 
     do j = 1, nbands
-        call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
+        call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
         rms,npix,nmaps,nullval,anynull,header=header)
         rmss(:,:,j) = rms
-        call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
+        call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
         map,npix,nmaps,nullval,anynull,header=header)
         maps(:,:,j) = map
     end do
@@ -190,7 +166,6 @@ program dang
         end if 
 
         do iter = 1, niter
-    
             call sample_joint_amp(npix,k,trim(solver))  
             dust_amps = fg_amp(0,k,:,2)
 
@@ -198,9 +173,8 @@ program dang
             ! Extrapolating A_synch to bands
             if (ANY(joint_comps=='synch')) then
                 do i = 0, npix-1
-                    fgs(1)%p(1) = beta_s(i,k)
                     do j = 1, nbands
-                        fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),par%dat_nu(j))
+                        fg_amp(i,k,j,1) = fg_amp(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,1,par%dat_nu(j),i,k)
                     end do
                 end do
                 synch_map(:,k,:)        = fg_amp(:,k,:,1)
@@ -209,10 +183,8 @@ program dang
             ! Extrapolating A_dust to bands
             if (ANY(joint_comps=='dust')) then
                 do i = 0, npix-1
-                    fgs(2)%p(1) = beta_d(i,k)
-                    fgs(2)%p(2) = T_d(i,k)
                     do j = 1, nbands
-                        fg_amp(i,k,j,3) = fg_amp(i,k,fgs(2)%loc,3)*compute_spectrum(fgs(2),par%dat_nu(j))
+                        fg_amp(i,k,j,3) = fg_amp(i,k,par%fg_ref_loc(2),3)*compute_spectrum(par,2,par%dat_nu(j),i,k)
                     end do
                 end do
                 dust_map(:,k,:)         = fg_amp(:,k,:,3)
@@ -227,24 +199,21 @@ program dang
 
             nodust = maps-dust_map
             ! -------------------------------------------------------------------------------------------------------------------
-!            call sample_index(fgs(1),nodust,beta_samp_nside,k)
-!            do i = 0, npix-1
-!               fgs(1)%p(1) = beta_s(i,k)
-!               do j = 1, nbands
-!                  fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),par%dat_nu(j))
-!               end do
-!            end do
-!            synch_map(:,k,:)        = fg_amp(:,k,:,1)
+            call sample_index(par,nodust,beta_samp_nside,1,k)
+            do i = 0, npix-1
+                do j = 1, nbands
+                    fg_amp(i,k,j,1) = fg_amp(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,1,par%dat_nu(j),i,k)
+                end do
+            end do
+            synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
 
-            call compute_chisq(fg_amp,k)
-
             if (mod(iter, 1) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
                  iter, " - chisq: " , chisq, " - A_s: ",&
-                 fg_amp(100,k,fgs(1)%loc,1),  " - beta_s: ",&
+                 fg_amp(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
                  sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps/temp_norm_01
             end if
 
@@ -273,22 +242,30 @@ program dang
       end if
     end function
 
-    function compute_spectrum(self, freq)
+    function compute_spectrum(self, comp, freq, pix, mapn, param)
         implicit none
-        class(fg_comp)                 :: self
+        class(params)                  :: self
         real(dp),           intent(in) :: freq
+        integer(i4b),       intent(in) :: comp
+        integer(i4b),       intent(in) :: pix
+        integer(i4b),       intent(in) :: mapn
+        real(dp), optional             :: param
         real(dp)                       :: y, rj_cmb ! Conversion factor from K_{RJ} -> K_{CMB}
         real(dp)                       :: z, compute_spectrum
-        real(dp)                       :: spectrum
 
         y = h*(freq*1.0d9) / (k_B*T_CMB)
         rj_cmb = ((exp(y)-1)**2.d0)/(y**2.d0*exp(y))
 
-        if (trim(self%type) == 'synch') then
-            compute_spectrum = (freq/self%nu_ref)**self%p(1) !*rj_cmb
-        else if (trim(self%type) == 'dust') then
-            z = h / (k_B*self%p(2))
-            compute_spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / (exp(z*freq*1d9)-1.d0) * (freq/self%nu_ref)**(self%p(1)+1.d0)!*rj_cmb
+        if (trim(self%fg_label(comp)) == 'synch') then
+           if (present(param)) then
+              compute_spectrum = (freq/self%fg_nu_ref(comp))**param
+           else 
+              compute_spectrum = (freq/self%fg_nu_ref(comp))**beta_s(pix,mapn)
+           end if
+        else if (trim(self%fg_label(comp)) == 'mbb') then
+           z = h / (k_B*T_d(pix,mapn))
+           compute_spectrum = (exp(z*self%fg_nu_ref(comp)*1d9)-1.d0) / &
+                (exp(z*freq*1d9)-1.d0) * (freq/self%fg_nu_ref(comp))**(beta_d(pix,mapn)+1.d0)!*rj_cmb
         end if
 
     end function compute_spectrum
@@ -334,36 +311,32 @@ program dang
   
     end function temp_fit
   
-    function sample_spec_amp(self,data,noise)
+    function sample_spec_amp(self, data, noise, comp, mapn)
         !------------------------------------------------------------------------
         ! Samples spectral amplitude (per pixel), following the spectrum of foreground 'type'. Returns a full map of amplitudes.
         !------------------------------------------------------------------------
         implicit none
   
-        class(fg_comp)                                         :: self
-        real(dp), dimension(0:npix-1,nbands), intent(in)       :: data, noise
-        real(dp)                                               :: sum1, sum2, spec
-        real(dp)                                               :: chi, chi_0, chi_00, p
-        real(dp)                                               :: amp, num, t, sam
-        real(dp), dimension(2)                                 :: pars
-        real(dp), dimension(nbands)                            :: tmp
-        real(dp), dimension(0:npix-1)                          :: norm
-        real(dp), dimension(0:npix-1,nbands)                   :: cov
-        real(dp), dimension(0:npix-1)                          :: sample_spec_amp
+        class(params)                                    :: self
+        real(dp), dimension(0:npix-1,nbands), intent(in) :: data, noise
+        integer(i4b),                         intent(in) :: comp
+        integer(i4b),                         intent(in) :: mapn
+        real(dp)                                         :: sum1, sum2, spec
+        real(dp)                                         :: chi, chi_0, chi_00, p
+        real(dp)                                         :: amp, num, t, sam
+        real(dp), dimension(2)                           :: pars
+        real(dp), dimension(nbands)                      :: tmp
+        real(dp), dimension(0:npix-1)                    :: norm
+        real(dp), dimension(0:npix-1,nbands)             :: cov
+        real(dp), dimension(0:npix-1)                    :: sample_spec_amp
 
         cov = noise*2
 
         do i = 0, npix-1
-            if (trim(self%type) == 'synch') then 
-                self%p(1) = beta_s(i,k)
-            else if (trim(self%type) == 'dust') then
-                self%p(1) = beta_d(i,k)
-                self%p(2) = T_d(i,k)
-            end if
             sum1 = 0.0d0
             sum2 = 0.0d0
             do j = 1, nbands
-                spec          = compute_spectrum(self,par%dat_nu(j))
+                spec          = compute_spectrum(self,comp,par%dat_nu(j),i,mapn)
                 sum1           = sum1 + (data(i,j)*spec)/cov(i,j)
                 sum2           = sum2 + (spec)**2.d0/cov(i,j)
                 norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,j)
@@ -375,11 +348,11 @@ program dang
 
     end function sample_spec_amp
   
-    subroutine sample_index(self, data, nside2, map_n)
+    subroutine sample_index(self, data, nside2, comp, map_n)
         implicit none
   
-        class(fg_comp)                                         :: self
-        integer(i4b),                               intent(in) :: map_n, nside2
+        class(params)                                          :: self
+        integer(i4b),                               intent(in) :: map_n, nside2, comp
         real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data
         integer(i4b)                                           :: nside1, npix2
         real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov
@@ -406,15 +379,15 @@ program dang
         !------------------------------------------------------------------------
         ! Load priors for the appropriate spectrum
         !------------------------------------------------------------------------
-        if (trim(self%type) == 'synch') then 
+        if (trim(self%fg_label(comp)) == 'synch') then 
             indx     = beta_s
-        else if (trim(self%type) == 'dust') then 
+        else if (trim(self%fg_label(comp)) == 'dust') then 
             indx     = beta_d
         end if
 
 
         if (mod(iter,output_iter) .EQ. 0) then
-           write(*,*) 'Sampling ' // trim(self%type) // ' beta at nside', beta_samp_nside
+           write(*,*) 'Sampling ' // trim(self%fg_label(comp)) // ' beta at nside', beta_samp_nside
         end if
 
         !------------------------------------------------------------------------
@@ -470,11 +443,10 @@ program dang
         do i = 0, npix2-1
             a         = 0.d0
             sol       = indx_low(i,map_n)
-            self%p(1) = indx_low(i,map_n)
 
             ! Chi-square from the most recent Gibbs chain update
             do j = 1, nbands
-                a = a + (((fg_amp_low(i,map_n,fgs(1)%loc) * compute_spectrum(fgs(1),par%dat_nu(j))) &
+                a = a + (((fg_amp_low(i,map_n,par%fg_ref_loc(1)) * compute_spectrum(self,comp,par%dat_nu(j),i,map_n,sol)) &
                       - data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
             end do
             c = a
@@ -482,17 +454,16 @@ program dang
             do l = 1, iterations
 
                 ! Sampling from the prior
-                t         = rand_normal(self%gauss_mean(1), self%gauss_std(1))
-                self%p(1) = t
+                t         = rand_normal(self%fg_gauss(comp,1,1), self%fg_gauss(comp,1,2))
                 b         = 0.d0
 
                 do j = 1, nbands
-                    tmp(j) = fg_amp_low(i,map_n,fgs(1)%loc)*compute_spectrum(fgs(1),par%dat_nu(j))
+                    tmp(j) = fg_amp_low(i,map_n,par%fg_ref_loc(1))*compute_spectrum(self,comp,par%dat_nu(j),i,map_n,t)
                     b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
                 end do
                 b = b
 
-                if (b < c .and. t .lt. self%uni_max(1) .and. t .gt. self%uni_min(1)) then
+                if (b < c .and. t .lt. self%fg_uni(comp,1,2) .and. t .gt. self%fg_uni(comp,1,1)) then
                     sam = t
                     c   = b
                 else
@@ -500,7 +471,7 @@ program dang
                     p = minval(x)
                     call RANDOM_NUMBER(num)
                     if (num < p) then
-                        if (t .lt. self%uni_max(1) .and. t .gt. self%uni_min(1)) then
+                        if (t .lt. self%fg_uni(comp,1,2) .and. t .gt. self%fg_uni(comp,1,1)) then
                             sam = t
                             c   = b
                         end if
@@ -522,9 +493,9 @@ program dang
             indx_sample = indx_sample_low
         end if
 
-        if (trim(self%type) == 'synch') then 
+        if (trim(self%fg_label(comp)) == 'synch') then 
             beta_s(:,k) = indx_sample
-        else if (trim(self%type) == 'dust') then 
+        else if (trim(self%fg_label(comp)) == 'dust') then 
             beta_d(:,k) = indx_sample
         end if
         deallocate(data_low)
@@ -540,7 +511,7 @@ program dang
     function sample_HI_T(self, band, npix, map_n, sigma, T_map, nside2)
         implicit none
   
-        class(fg_comp)                                         :: self
+        class(params)                                          :: self
         integer(i4b), intent(in)                               :: npix, map_n, nside2
         integer(i4b)                                           :: nside1, npix2
         real(dp), intent(in)                                   :: sigma
@@ -618,7 +589,7 @@ program dang
 
                 do l = 1, iterations
                     ! Begin sampling from the prior
-                    t = rand_normal(self%gauss_mean(2), self%gauss_std(2))
+                    t = rand_normal(self%fg_gauss(2,2,1), self%fg_gauss(2,2,2))
                     b = 0.d0
                     do j = 1, nbands
                         tmp(j) = fg_amp_low(i,map_n,j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,t)
@@ -766,21 +737,15 @@ program dang
         do m = 1, size(joint_comps)
             if (joint_comps(m) == 'synch') then
                 do i = 1, x
-                    fgs(1)%p(1) = beta_s(i-1,map_n)
                     do j = 1, z
-                        T_nu(i,w+i,j) = compute_spectrum(fgs(1),par%dat_nu(j))
-                        if (i == 1) then
-                            
-                        end if
+                        T_nu(i,w+i,j) = compute_spectrum(par,1,par%dat_nu(j),i-1,map_n)
                     end do
                 end do
                 w = w + x
             else if (joint_comps(m) == 'dust') then
                 do i = 1, x
-                    fgs(2)%p(1) = beta_d(i-1,map_n)
-                    fgs(2)%p(2) = T_d(i-1,map_n)
                     do j = 1, z
-                        T_nu(i,w+i,j) = compute_spectrum(fgs(2),par%dat_nu(j))
+                        T_nu(i,w+i,j) = compute_spectrum(par,2,par%dat_nu(j),i-1,map_n)
                     end do
                 end do
                 w = w + x
@@ -812,8 +777,6 @@ program dang
                 w = w + l
             end if
         end do
-
-        write(*,*) T_nu(:,x+1,1)
 
         ! Computing the LHS and RHS of the linear equation
         do j=1, nbands
@@ -863,12 +826,12 @@ program dang
         do m = 1, size(joint_comps)
             if (joint_comps(m) == 'synch') then
                 do i = 1, x
-                    fg_amp(i-1,map_n,fgs(1)%loc,1) = b(i)
+                    fg_amp(i-1,map_n,par%fg_ref_loc(1),1) = b(i)
                 end do
                 b = b(x+1:)
             else if (joint_comps(m) == 'dust') then
                 do i = 1, x
-                    fg_amp(i-1,map_n,fgs(2)%loc,3) = b(i)
+                    fg_amp(i-1,map_n,par%fg_ref_loc(2),3) = b(i)
                 end do
                 b = b(x+1:)
             end if
@@ -880,7 +843,11 @@ program dang
                     do j= 1, z
                         if (j_corr01(j) .eqv. .true.) then
                             fg_amp(:,map_n,j,2) = b(l)
+                            write(*,*) j
+                            write(*,*) b(l)
                             l = l + 1
+                        else
+                           fg_amp(:,map_n,j,2) = 0.d0
                         end if
                     end do
                 end do
@@ -898,13 +865,16 @@ program dang
                 b = b(l+nfit2:)
             end if
         end do
+        write(*,*) ''
+        write(*,*) fg_amp(1,map_n,:,2)
+
 
         ! Sure to deallocate all arrays here to free up memory
         deallocate(A_1)
         deallocate(A_2)
         deallocate(A)
         deallocate(A_inv)
-        ! deallocate(b)
+        deallocate(b)
         deallocate(c)
         deallocate(c_1)
         deallocate(c_2)
@@ -940,9 +910,9 @@ program dang
                 call write_bintab(map,npix,1, header, nlheader, trim(title))
             end do
         else 
-            title = trim(direct) // trim(par%dat_label(fgs(1)%loc)) // '_synch_amplitude_' //  trim(tqu(nm)) &
+            title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
                     // '_' // trim(iter_str) // '.fits'
-            map(:,1)   = fg_amp(:,nm,fgs(1)%loc,1)
+            map(:,1)   = fg_amp(:,nm,par%fg_ref_loc(1),1)
             call write_bintab(map,npix,1, header, nlheader, trim(title))
         end if
         do j = 1, nbands
@@ -978,7 +948,7 @@ program dang
         else
             open(30,file=title, status="new", action="write")
         endif
-        write(30,*) dust_map(100,k,fgs(1)%loc)
+        write(30,*) dust_map(100,k,par%fg_ref_loc(1))
         close(30)
 
         title = trim(direct) // 'pixel_100_A_s.dat'
@@ -988,7 +958,7 @@ program dang
         else
             open(31,file=title, status="new", action="write")
         endif
-        write(31,*) fg_amp(100,k,fgs(1)%loc,1)
+        write(31,*) fg_amp(100,k,par%fg_ref_loc(1),1)
         close(31)
 
         title = trim(direct) // 'pixel_100_beta_s.dat'

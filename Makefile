@@ -11,7 +11,7 @@ HEALPIX  = -L/mn/stornext/u3/hke/local/lib -lhealpix
 HEALINC  = -I/mn/stornext/u3/hke/local/include
 OUTPUT   = dang
 
-OBJS    = init_mod.o utility_mod.o hashtbl.o param_mod.o linalg_mod.o foreground_mod.o data_mod.o dang.o
+OBJS    = init_mod.o utility_mod.o hashtbl.o param_mod.o linalg_mod.o data_mod.o dang.o
 
 dang: $(OBJS)
 	$(FC) $(OBJS) $(HEALPIX) $(FITSDIR) $(LAPACK) -qopenmp -o $(OUTPUT)
@@ -19,9 +19,9 @@ dang: $(OBJS)
 # Dependencies
 linalg_mod.o           : init_mod.o utility_mod.o
 data_mod.o             : init_mod.o utility_mod.o
-foreground_mod.o       : init_mod.o utility_mod.o
+#foreground_mod.o       : init_mod.o utility_mod.o
 param_mod.o            : init_mod.o hashtbl.o utility_mod.o
-dang.o : init_mod.o utility_mod.o param_mod.o linalg_mod.o data_mod.o foreground_mod.o
+dang.o : init_mod.o utility_mod.o param_mod.o linalg_mod.o data_mod.o #foreground_mod.o
 
 # Compilation stage
 %.o : %.f90
