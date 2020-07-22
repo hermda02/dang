@@ -1,6 +1,7 @@
 # -*- Makefile -*-
 
 FC      = ifort
+MFC     = mpiifort
 OPTIM   = -g -c
 
 MPICHINC = -I/astro/local/opt/Intel/compilers_and_libraries_2018.3.222/linux/mpi/intel64/include
@@ -25,7 +26,7 @@ dang.o : init_mod.o utility_mod.o param_mod.o linalg_mod.o data_mod.o #foregroun
 
 # Compilation stage
 %.o : %.f90
-	$(FC) -fpp $(OPTIM) $(HEALINC) $(LAPACK) $(CFITSIO) -qopenmp -parallel -c $<
+	$(MFC) -fpp $(OPTIM) $(HEALINC) $(LAPACK) $(CFITSIO) -qopenmp -parallel -c $<
 
 # Cleaning command
 .PHONY: clean
