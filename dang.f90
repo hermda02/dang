@@ -9,7 +9,6 @@ program dang
     use linalg_mod
     use data_mod
     implicit none
-    include "mpif.h"
   
     !------------------------------------------------------------------------------------------------------
     ! This program was designed to fit the Planck (NPIPE) 353 GHz dust map to LFI bands to set constraints|
@@ -75,7 +74,7 @@ program dang
 
     !----------------------------------------------------------------------------------------------------------
     ! General paramters
-    template_file_01  = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
+    template_file_01  = 'data/npipe6v20_353_map_QUADCOR_ZODICOR_n0064_60arcmin_uK.fits'
     template_file_02  = 'data/temp_synch_030_n0004.fits'
     mask_file         = 'data/mask_fullsky_n0004.fits'
     tqu(1)            = 'T'
@@ -86,14 +85,14 @@ program dang
     nbands            = par%numband
     nfgs              = par%ncomp
     nlheader          = size(header)
-    nmaps             = 1
+    nmaps             = nmaps
 
-    niter             = par%ngibbs       ! # of MC-MC iterations
-    iterations        = par%nsample      ! # of iterations in the samplers
-    output_iter       = par%iter_out     ! Output maps every <- # of iterations
-    output_fg         = par%output_fg    ! Option for outputting foregrounds for all bands
-    direct            = par%outdir       ! Output directory name
-    beta_samp_nside   = 4          ! \beta_synch nside sampling
+    niter             = par%ngibbs         ! # of MC-MC iterations
+    iterations        = par%nsample        ! # of iterations in the samplers
+    output_iter       = par%iter_out       ! Output maps every <- # of iterations
+    output_fg         = par%output_fg      ! Option for outputting foregrounds for all bands
+    direct            = par%outdir         ! Output directory name
+    beta_samp_nside   = par%fg_samp_nside(1,1)          ! \beta_synch nside sampling
     !----------------------------------------------------------------------------------------------------------
 
     !----------------------------------------------------------------------------------------------------------
@@ -126,8 +125,8 @@ program dang
     deallocate(map,rms)
 
     call read_bintab(template_file_01,template_01,npix,nmaps,nullval,anynull,header=header)
-    call read_bintab(mask_file,mask,npix,1,nullval,anynull,header=header)
-    call read_bintab(template_file_02,template_02,npix,nmaps,nullval,anynull,header=header)
+!    call read_bintab(mask_file,mask,npix,1,nullval,anynull,header=header)
+!    call read_bintab(template_file_02,template_02,npix,nmaps,nullval,anynull,header=header)
 
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
@@ -148,8 +147,8 @@ program dang
     ! Normalize template to avoid large values in the matrix equation
     temp_norm_01 = maxval(template_01)
     template_01  = template_01/temp_norm_01
-    temp_norm_02 = maxval(template_02)
-    template_02  = template_02/temp_norm_02
+!    temp_norm_02 = maxval(template_02)
+!    template_02  = template_02/temp_norm_02
     !----------------------------------------------------------------------------------------------------------
     ! Joint Sampler Info
 
@@ -164,15 +163,15 @@ program dang
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
 
-    do k = 1, nmaps
+    do k = 2, nmaps
         
-        ! if (k == 1) then
-        !     write(*,*) 'Sampling Temperature'
-        !     write(*,*) '-----------------------'
         if (k == 1) then
-            write(*,*) 'Stokes Q'
+            write(*,*) 'Sampling Temperature'
             write(*,*) '-----------------------'
         else if (k == 2) then
+            write(*,*) 'Stokes Q'
+            write(*,*) '-----------------------'
+        else if (k == 3) then
             write(*,*) 'Stokes U'
             write(*,*) '-----------------------'
         end if 
@@ -205,7 +204,7 @@ program dang
             ! Applying dust templates to make dust maps
             if (ANY(joint_comps=='template01')) then
                 do j = 1, nbands
-                    dust_map(:,k,j) = fg_amp(:,k,j,2)*template_01(:,k)
+                    dust_map(:,k,j) = dust_amps(j)*template_01(:,k)
                 end do
             end if
 
@@ -221,6 +220,8 @@ program dang
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
+
+            call compute_chisq(fg_amp,k)
 
             if (mod(iter, 1) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
@@ -670,9 +671,9 @@ program dang
         implicit none
         integer(i4b),              intent(in)     :: npix, map_n
         character(len=*),          intent(in)     :: method
-        real(dp), allocatable, dimension(:,:,:)   :: T_nu, T_nu_T, covar, A_1, A_2
-        real(dp), allocatable, dimension(:,:)     :: A, c_1, c_2, dats, norm
-        real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u, A_inv
+        real(dp), allocatable, dimension(:,:,:)   :: T_nu, T_nu_T, A_1, A_2, covar
+        real(dp), allocatable, dimension(:,:)     :: A, norm, dats, Q
+        real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u, A_inv, c_1, c_2
         real(dp), allocatable, dimension(:)       :: b, c, d, samp, rand
         integer(i4b)                              :: x, y, z, nfit1, nfit2, w
 
@@ -710,54 +711,39 @@ program dang
             end if
         end do
 
-        allocate(T_nu(x,y,z),T_nu_T(y,x,z),dats(x,z))
-        allocate(A_1(y,x,z),A_2(y,y,z))
-        allocate(A(y,y),b(y),c(y),d(y),A_inv(y,y))
+        write(*,*) 'Allocate'
+        allocate(T_nu(x,y,z),A(y,y))
+        allocate(b(y),c(y),d(y))
         allocate(mat_l(y,y),mat_u(y,y))
-        allocate(samp(y),rand(y), norm(y,y))
-        allocate(covar(x,x,z),c_1(x,z),c_2(y,z))
+        allocate(samp(y),rand(y))
 
+        write(*,*) 'Initialize'
         ! Initialize arrays
-        covar(:,:,:)      = 0.d0
         T_nu(:,:,:)       = 0.d0
-        A_1(:,:,:)        = 0.d0
-        A_2(:,:,:)        = 0.d0
         A(:,:)            = 0.d0
-        A_inv(:,:)        = 0.d0
         b(:)              = 0.d0
         c(:)              = 0.d0
         d(:)              = 0.d0
         rand(:)           = 0.d0
         samp(:)           = 0.d0
-        norm(:,:)         = 0.d0
-        dats(:,:)         = 0.d0
         mat_l(:,:)        = 0.d0
         mat_u(:,:)        = 0.d0
-        c_1(:,:)          = 0.d0
-        c_2(:,:)          = 0.d0
 
-        ! Fill data and covariance arrays
-        do i=1, x
-            do j=1,z
-                covar(i,i,j) = rmss(i-1,map_n,j)**2
-                dats(i,j)    = maps(i-1,map_n,j)
-            end do
-        end do
-
+        write(*,*) 'Fill Template Matrix'
         ! Fill template matrix
         w = 0 
         do m = 1, size(joint_comps)
             if (joint_comps(m) == 'synch') then
                 do i = 1, x
                     do j = 1, z
-                        T_nu(i,w+i,j) = compute_spectrum(par,1,par%dat_nu(j),i-1,map_n)
+                        T_nu(i,w+i,j) = compute_spectrum(par,1,par%dat_nu(j),i-1,map_n)/rmss(i-1,map_n,j)
                     end do
                 end do
                 w = w + x
             else if (joint_comps(m) == 'dust') then
                 do i = 1, x
                     do j = 1, z
-                        T_nu(i,w+i,j) = compute_spectrum(par,2,par%dat_nu(j),i-1,map_n)
+                        T_nu(i,w+i,j) = compute_spectrum(par,2,par%dat_nu(j),i-1,map_n)/rmss(i-1,map_n,j)
                     end do
                 end do
                 w = w + x
@@ -770,7 +756,7 @@ program dang
                     l = 1
                     do j = 1, z
                         if (j_corr01(j) .eqv. .true.) then
-                            T_nu(i,w+l,j) = template_01(i-1,map_n)
+                            T_nu(i,w+l,j) = template_01(i-1,map_n)/rmss(i-1,map_n,j)
                             l = l + 1
                         end if
                     end do
@@ -781,7 +767,7 @@ program dang
                     l = 1
                     do j = 1, z
                         if (j_corr02(j) .eqv. .true.) then
-                            T_nu(i,w+l,j) = template_02(i-1,map_n)
+                            T_nu(i,w+l,j) = template_02(i-1,map_n)/rmss(i-1,map_n,j)
                             l = l + 1
                         end if
                     end do
@@ -790,15 +776,60 @@ program dang
             end if
         end do
 
+        write(*,*) 'Compute RHS of matrix eqn.'
         ! Computing the LHS and RHS of the linear equation
-        do j=1, nbands
-            T_nu_T(:,:,j) = transpose(T_nu(:,:,j))
-            c_1(:,j)      = matmul(inv(covar(:,:,j)),dats(:,j))
-            c_2(:,j)      = matmul(T_nu_T(:,:,j),c_1(:,j))
-            A_1(:,:,j)    = matmul(T_nu_T(:,:,j),inv(covar(:,:,j)))
-            A_2(:,:,j)    = matmul(A_1(:,:,j),T_nu(:,:,j)) 
-            A(:,:)        = A(:,:) + A_2(:,:,j)
-            c(:)          = c(:) + c_2(:,j)
+        ! RHS
+        w = 0 
+        do m = 1, size(joint_comps)
+            if (joint_comps(m) == 'synch') then
+               do j=1, z
+                  do i=1, x
+                     c(i) = c(i) + 1.d0/(rmss(i-1,map_n,j)**2.d0)*maps(i-1,map_n,j)*compute_spectrum(par,1,par%dat_nu(j),i-1,map_n)
+                  end do
+               end do
+               w = w + x
+            else if (joint_comps(m) == 'dust') then
+               do j=1, z
+                  do i=1, x
+                     c(i) = c(i) + 1.d0/(rmss(i-1,map_n,j)**2.d0)*maps(i-1,map_n,j)*compute_spectrum(par,2,par%dat_nu(j),i-1,map_n)
+                  end do
+               end do
+               w = w + x
+            end if
+        end do
+        do m = 1, size(joint_comps)
+            if (joint_comps(m) == 'template01') then
+               l = 1
+               do j = 1, z
+                  if (j_corr01(j) .eqv. .true.) then
+                     do i = 1, x
+                        c(w+l) = c(w+l)+1.d0/(rmss(i-1,map_n,j)**2.d0)*maps(i-1,map_n,j)*&
+                                 template_01(i-1,map_n)
+                     end do
+                     l = l + 1
+                  end if
+               end do
+               w = w + l  
+            else if (joint_comps(m) == 'template02') then
+               l = 1
+               do j = 1, z
+                  if (j_corr02(j) .eqv. .true.) then
+                     do i = 1, x
+                        c(w+l) = c(w+l)+1.d0/(rmss(i-1,map_n,j)**2.d0)*maps(i-1,map_n,j)*&
+                                 template_02(i-1,map_n)
+                     end do
+                     l = l + 1
+                  end if
+               end do
+               w = w + l
+            end if
+        end do
+
+        write(*,*) 'Compute LHS of matrix eqn.'
+        !LHS
+        do j=1, z
+!           A(:,:)        = A(:,:) + matmul(matmul(transpose(T_nu(:,:,j)),inv(covar(:,:,j))),T_nu(:,:,j))
+           A(:,:)        = A(:,:) + matmul(transpose(T_nu(:,:,j)),T_nu(:,:,j))
         end do
 
         ! Computation
@@ -826,12 +857,11 @@ program dang
 
         ! Draw a sample by cholesky decompsing A^-1, and multiplying 
         ! the subsequent lower triangular by a vector of random numbers
-        A_inv = inv(A)
-        call cholesky_decomp(A_inv,norm,y)
+        call cholesky_decomp(inv(A),mat_l,y)
         do i = 1, y
             rand(i) = rand_normal(0.d0,1.d0)
         end do
-        samp  = matmul(norm,rand)
+        samp  = matmul(mat_l,rand)
         b     = b  + samp
 
         ! Output amplitudes to the appropriate variables
@@ -883,10 +913,7 @@ program dang
         deallocate(A_inv)
         deallocate(b)
         deallocate(c)
-        deallocate(c_1)
-        deallocate(c_2)
         deallocate(covar)
-        deallocate(dats)
         deallocate(d)
         deallocate(norm)
         deallocate(mat_l)
