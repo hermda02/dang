@@ -24,6 +24,8 @@ module param_mod
 
         ! Component parameters
         integer(i4b)   :: ncomp                                             ! # of foregrounds
+        integer(i4b)   :: ntemp                                             ! # of templates
+        character(len=512), allocatable, dimension(:)     :: temp_file      ! Template Filename
         logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
         logical(lgt),       allocatable, dimension(:,:)   :: fg_sample_spec ! Logical - sample spec params
         logical(lgt),       allocatable, dimension(:)     :: fg_sample_amp  ! Logical - sample amplitude
@@ -31,6 +33,7 @@ module param_mod
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
         integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
+        integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg reference band
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
     end type params
@@ -360,6 +363,7 @@ contains
         allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
         allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_sample_amp(n))
         allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
+        allocate(par%fg_samp_nside(n,2))
 
         do i = 1, n
             call int2string(i, itext)
@@ -377,6 +381,8 @@ contains
                     par_dp=par%fg_uni(i,1,1))
                call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
                     par_dp=par%fg_uni(i,1,2))
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
+                    par_int=par%fg_samp_nside(i,1))
             else if (trim(par%fg_type(i)) == 'mbb') then
                call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                     par_dp=par%fg_gauss(i,1,1))

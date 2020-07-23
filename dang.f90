@@ -63,7 +63,7 @@ program dang
 
     !----------------------------------------------------------------------------------------------------------
     ! General paramters
-    template_file_01  = 'data/test_data/npipe6v20_353_map_Q_n0004.fits'
+    template_file_01  = 'data/npipe6v20_353_map_QUADCOR_ZODICOR_n0064_60arcmin_uK.fits'
     template_file_02  = 'data/temp_synch_030_n0004.fits'
     mask_file         = 'data/mask_fullsky_n0004.fits'
     tqu(1)            = 'T'
@@ -74,14 +74,14 @@ program dang
     nbands            = par%numband
     nfgs              = par%ncomp
     nlheader          = size(header)
-    nmaps             = 1
+    nmaps             = nmaps
 
-    niter             = par%ngibbs       ! # of MC-MC iterations
-    iterations        = par%nsample      ! # of iterations in the samplers
-    output_iter       = par%iter_out     ! Output maps every <- # of iterations
-    output_fg         = par%output_fg    ! Option for outputting foregrounds for all bands
-    direct            = par%outdir       ! Output directory name
-    beta_samp_nside   = 4          ! \beta_synch nside sampling
+    niter             = par%ngibbs         ! # of MC-MC iterations
+    iterations        = par%nsample        ! # of iterations in the samplers
+    output_iter       = par%iter_out       ! Output maps every <- # of iterations
+    output_fg         = par%output_fg      ! Option for outputting foregrounds for all bands
+    direct            = par%outdir         ! Output directory name
+    beta_samp_nside   = par%fg_samp_nside(1,1)          ! \beta_synch nside sampling
     !----------------------------------------------------------------------------------------------------------
 
     !----------------------------------------------------------------------------------------------------------
@@ -114,8 +114,8 @@ program dang
     deallocate(map,rms)
 
     call read_bintab(template_file_01,template_01,npix,nmaps,nullval,anynull,header=header)
-    call read_bintab(mask_file,mask,npix,1,nullval,anynull,header=header)
-    call read_bintab(template_file_02,template_02,npix,nmaps,nullval,anynull,header=header)
+!    call read_bintab(mask_file,mask,npix,1,nullval,anynull,header=header)
+!    call read_bintab(template_file_02,template_02,npix,nmaps,nullval,anynull,header=header)
 
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
@@ -136,8 +136,8 @@ program dang
     ! Normalize template to avoid large values in the matrix equation
     temp_norm_01 = maxval(template_01)
     template_01  = template_01/temp_norm_01
-    temp_norm_02 = maxval(template_02)
-    template_02  = template_02/temp_norm_02
+!    temp_norm_02 = maxval(template_02)
+!    template_02  = template_02/temp_norm_02
     !----------------------------------------------------------------------------------------------------------
     ! Joint Sampler Info
 
@@ -152,15 +152,15 @@ program dang
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
 
-    do k = 1, nmaps
+    do k = 2, nmaps
         
-        ! if (k == 1) then
-        !     write(*,*) 'Sampling Temperature'
-        !     write(*,*) '-----------------------'
         if (k == 1) then
-            write(*,*) 'Stokes Q'
+            write(*,*) 'Sampling Temperature'
             write(*,*) '-----------------------'
         else if (k == 2) then
+            write(*,*) 'Stokes Q'
+            write(*,*) '-----------------------'
+        else if (k == 3) then
             write(*,*) 'Stokes U'
             write(*,*) '-----------------------'
         end if 
@@ -700,11 +700,13 @@ program dang
             end if
         end do
 
+        write(*,*) 'Allocate'
         allocate(T_nu(x,y,z),A(y,y))
         allocate(b(y),c(y),d(y))
         allocate(mat_l(y,y),mat_u(y,y))
         allocate(samp(y),rand(y))
 
+        write(*,*) 'Initialize'
         ! Initialize arrays
         T_nu(:,:,:)       = 0.d0
         A(:,:)            = 0.d0
@@ -716,12 +718,7 @@ program dang
         mat_l(:,:)        = 0.d0
         mat_u(:,:)        = 0.d0
 
-        ! Fill data and covariance arrays
-        do i=1, x
-            do j=1,z
-                covar(i,i,j) = rmss(i-1,map_n,j)**2
-            end do
-        end do
+        write(*,*) 'Fill Template Matrix'
         ! Fill template matrix
         w = 0 
         do m = 1, size(joint_comps)
@@ -768,6 +765,7 @@ program dang
             end if
         end do
 
+        write(*,*) 'Compute RHS of matrix eqn.'
         ! Computing the LHS and RHS of the linear equation
         ! RHS
         w = 0 
@@ -816,6 +814,7 @@ program dang
             end if
         end do
 
+        write(*,*) 'Compute LHS of matrix eqn.'
         !LHS
         do j=1, z
 !           A(:,:)        = A(:,:) + matmul(matmul(transpose(T_nu(:,:,j)),inv(covar(:,:,j))),T_nu(:,:,j))
