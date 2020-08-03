@@ -351,19 +351,29 @@ contains
         type(hash_tbl_sll), intent(in)    :: htbl
         type(params),       intent(inout) :: par
 
-        integer(i4b)     :: i, j, n, len_itext
+        integer(i4b)     :: i, j, n, n2, len_itext
         character(len=2) :: itext
         character(len=2) :: jtext
 
         len_itext = len(trim(itext))
 
         call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
-        n = par%ncomp
+        call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
+        n  = par%ncomp
+        n2 = par%ntemp
+
 
         allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
         allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_sample_amp(n))
         allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
         allocate(par%fg_samp_nside(n,2))
+
+        allocate(par%temp_file(n))
+        
+        do i = 1, n2
+            call int2string(i, itext)
+            call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext, len_itext=len_itext, par_string=par%temp_file(i))
+        end do
 
         do i = 1, n
             call int2string(i, itext)

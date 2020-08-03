@@ -32,7 +32,6 @@ program dang
     integer(i4b)       :: i, j, k, l, iter, npix, nside, nmaps, ordering, ln
     integer(i4b)       :: beta_samp_nside, nlheader, niter, nfgs, iterations
     integer(i4b)       :: output_iter, like_iter, m
-    integer(i4b)       :: ierr, rank, numprocs
     real(dp)           :: nullval
     real(dp)           :: missval = -1.6375d30
     logical(lgt)       :: anynull, double_precision, test, exist, output_fg
@@ -45,8 +44,8 @@ program dang
     real(dp), allocatable, dimension(:,:,:)      :: synch_map, dust_map, cmb_map, nodust
     real(dp), allocatable, dimension(:,:)        :: template_01, template_02, map, rms
     real(dp), allocatable, dimension(:,:)        :: beta_s, T_d, beta_d, chi_map, mask, HI
-    real(dp), allocatable, dimension(:)          :: dust_amps
-    real(dp)                                     :: chisq, temp_norm_01, temp_norm_02
+    real(dp), allocatable, dimension(:)          :: dust_amps, temp_norm_01, temp_norm_02
+    real(dp)                                     :: chisq
     character(len=80), dimension(180)            :: header
     character(len=80), dimension(3)              :: tqu
     character(len=80), allocatable, dimension(:) :: joint_comps
@@ -60,21 +59,12 @@ program dang
     ! Object Orient
     type(params)       :: par
 
-!    call wall_time(t0)                                                                                                                                             
-    call mpi_init(ierr)                                                                                                                                           
-    call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)                                                                                                                 
-    call mpi_comm_size(MPI_COMM_WORLD, numprocs, ierr)                                                                                                             
-    if (rank == 0) then                                                                                                                                            
-       write(*,'(a,i8)') ' The number of processors available = ', numprocs                                                                                        
-    end if                                                                                                                                                         
-    call mpi_finalize(ierr)                                                                                                                                        
-!    stop     
-
+    call init_mpi()
     call read_param_file(par)
 
     !----------------------------------------------------------------------------------------------------------
     ! General paramters
-    template_file_01  = 'data/npipe6v20_353_map_QUADCOR_ZODICOR_n0064_60arcmin_uK.fits'
+    template_file_01  = par%temp_file(1)
     template_file_02  = 'data/temp_synch_030_n0004.fits'
     mask_file         = 'data/mask_fullsky_n0004.fits'
     tqu(1)            = 'T'
@@ -103,7 +93,7 @@ program dang
     allocate(fg_amp(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
     allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps))
     allocate(cmb_map(0:npix-1,nmaps,nbands), dust_map(0:npix-1,nmaps,nbands), synch_map(0:npix-1,nmaps,nbands))
-    allocate(dust_amps(nbands))
+    allocate(dust_amps(nbands), temp_norm_01(3), temp_norm_02(3))
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
@@ -145,10 +135,13 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Normalize template to avoid large values in the matrix equation
-    temp_norm_01 = maxval(template_01)
-    template_01  = template_01/temp_norm_01
+    do k = 1, 3
+       temp_norm_01(k) = maxval(template_01(:,k))
+       template_01(:,k)  = template_01(:,k)/temp_norm_01(k)
+    end do
 !    temp_norm_02 = maxval(template_02)
 !    template_02  = template_02/temp_norm_02
+
     !----------------------------------------------------------------------------------------------------------
     ! Joint Sampler Info
 
@@ -163,7 +156,7 @@ program dang
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
 
-    do k = 2, nmaps
+    do k = 1, nmaps
         
         if (k == 1) then
             write(*,*) 'Sampling Temperature'
@@ -177,9 +170,8 @@ program dang
         end if 
 
         do iter = 1, niter
-            call sample_joint_amp(npix,k,trim(solver))  
+            call sample_joint_amp(npix,k,trim(solver))
             dust_amps = fg_amp(0,k,:,2)
-
             ! -------------------------------------------------------------------------------------------------------------------
             ! Extrapolating A_synch to bands
             if (ANY(joint_comps=='synch')) then
@@ -223,19 +215,22 @@ program dang
 
             call compute_chisq(fg_amp,k)
 
-            if (mod(iter, 1) == 0 .or. iter == 1) then
-                write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
-                 iter, " - chisq: " , chisq, " - A_s: ",&
-                 fg_amp(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                 sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps/temp_norm_01
-            end if
+            if (rank == master) then
+               if (mod(iter, 1) == 0 .or. iter == 1) then
+                  write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
+                       iter, " - chisq: " , chisq, " - A_s: ",&
+                       fg_amp(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
+                       sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps/temp_norm_01(k)
+               end if
 
-            call write_data
-            if (mod(iter,output_iter) .EQ. 0) then
-                call write_maps(k)
+               call write_data
+               if (mod(iter,output_iter) .EQ. 0) then
+                  call write_maps(k)
+               end if
             end if
         end do    
     end do
+    call mpi_finalize(ierr)
   
   contains
 
@@ -397,10 +392,11 @@ program dang
         else if (trim(self%fg_label(comp)) == 'dust') then 
             indx     = beta_d
         end if
-
-
-        if (mod(iter,output_iter) .EQ. 0) then
-           write(*,*) 'Sampling ' // trim(self%fg_label(comp)) // ' beta at nside', beta_samp_nside
+        
+        if (rank == master) then
+           if (mod(iter,output_iter) .EQ. 0) then
+              write(*,*) 'Sampling ' // trim(self%fg_label(comp)) // ' beta at nside', beta_samp_nside
+           end if
         end if
 
         !------------------------------------------------------------------------
@@ -418,37 +414,36 @@ program dang
         allocate(indx_sample_low(0:npix2-1))
 
         if (nside1 /= nside2) then 
-            if (ordering == 1) then
-                call udgrade_ring(indx,nside1,indx_low,nside2)
-            else
-                call udgrade_nest(indx,nside1,indx_low,nside2)
-            end if
-            do j = 1, nbands
-                if (ordering == 1) then
-                    call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                    call convert_nest2ring(nside1,map2fit(:,:,j))
-                    call udgrade_ring(fg_amp(:,:,j,1),nside1,fg_amp_low(:,:,j),nside2)
-                    call convert_nest2ring(nside1,fg_amp(:,:,j,1))
-                    call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
-                    call convert_nest2ring(nside1,rmss(:,:,j))
-                else
-                    call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                    call udgrade_nest(fg_amp(:,:,j,1),nside1,fg_amp_low(:,:,j),nside2)
-                    call udgrade_nest(rmss(:,:,j),nside1,rms_low(:,:,j),nside2)
-                end if
-            end do
-            rms_low = sqrt(rms_low / (npix/npix2))
+           if (ordering == 1) then
+              call udgrade_ring(indx,nside1,indx_low,nside2)
+           else
+              call udgrade_nest(indx,nside1,indx_low,nside2)
+           end if
+           do j = 1, nbands
+              if (ordering == 1) then
+                 call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
+                 call convert_nest2ring(nside1,map2fit(:,:,j))
+                 call udgrade_ring(fg_amp(:,:,j,1),nside1,fg_amp_low(:,:,j),nside2)
+                 call convert_nest2ring(nside1,fg_amp(:,:,j,1))
+                 call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
+                 call convert_nest2ring(nside1,rmss(:,:,j))
+              else
+                 call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
+                 call udgrade_nest(fg_amp(:,:,j,1),nside1,fg_amp_low(:,:,j),nside2)
+                 call udgrade_nest(rmss(:,:,j),nside1,rms_low(:,:,j),nside2)
+              end if
+           end do
+           rms_low = sqrt(rms_low / (npix/npix2))
         else
-            do j = 1, nbands
-                data_low(:,:,j)   = data(:,:,j)
-                fg_amp_low(:,:,j) = fg_amp(:,:,j,1)
-                rms_low(:,:,j)    = rmss(:,:,j)
-            end do
-            indx_low = indx
+           do j = 1, nbands
+              data_low(:,:,j)   = data(:,:,j)
+              fg_amp_low(:,:,j) = fg_amp(:,:,j,1)
+              rms_low(:,:,j)    = rmss(:,:,j)
+           end do
+           indx_low = indx
         end if
 
         x(1) = 1.d0           
-
         !------------------------------------------------------------------------
         ! Sampling portion. Determine the log-likelihood, and accept based off of
         ! the improvement in the fit.
@@ -671,11 +666,18 @@ program dang
         implicit none
         integer(i4b),              intent(in)     :: npix, map_n
         character(len=*),          intent(in)     :: method
-        real(dp), allocatable, dimension(:,:,:)   :: T_nu, T_nu_T, A_1, A_2, covar
-        real(dp), allocatable, dimension(:,:)     :: A, norm, dats, Q
-        real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u, A_inv, c_1, c_2
+        real(dp), allocatable, dimension(:,:)     :: A, val
+        integer(i4b), allocatable, dimension(:,:) :: col_ptr, row_ind
+        real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u
         real(dp), allocatable, dimension(:)       :: b, c, d, samp, rand
-        integer(i4b)                              :: x, y, z, nfit1, nfit2, w
+        integer(i4b)                              :: x, y, z, nfit1, nfit2, w, l, m, n
+        integer(i4b)                              :: vi, ci, ri, co, nnz
+
+        real(dp)                                  :: q
+
+        if (rank == master) then
+           t1 = mpi_wtime()
+        end if
 
         ! Load which components to jointly fit for arary allocation
         ! vv These will not change based off of components
@@ -711,15 +713,35 @@ program dang
             end if
         end do
 
-        write(*,*) 'Allocate'
-        allocate(T_nu(x,y,z),A(y,y))
+!        if (rank == master) then
+!           write(*,*) 'Allocate'
+!        end if
+
+        !------------------------------------------------------------------------------|
+        ! Since A is sparse (mostly 0s), we'll try to save time and memory by          |
+        ! putting all of the values, with 'pointers' into a smaller array              |
+        !                                                                              |
+        ! We will use the CSC (Compressed Sparse Column) scheme to save time here.     |
+        ! CSC is used instead of CSR due to the nature of the sparse matrix calc.      |
+        !                                                                              |
+        ! There are three arrays that will be used here, namely col_ptr, row_ind, and  |
+        ! val. col_ptr is size y+1 (int), row_ind is nnz (num non-zero entries) (int), |
+        ! and val is also size nnz (dp).                                               |
+        !                                                                              |
+        ! so for each band, we have nnz = 2*npix                                       |
+        !------------------------------------------------------------------------------|
+
+        nnz = x + x 
+
+        allocate(A(y,y))
         allocate(b(y),c(y),d(y))
         allocate(mat_l(y,y),mat_u(y,y))
         allocate(samp(y),rand(y))
 
-        write(*,*) 'Initialize'
+        allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
+
+!        write(*,*) 'Initialize'
         ! Initialize arrays
-        T_nu(:,:,:)       = 0.d0
         A(:,:)            = 0.d0
         b(:)              = 0.d0
         c(:)              = 0.d0
@@ -729,51 +751,44 @@ program dang
         mat_l(:,:)        = 0.d0
         mat_u(:,:)        = 0.d0
 
-        write(*,*) 'Fill Template Matrix'
+!        write(*,*) 'Fill Template Matrix'
         ! Fill template matrix
-        w = 0 
-        do m = 1, size(joint_comps)
-            if (joint_comps(m) == 'synch') then
-                do i = 1, x
-                    do j = 1, z
-                        T_nu(i,w+i,j) = compute_spectrum(par,1,par%dat_nu(j),i-1,map_n)/rmss(i-1,map_n,j)
-                    end do
-                end do
-                w = w + x
-            else if (joint_comps(m) == 'dust') then
-                do i = 1, x
-                    do j = 1, z
-                        T_nu(i,w+i,j) = compute_spectrum(par,2,par%dat_nu(j),i-1,map_n)/rmss(i-1,map_n,j)
-                    end do
-                end do
-                w = w + x
-            end if
-        end do
-
-        do m = 1, size(joint_comps)
-            if (joint_comps(m) == 'template01') then
-                do i = 1, x
-                    l = 1
-                    do j = 1, z
-                        if (j_corr01(j) .eqv. .true.) then
-                            T_nu(i,w+l,j) = template_01(i-1,map_n)/rmss(i-1,map_n,j)
-                            l = l + 1
-                        end if
-                    end do
-                end do
-                w = w + l  
-            else if (joint_comps(m) == 'template02') then
-                do i = 1, x
-                    l = 1
-                    do j = 1, z
-                        if (j_corr02(j) .eqv. .true.) then
-                            T_nu(i,w+l,j) = template_02(i-1,map_n)/rmss(i-1,map_n,j)
-                            l = l + 1
-                        end if
-                    end do
-                end do
-                w = w + l
-            end if
+ 
+        l  = 1
+        do j = 1, z
+           vi = 1
+           ci = 1
+           ri = 1
+           co = 1
+           col_ptr(ci,:) = 1
+           ci = ci + 1
+           do m = 1,x 
+!              if (m <= x) then
+              val(vi,j)     = compute_spectrum(par,1,par%dat_nu(j),m-1,map_n)/rmss(m-1,map_n,j)
+              row_ind(ri,j) = m
+              co            = co + 1
+              vi            = vi + 1
+              ri            = ri + 1
+              col_ptr(ci,j) = co
+              ci            = ci + 1
+           end do
+           if (j_corr01(j) .eqv. .true.) then
+              do i = 1, x
+                 val(vi,j)     = template_01(i-1,map_n)/rmss(i-1,map_n,j)
+                 co            = co + 1
+                 row_ind(ri,j) = i
+                 vi            = vi + 1
+                 ri            = ri + 1
+              end do
+              col_ptr(m:ci+l-1,j)  = col_ptr(m,j)
+              col_ptr(ci+l-1,j)    = co
+              col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
+              l = l + 1
+           else
+              col_ptr(m:ci+l-1,j)  = col_ptr(m,j)
+              col_ptr(ci+l-1,j)    = co
+              col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
+           end if
         end do
 
         write(*,*) 'Compute RHS of matrix eqn.'
@@ -826,33 +841,54 @@ program dang
         end do
 
         write(*,*) 'Compute LHS of matrix eqn.'
+
         !LHS
-        do j=1, z
-!           A(:,:)        = A(:,:) + matmul(matmul(transpose(T_nu(:,:,j)),inv(covar(:,:,j))),T_nu(:,:,j))
-           A(:,:)        = A(:,:) + matmul(transpose(T_nu(:,:,j)),T_nu(:,:,j))
+
+        t1 = mpi_wtime()
+
+        do j = 1, z
+           write(*,*) j
+           A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))!compute_sparse_ATA(sparse(:,:,j),'ata',2*x,y)
         end do
+        t2 = mpi_wtime()
+        write(*,*) 'sparse matrix multiply: ', t2-t1
+
+        !if (rank == master) then
+        !   write(*,*) 'My MPI matmul:'
+        !   t1 = mpi_wtime()
+        !end if
+        !do j=1, z
+        !   write(*,*) j
+        !   A(:,:)  = A(:,:) + mm_mpi(transpose(T_nu(:,:,j)),T_nu(:,:,j))
+        !   write(*,*) 'mm_mpi completed for band ', j, rank
+        !end do
+        !if (rank == master) then
+        !   t2 = mpi_wtime()
+        !   write(*,*) t2-t1, rank
+        !end if
+        !stop
 
         ! Computation
         if (trim(method) == 'cholesky') then
-            if (mod(iter,output_iter) .EQ. 0) then
-                write(*,*) 'Joint sampling using Cholesky Decomp'
-            end if
-            call cholesky_decomp(A,mat_l,y)
-            mat_u  = transpose(mat_l)
-            call forward_sub(mat_l,d,c)
-            call backward_sub(mat_u,b,d)
+           if (rank == master) then
+           write(*,*) 'Joint sampling using Cholesky Decomp'
+           end if
+           call cholesky_decomp(A,mat_l,y)
+           mat_u  = transpose(mat_l)
+           call forward_sub(mat_l,d,c)
+           call backward_sub(mat_u,b,d)
         else if (trim(method) == 'cg') then
-            if (mod(iter,output_iter) .EQ. 0) then
-                write(*,*) 'Joint sampling using CG'
-            end if
-            call compute_cg(A,b,c,y)
+           if (rank == master) then
+           write(*,*) 'Joint sampling using CG'
+           end if
+           call compute_cg(A,b,c,y)
         else if (trim(method) == 'lu') then
-            if (mod(iter,output_iter) .EQ. 0) then
-                write(*,*) 'Joint sampling using LU Decomp'
-            end if
-            call LUDecomp(A,mat_l,mat_u,y)
-            call forward_sub(mat_l,d,c)
-            call backward_sub(mat_u,b,d)
+           if (rank == master) then
+           write(*,*) 'Joint sampling using LU Decomp'
+           end if
+           call LUDecomp(A,mat_l,mat_u,y)
+           call forward_sub(mat_l,d,c)
+           call backward_sub(mat_u,b,d)
         end if
 
         ! Draw a sample by cholesky decompsing A^-1, and multiplying 
@@ -865,63 +901,60 @@ program dang
         b     = b  + samp
 
         ! Output amplitudes to the appropriate variables
+        w = 0
         do m = 1, size(joint_comps)
-            if (joint_comps(m) == 'synch') then
-                do i = 1, x
-                    fg_amp(i-1,map_n,par%fg_ref_loc(1),1) = b(i)
-                end do
-                b = b(x+1:)
-            else if (joint_comps(m) == 'dust') then
-                do i = 1, x
-                    fg_amp(i-1,map_n,par%fg_ref_loc(2),3) = b(i)
-                end do
-                b = b(x+1:)
-            end if
+           if (joint_comps(m) == 'synch') then
+              do i = 1, x
+                 fg_amp(i-1,map_n,par%fg_ref_loc(1),1) = b(w+i)
+              end do
+              w = w + x
+           else if (joint_comps(m) == 'dust') then
+              do i = 1, x
+                 fg_amp(i-1,map_n,par%fg_ref_loc(2),3) = b(w+i)
+              end do
+              w = w + x
+           end if
         end do
         do m = 1, size(joint_comps)
-            if (joint_comps(m) == 'template01') then
-                l = 1
-                do while (l .lt. (nfit1))
-                    do j= 1, z
-                        if (j_corr01(j) .eqv. .true.) then
-                            fg_amp(:,map_n,j,2) = b(l)
-                            l = l + 1
-                        else
-                           fg_amp(:,map_n,j,2) = 0.d0
-                        end if
-                    end do
-                end do
-                b = b(l+nfit1:)
-            else if (joint_comps(m) == 'template02') then
-                l = 1
-                do while (l .lt. (nfit2))
-                    do j= 1, z
-                        if (j_corr02(j) .eqv. .true.) then
-                            fg_amp(:,map_n,j,2) = b(l)
-                            l = l + 1
-                        end if
-                    end do
-                end do
-                b = b(l+nfit2:)
-            end if
+           if (joint_comps(m) == 'template01') then
+              l = 1
+              do while (l .lt. (nfit1))
+                 do j= 1, z
+                    if (j_corr01(j) .eqv. .true.) then
+                       fg_amp(:,map_n,j,2) = b(w+l)
+                       l = l + 1
+                    else
+                       fg_amp(:,map_n,j,2) = 0.d0
+                    end if
+                 end do
+              end do
+           else if (joint_comps(m) == 'template02') then
+              l = 1
+              do while (l .lt. (nfit2))
+                 do j= 1, z
+                    if (j_corr02(j) .eqv. .true.) then
+                       fg_amp(:,map_n,j,2) = b(w+l)
+                       l = l + 1
+                    end if
+                 end do
+              end do
+           end if
         end do
 
+        if (rank == master) then
+           t2 = mpi_wtime()
+           write(*,*) 'Joint Sampler completed in ', t2-t1, 's.'
+        end if
+
         ! Sure to deallocate all arrays here to free up memory
-        deallocate(A_1)
-        deallocate(A_2)
         deallocate(A)
-        deallocate(A_inv)
         deallocate(b)
         deallocate(c)
-        deallocate(covar)
         deallocate(d)
-        deallocate(norm)
         deallocate(mat_l)
         deallocate(mat_u)
         deallocate(rand)
         deallocate(samp)
-        deallocate(T_nu)
-        deallocate(T_nu_T)
 
     end subroutine sample_joint_amp
 

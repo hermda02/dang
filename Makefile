@@ -18,11 +18,12 @@ dang: $(OBJS)
 	$(MFC) $(OBJS) $(HEALPIX) $(FITSDIR) $(LAPACK) -qopenmp -o $(OUTPUT)
 
 # Dependencies
-linalg_mod.o           : init_mod.o utility_mod.o
-data_mod.o             : init_mod.o utility_mod.o
-#foreground_mod.o       : init_mod.o utility_mod.o
-param_mod.o            : init_mod.o hashtbl.o utility_mod.o
-dang.o : init_mod.o utility_mod.o param_mod.o linalg_mod.o data_mod.o #foreground_mod.o
+init_mod.o             : utility_mod.o
+linalg_mod.o           : utility_mod.o init_mod.o
+data_mod.o             : utility_mod.o init_mod.o
+#foreground_mod.o       : utility_mod.o init_mod.o
+param_mod.o            : utility_mod.o init_mod.o hashtbl.o
+dang.o : utility_mod.o init_mod.o param_mod.o linalg_mod.o data_mod.o #foreground_mod.o
 
 # Compilation stage
 %.o : %.f90

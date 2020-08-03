@@ -3,6 +3,8 @@ module utility_mod
     implicit none
     include 'mpif.h'
 
+    integer(i4b) :: ierr, rank, numprocs
+
 contains 
 
   ! Small utility for converting an integer to a string                                              
