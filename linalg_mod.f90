@@ -3,6 +3,8 @@ module linalg_mod
     use pix_tools
     use fitstools
     use udgrade_nr
+    use init_mod
+    use utility_mod
     implicit none
 
 contains
@@ -93,7 +95,7 @@ contains
                 sum = 0
                 do j = 1, i
                     sum = sum + (L(i,j) * U(j,m))
-                    U(i,m) = A(i,m) - sum
+                U(i,m) = A(i,m) - sum
                 end do
             end do
             do m = i, n
@@ -201,4 +203,48 @@ contains
         deallocate(d)
 
     end subroutine compute_cg
+
+    function compute_ATA_CSC(v,row_i,col_p) result(B)
+      implicit none
+      real(dp), dimension(:),     intent(in) :: v
+      integer(i4b), dimension(:), intent(in) :: row_i, col_p
+      integer(i4b)                           :: n, col, row, i, ii, k, ik
+      real(dp), allocatable, dimension(:,:)  :: B
+      real(dp)                               :: x, y
+
+      n = size(col_p)-1
+
+      allocate(B(n,n))
+
+      b = 0.d0
+      y = 0.d0
+
+      do i = 1, n+1
+         do k = col_p(i), col_p(i+1)-1
+            col = i
+            do ii = 1, n+1
+               x = 0
+               row = ii
+               do ik = col_p(ii), col_p(ii+1)-1
+                  if (row_i(k) == row_i(ik)) then
+                     b(row,col) = b(row,col) + v(k)*v(ik)
+!                     if (row == 193 .and. col == 193) then
+!                        y = y + v(k)*v(ik)
+!                        write(*,*) x
+!                     end if
+                  end if
+               end do
+!               b(row,col) = x
+            end do
+         end do
+      end do
+      do i = 1, n
+         do k = 1, n
+            if (b(i,k) /= 0.d0) b(k,i) = b(i,k)
+         end do
+      end do
+
+    end function compute_ATA_CSC
+
+
 end module linalg_mod
