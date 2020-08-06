@@ -146,17 +146,16 @@ program dang
     ! Joint Sampler Info
 
     allocate(joint_comps(2))
-
+    solver = par%solver
     joint_comps(1) = 'synch'
     joint_comps(2) = 'template01'
 
-    solver = 'lu' ! Method possibilities are 'cg', 'lu', and 'cholesky'
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
 
-    do k = 1, nmaps
+    do k = 2, nmaps
         
         if (k == 1) then
             write(*,*) 'Sampling Temperature'
@@ -671,7 +670,7 @@ program dang
         real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u
         real(dp), allocatable, dimension(:)       :: b, c, d, samp, rand
         integer(i4b)                              :: x, y, z, nfit1, nfit2, w, l, m, n
-        integer(i4b)                              :: vi, ci, ri, co, nnz
+        integer(i4b)                              :: vi, ci, ri, co, nnz, nnz_a
 
         real(dp)                                  :: q
 
@@ -844,48 +843,28 @@ program dang
 
         !LHS
 
-        t1 = mpi_wtime()
+        t2 = mpi_wtime()
 
         do j = 1, z
            write(*,*) j
-           A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))!compute_sparse_ATA(sparse(:,:,j),'ata',2*x,y)
+           A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
         end do
-        t2 = mpi_wtime()
-        write(*,*) 'sparse matrix multiply: ', t2-t1
-
-        !if (rank == master) then
-        !   write(*,*) 'My MPI matmul:'
-        !   t1 = mpi_wtime()
-        !end if
-        !do j=1, z
-        !   write(*,*) j
-        !   A(:,:)  = A(:,:) + mm_mpi(transpose(T_nu(:,:,j)),T_nu(:,:,j))
-        !   write(*,*) 'mm_mpi completed for band ', j, rank
-        !end do
-        !if (rank == master) then
-        !   t2 = mpi_wtime()
-        !   write(*,*) t2-t1, rank
-        !end if
-        !stop
+        nnz_a = count(A/=0)
+        t3 = mpi_wtime()
+        write(*,*) 'sparse matrix multiply: ', t3-t2
 
         ! Computation
         if (trim(method) == 'cholesky') then
-           if (rank == master) then
-           write(*,*) 'Joint sampling using Cholesky Decomp'
-           end if
+           if (rank == master) write(*,*) 'Joint sampling using Cholesky Decomp'
            call cholesky_decomp(A,mat_l,y)
            mat_u  = transpose(mat_l)
            call forward_sub(mat_l,d,c)
            call backward_sub(mat_u,b,d)
         else if (trim(method) == 'cg') then
-           if (rank == master) then
-           write(*,*) 'Joint sampling using CG'
-           end if
-           call compute_cg(A,b,c,y)
+           if (rank == master) write(*,*) 'Joint sampling using CG'
+           call compute_cg(A,b,c,y,nnz_a)
         else if (trim(method) == 'lu') then
-           if (rank == master) then
-           write(*,*) 'Joint sampling using LU Decomp'
-           end if
+           if (rank == master) write(*,*) 'Joint sampling using LU Decomp'
            call LUDecomp(A,mat_l,mat_u,y)
            call forward_sub(mat_l,d,c)
            call backward_sub(mat_u,b,d)
@@ -942,8 +921,8 @@ program dang
         end do
 
         if (rank == master) then
-           t2 = mpi_wtime()
-           write(*,*) 'Joint Sampler completed in ', t2-t1, 's.'
+           t3 = mpi_wtime()
+           write(*,*) 'Joint Sampler completed in ', t3-t1, 's.'
         end if
 
         ! Sure to deallocate all arrays here to free up memory
