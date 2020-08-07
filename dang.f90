@@ -155,18 +155,20 @@ program dang
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
 
-    do k = 2, nmaps
+    do k = 1, nmaps
         
-        if (k == 1) then
-            write(*,*) 'Sampling Temperature'
-            write(*,*) '-----------------------'
-        else if (k == 2) then
-            write(*,*) 'Stokes Q'
-            write(*,*) '-----------------------'
-        else if (k == 3) then
-            write(*,*) 'Stokes U'
-            write(*,*) '-----------------------'
-        end if 
+        if (rank == master) then
+            if (k == 1) then
+                write(*,*) 'Sampling Temperature'
+                write(*,*) '-----------------------'
+            else if (k == 2) then
+                write(*,*) 'Stokes Q'
+                write(*,*) '-----------------------'
+            else if (k == 3) then
+                write(*,*) 'Stokes U'
+                write(*,*) '-----------------------'
+            end if
+        end if
 
         do iter = 1, niter
             call sample_joint_amp(npix,k,trim(solver))
@@ -790,7 +792,7 @@ program dang
            end if
         end do
 
-        write(*,*) 'Compute RHS of matrix eqn.'
+        if (rank == master) write(*,*) 'Compute RHS of matrix eqn.'
         ! Computing the LHS and RHS of the linear equation
         ! RHS
         w = 0 
@@ -839,19 +841,19 @@ program dang
             end if
         end do
 
-        write(*,*) 'Compute LHS of matrix eqn.'
+        if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
 
         !LHS
 
         t2 = mpi_wtime()
 
         do j = 1, z
-           write(*,*) j
+            if (rank == master) write(*,*) j
            A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
         end do
         nnz_a = count(A/=0)
         t3 = mpi_wtime()
-        write(*,*) 'sparse matrix multiply: ', t3-t2
+        if (rank == master) write(*,*) 'sparse matrix multiply: ', t3-t2
 
         ! Computation
         if (trim(method) == 'cholesky') then

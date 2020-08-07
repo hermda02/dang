@@ -13,7 +13,7 @@ module init_mod
     integer(i4b)       :: master      = 0 
     integer(i4b)       :: from_master = 1
     integer(i4b)       :: from_worker = 2
-
+    integer(i4b) status(mpi_status_size)
 
 contains 
 

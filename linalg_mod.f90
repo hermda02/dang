@@ -189,6 +189,7 @@ contains
 
         if (present(nnz_a)) then
            r = b - Ax_CSR(rp,ci,v,x)
+!           stop
         else
            r = b - matmul(A,x)
         end if
@@ -226,13 +227,85 @@ contains
 
     end subroutine compute_cg
 
+    subroutine compute_cg_precond(A,x,b,n,nnz_a)
+        
+      ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
+      ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
+
+      implicit none
+
+      real(dp), dimension(:,:), intent(in)  :: A
+      real(dp), dimension(:), intent(in)    :: b
+      real(dp), dimension(:), intent(out)   :: x
+      integer(i4b), intent(in)              :: n
+      integer(i4b), optional, intent(in)    :: nnz_a
+      real(dp), allocatable, dimension(:)   :: r, q, d
+      real(dp)                              :: epsil, alpha, beta, delta_0
+      real(dp)                              :: delta_old, delta_new, t3, t4
+      integer(i4b)                          :: i_max, i, j
+
+      real(dp),allocatable,dimension(:)     :: v
+      integer(i4b),allocatable,dimension(:) :: rp, ci
+
+
+      allocate(r(n),q(n),d(n))
+
+      if(present(nnz_a)) then
+         allocate(v(nnz_a),rp(n+1),ci(nnz_a))
+         call A_to_CSR(A,rp,ci,v)
+      end if
+
+      x(:) = 0.0d0
+      i_max = 10
+
+      i = 0
+      epsil = 1.0d-16
+
+      if (present(nnz_a)) then
+         r = b - Ax_CSR(rp,ci,v,x)
+      else
+         r = b - matmul(A,x)
+      end if
+      d = r
+      delta_new = sum(r*r)
+      delta_0   = delta_new
+      t3 = mpi_wtime()
+      do while( (i .lt. i_max) .and. (delta_new .gt. (epsil**2)*delta_0))
+          if (present(nnz_a)) then
+             q = Ax_CSR(rp,ci,v,d)
+          else
+             q = matmul(A,d)
+          end if
+          alpha = delta_new/(sum(d*q))
+          x = x + alpha*d
+          if (mod(i,50) == 0) then
+             if (present(nnz_a)) then
+                r = b - Ax_CSR(rp,ci,v,x)
+             else
+                r = b - matmul(A,x)
+             end if
+          else
+              r = r - alpha*q
+          end if
+          delta_old = delta_new
+          delta_new = sum(r*r)
+          beta = delta_new/delta_old
+          d = r + beta*d
+          i = i + 1
+      end do
+
+      deallocate(r)
+      deallocate(q)
+      deallocate(d)
+
+  end subroutine compute_cg_precond
+
     function mm_mpi(A,B)
       implicit none
 
       integer(i4b)   :: nworkers, source, dest, mtype
       integer(i4b)   :: cols, avecol, extra, offset
       integer(i4b)   :: m, n, p, ii, ij, ik
-      integer status(mpi_status_size)
 
       real(dp), dimension(:,:), intent(in)  :: A
       real(dp), dimension(:,:), intent(in)  :: B
@@ -281,8 +354,7 @@ contains
             source = ii
             call mpi_recv(offset, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
             call mpi_recv(cols, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
-            call mpi_recv(mm_mpi(1,offset), cols*m, mpi_double_precision, source, mtype, &
-                      mpi_comm_world, ierr)
+            call mpi_recv(mm_mpi(1,offset), cols*m, mpi_double_precision, source, mtype, mpi_comm_world, status, ierr)
          end do
       end if
 
@@ -348,10 +420,11 @@ contains
       implicit none
       real(dp), dimension(:),     intent(in) :: v
       integer(i4b), dimension(:), intent(in) :: row_i, col_p
-      integer(i4b)                           :: n, col, row, i, ii, k, ik
+      integer(i4b)                           :: n, col, row, i, ii, k, ik, nnz
       real(dp), allocatable, dimension(:,:)  :: B
 
-      n = size(col_p)-1
+      n   = size(col_p)-1
+      nnz = size(row_i)
 
       allocate(B(n,n))
 
@@ -382,10 +455,11 @@ contains
       implicit none
       real(dp), dimension(:),     intent(in) :: v
       integer(i4b), dimension(:), intent(in) :: col_i, row_p
-      integer(i4b)                           :: n, col, row, i, ii, k, ik
+      integer(i4b)                           :: n, col, row, i, ii, k, ik, nnz
       real(dp), allocatable, dimension(:,:)  :: B
 
-      n = size(row_p)-1
+      n   = size(row_p)-1
+      nnz = size(col_i)
 
       allocate(B(n,n))
 
@@ -412,11 +486,11 @@ contains
 
     end function compute_ATA_CSR
 
-    subroutine A_to_CSC(A,col_ptr,row_ind,v)
+    subroutine A_to_CSC(A,col_p,row_i,v)
       implicit none
       real(dp), dimension(:,:),   intent(in)  :: A
       real(dp), dimension(:),     intent(out) :: v
-      integer(i4b), dimension(:), intent(out) :: col_ptr, row_ind
+      integer(i4b), dimension(:), intent(out) :: col_p, row_i
       integer(i4b)               :: vi, ci, ri, co, n, m, i ,j
 
       m = size(A(1,:))
@@ -426,30 +500,30 @@ contains
       ci  = 1
       ri  = 1
       co  = 1
-      col_ptr(ci) = 1
+      col_p(ci) = 1
       ci  = ci + 1
 
       do i = 1, n
          do j = 1, m
             if (A(j,i) /= 0.d0) then
                v(vi) = A(j,i)
-               row_ind(ri) = j
+               row_i(ri) = j
                co = co + 1
                vi = vi + 1
                ri = ri + 1
             end if
          end do
-         col_ptr(ci) = co
+         col_p(ci) = co
          ci = ci + 1
       end do
 
     end subroutine A_to_CSC
 
-    subroutine A_to_CSR(A,row_ptr,col_ind,v)
+    subroutine A_to_CSR(A,row_p,col_i,v)
       implicit none
       real(dp), dimension(:,:),   intent(in)  :: A
       real(dp), dimension(:),     intent(out) :: v
-      integer(i4b), dimension(:), intent(out) :: row_ptr, col_ind
+      integer(i4b), dimension(:), intent(out) :: row_p, col_i
       integer(i4b)                            :: vi, ci, ri, ro, n, m, i, j
 
       m = size(A(1,:))
@@ -459,63 +533,136 @@ contains
       ci  = 1
       ri  = 1
       ro  = 1
-      row_ptr(ri) = 1
+      row_p(ri) = 1
       ri  = ri + 1
 
       do i = 1, n
          do j = 1, m
             if (A(i,j) /= 0.d0) then
                v(vi)       = A(i,j)
-               col_ind(ci) = j
+               col_i(ci) = j
                ro  = ro + 1
                vi  = vi + 1
                ci  = ci + 1
             end if
          end do
-         row_ptr(ri) = ro
+         row_p(ri) = ro
          ri = ri + 1
       end do
   
     end subroutine A_to_CSR
 
-    function Ax_csr(rptr,cind,val,x) result(res)
+    function Ax_csr(row_p,col_i,val,x) result(res)
       implicit none
       real(dp), dimension(:), intent(in)     :: val, x
-      integer(i4b), dimension(:), intent(in) :: rptr, cind
+      integer(i4b), dimension(:), intent(in) :: row_p, col_i
       real(dp), allocatable, dimension(:)    :: res
 
-      integer(i4b)                           :: i, k, n
+      integer(i4b)                           :: i, j, k, n, nnz, nval, mtype
+      integer(i4b)                           :: nrows, offset, extra, dest, source
 
-      n = size(rptr)-1
+      n   = size(row_p)-1
+      nnz = size(col_i)
+
 
       allocate(res(n))
-
       res = 0.d0
 
-      do i = 1, n+1
-         do k = rptr(i), rptr(i+1)-1
-            res(i) = res(i) + val(k)*x(cind(k))
+      if (numprocs > 1) then
+         nval   = nnz/(numprocs-1)
+         extra  = mod(nnz,numprocs-1)
+         offset = 1
+
+         if (rank == master) then
+            write(*,*) row_p(n+1)
+            write(*,*) 'n, nnz, nval ', n, nnz, nval
+            call mpi_bcast(val,nnz,mpi_double_precision,master,mpi_comm_world,ierr)
+            call mpi_bcast(x,n,mpi_double_precision,master,mpi_comm_world,ierr)
+            call mpi_bcast(row_p,n+1,mpi_integer,master,mpi_comm_world,ierr)
+            call mpi_bcast(col_i,nnz,mpi_integer,master,mpi_comm_world,ierr)
+            mtype  = FROM_MASTER
+            do dest = 1, numprocs-1
+               nrows = 1
+               do while ((row_p(offset+nrows) -row_p(offset)) <= nval .and. row_p(offset+nrows) <= nnz)
+                  nrows = nrows + 1
+               end do
+               write(*,*) 'dest, rowp(off), rowp(off+nrows) ',dest, row_p(offset), row_p(offset+nrows)
+               call mpi_send(nrows, 1, mpi_integer, dest, mtype, mpi_comm_world, ierr)
+               call mpi_send(offset, 1, mpi_integer, dest, mtype, mpi_comm_world, ierr)
+               offset = offset + nrows
+            end do
+
+            mtype = from_worker
+            do dest = 1, numprocs-1
+               source = dest
+               call mpi_recv(offset, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
+               call mpi_recv(nrows, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
+               call mpi_recv(res(offset:offset+nrows),nrows,mpi_double_precision, source, mtype, mpi_comm_world, status, ierr)
+            end do
+         end if
+
+         if (rank > master) then
+            mtype = from_master
+            write(*,*) 'receiving', rank
+            call mpi_recv(nrows, 1, mpi_integer, master, mtype, mpi_comm_world, status, ierr)
+            call mpi_recv(offset, 1, mpi_integer, master, mtype, mpi_comm_world, status, ierr)
+            write(*,*) rank, nrows, offset, nrows+offset
+
+            do i = offset, offset+nrows
+               res(i) = 0.d0
+               do k = row_p(i), row_p(i+1)-1
+                  res(i) = res(i) + val(k)*x(col_i(k))
+               end do
+               if (i < 20) write(*,*) 'par: i, res(i) ', i, res(i)
+            end do
+
+            mtype = from_worker
+            call mpi_send(offset, 1, mpi_integer, master, mtype, mpi_comm_world, ierr)
+            call mpi_send(nrows, 1, mpi_integer, master, mtype, mpi_comm_world, ierr)
+            call mpi_send(res,nrows,mpi_double_precision,master,mtype, mpi_comm_world,ierr)
+         end if
+
+      else
+         do i = 1, n+1
+            res(i) = 0.d0
+            do k = row_p(i), row_p(i+1)-1
+               res(i) = res(i) + val(k)*x(col_i(k))
+            end do
+         if (i < 20) write(*,*) 'non: i, res(i) ', i, res(i)
          end do
+      end if
+
+      ! do i = 1, 19
+      !    write(*,*) res(i)
+      ! end do
+
+      do i = 1, n+1
+         res(i) = 0.d0
+         do k = row_p(i), row_p(i+1)-1
+            res(i) = res(i) + val(k)*x(col_i(k))
+         end do
+         if (i < 20) write(*,*) 'free: i, res(i) ', i, res(i)
       end do
 
     end function Ax_csr
 
-    function Ax_csc(cptr,rind,val,x) result(res)
+    function Ax_csc(col_p,row_i,val,x) result(res)
+      ! Does not work currently...I don't think.
       implicit none
       real(dp), dimension(:), intent(in)     :: val, x
-      integer(i4b), dimension(:), intent(in) :: cptr, rind
+      integer(i4b), dimension(:), intent(in) :: col_p, row_i
       real(dp), allocatable, dimension(:)    :: res
 
       integer(i4b)                           :: i, k, n
 
-      n = size(cptr)-1
+      n = size(col_p)-1
 
       allocate(res(n))
 
       res = 0.d0
 
       do i = 1, n+1
-         do k = cptr(i), cptr(i+1)-1
+         do k = col_p(i), col_p(i+1)-1
             res(i) = res(i) + val(k)*x(i)
          end do
       end do
