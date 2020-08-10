@@ -3,7 +3,6 @@ program dang
     use pix_tools
     use fitstools
     use udgrade_nr
-    use init_mod
     use utility_mod
     use param_mod
     use linalg_mod
@@ -53,20 +52,22 @@ program dang
     character(len=5)                             :: iter_str
     logical(lgt), allocatable, dimension(:)      :: j_corr01, j_corr02
 
-    real(dp), allocatable, dimension(:,:)        :: mat_test, mat_l, mat_u
+    real(dp), allocatable, dimension(:,:)        :: mat_l, mat_u
+    real(dp), allocatable, dimension(:,:)        :: mat_test
     real(dp), allocatable, dimension(:)          :: x, b, d
 
     ! Object Orient
     type(params)       :: par
 
     call init_mpi()
+
     call read_param_file(par)
 
     !----------------------------------------------------------------------------------------------------------
     ! General paramters
     template_file_01  = par%temp_file(1)
-    template_file_02  = 'data/temp_synch_030_n0004.fits'
-    mask_file         = 'data/mask_fullsky_n0004.fits'
+    ! template_file_02  = 'data/temp_synch_030_n0004.fits'
+    ! mask_file         = 'data/mask_fullsky_n0004.fits'
     tqu(1)            = 'T'
     tqu(2)            = 'Q'
     tqu(3)            = 'U'
@@ -77,14 +78,14 @@ program dang
     nlheader          = size(header)
     nmaps             = nmaps
 
-    niter             = par%ngibbs         ! # of MC-MC iterations
-    iterations        = par%nsample        ! # of iterations in the samplers
-    output_iter       = par%iter_out       ! Output maps every <- # of iterations
-    output_fg         = par%output_fg      ! Option for outputting foregrounds for all bands
-    direct            = par%outdir         ! Output directory name
-    beta_samp_nside   = par%fg_samp_nside(1,1)          ! \beta_synch nside sampling
+    niter             = par%ngibbs               ! # of MC-MC iterations
+    iterations        = par%nsample              ! # of iterations in the samplers
+    output_iter       = par%iter_out             ! Output maps every <- # of iterations
+    output_fg         = par%output_fg            ! Option for outputting foregrounds for all bands
+    direct            = par%outdir               ! Output directory name
+    beta_samp_nside   = par%fg_samp_nside(1,1)   ! \beta_synch nside sampling
     !----------------------------------------------------------------------------------------------------------
-
+    proc_per_band = numprocs/nbands
     !----------------------------------------------------------------------------------------------------------
     ! Array allocation
     allocate(template_01(0:npix-1,nmaps), template_02(0:npix-1,nmaps), j_corr01(nbands), j_corr02(nbands))
@@ -139,8 +140,6 @@ program dang
        temp_norm_01(k) = maxval(template_01(:,k))
        template_01(:,k)  = template_01(:,k)/temp_norm_01(k)
     end do
-!    temp_norm_02 = maxval(template_02)
-!    template_02  = template_02/temp_norm_02
 
     !----------------------------------------------------------------------------------------------------------
     ! Joint Sampler Info
@@ -350,7 +349,7 @@ program dang
                 sum2           = sum2 + (spec)**2.d0/cov(i,j)
                 norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,j)
             end do
-            norm(i)            = norm(i)!/nbands
+            norm(i)            = norm(i)
             amp                = sum1/sum2
             sample_spec_amp(i) = amp + rand_normal(0.d0,1.d0)/sqrt(norm(i))
         end do
@@ -670,9 +669,10 @@ program dang
         real(dp), allocatable, dimension(:,:)     :: A, val
         integer(i4b), allocatable, dimension(:,:) :: col_ptr, row_ind
         real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u
-        real(dp), allocatable, dimension(:)       :: b, c, d, samp, rand
+        real(dp), allocatable, dimension(:)       :: b, c, d, rand
         integer(i4b)                              :: x, y, z, nfit1, nfit2, w, l, m, n
         integer(i4b)                              :: vi, ci, ri, co, nnz, nnz_a
+        integer(i4b)                              :: info
 
         real(dp)                                  :: q
 
@@ -714,9 +714,7 @@ program dang
             end if
         end do
 
-!        if (rank == master) then
-!           write(*,*) 'Allocate'
-!        end if
+!        if (rank == master) write(*,*) 'Allocate'
 
         !------------------------------------------------------------------------------|
         ! Since A is sparse (mostly 0s), we'll try to save time and memory by          |
@@ -737,22 +735,19 @@ program dang
         allocate(A(y,y))
         allocate(b(y),c(y),d(y))
         allocate(mat_l(y,y),mat_u(y,y))
-        allocate(samp(y),rand(y))
-
+        allocate(rand(y))
         allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
 
-!        write(*,*) 'Initialize'
+        ! write(*,*) 'Initialize'
         ! Initialize arrays
         A(:,:)            = 0.d0
         b(:)              = 0.d0
         c(:)              = 0.d0
         d(:)              = 0.d0
         rand(:)           = 0.d0
-        samp(:)           = 0.d0
         mat_l(:,:)        = 0.d0
-        mat_u(:,:)        = 0.d0
 
-!        write(*,*) 'Fill Template Matrix'
+        ! write(*,*) 'Fill Template Matrix'
         ! Fill template matrix
  
         l  = 1
@@ -764,7 +759,6 @@ program dang
            col_ptr(ci,:) = 1
            ci = ci + 1
            do m = 1,x 
-!              if (m <= x) then
               val(vi,j)     = compute_spectrum(par,1,par%dat_nu(j),m-1,map_n)/rmss(m-1,map_n,j)
               row_ind(ri,j) = m
               co            = co + 1
@@ -847,16 +841,28 @@ program dang
 
         t2 = mpi_wtime()
 
-        do j = 1, z
-            if (rank == master) write(*,*) j
+        if (numprocs == z) then
+           j = 1 + rank
+           write(*,*) rank, j
            A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
-        end do
+        else
+           do j = 1, z
+              if (rank == master) write(*,*) j
+              A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
+           end do
+        end if
+
         nnz_a = count(A/=0)
+
         t3 = mpi_wtime()
+
         if (rank == master) write(*,*) 'sparse matrix multiply: ', t3-t2
 
         ! Computation
         if (trim(method) == 'cholesky') then
+           write(*,*) 'Currently deprecated -- replace with LAPACK'
+           stop
+           mat_u(:,:)        = 0.d0
            if (rank == master) write(*,*) 'Joint sampling using Cholesky Decomp'
            call cholesky_decomp(A,mat_l,y)
            mat_u  = transpose(mat_l)
@@ -866,20 +872,28 @@ program dang
            if (rank == master) write(*,*) 'Joint sampling using CG'
            call compute_cg(A,b,c,y,nnz_a)
         else if (trim(method) == 'lu') then
+           write(*,*) 'Currently deprecated -- replace with LAPACK'
+           stop
+           mat_u(:,:)        = 0.d0
            if (rank == master) write(*,*) 'Joint sampling using LU Decomp'
            call LUDecomp(A,mat_l,mat_u,y)
            call forward_sub(mat_l,d,c)
            call backward_sub(mat_u,b,d)
         end if
-
         ! Draw a sample by cholesky decompsing A^-1, and multiplying 
         ! the subsequent lower triangular by a vector of random numbers
-        call cholesky_decomp(inv(A),mat_l,y)
+
+        if (rank == master) write(*,*) 'Draw a sample for iteration ', iter
         do i = 1, y
-            rand(i) = rand_normal(0.d0,1.d0)
+           rand(i) = rand_normal(0.d0,1.d0)
         end do
-        samp  = matmul(mat_l,rand)
-        b     = b  + samp
+
+        if (rank == master) write(*,*) 'Complete LAPACK routines '
+        mat_l = inv(A)
+        call dpotrf('L',y,mat_l,y,info)
+        call dtrmv('L','n','n',y,mat_l,y,rand,1)
+
+        b = b + rand
 
         ! Output amplitudes to the appropriate variables
         w = 0
@@ -935,7 +949,6 @@ program dang
         deallocate(mat_l)
         deallocate(mat_u)
         deallocate(rand)
-        deallocate(samp)
 
     end subroutine sample_joint_amp
 

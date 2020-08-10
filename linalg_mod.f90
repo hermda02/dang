@@ -3,7 +3,6 @@ module linalg_mod
     use pix_tools
     use fitstools
     use udgrade_nr
-    use init_mod
     use utility_mod
     implicit none
 
@@ -53,10 +52,10 @@ contains
         low(:,:)   = 0.d0
 
         do i = 1, n
-        low(i,i) = sqrt(mat(i,i) - dot_product(low(i,1:i-1),low(i,1:i-1)) )
-        do j = i+1, n
-            low(j,i) = (mat(j,i) - dot_product(low(j,1:i-1),low(i,1:i-1)))/low(i,i)
-        end do
+           low(i,i) = sqrt(mat(i,i) - dot_product(low(i,1:i-1),low(i,1:i-1)) )
+           do j = i+1, n
+              low(j,i) = (mat(j,i) - dot_product(low(j,1:i-1),low(i,1:i-1)))/low(i,i)
+           end do
         end do
 
         ! This code would be used for the LDU decomp:
@@ -189,15 +188,14 @@ contains
 
         if (present(nnz_a)) then
            r = b - Ax_CSR(rp,ci,v,x)
-!           stop
         else
            r = b - matmul(A,x)
         end if
         d = r
         delta_new = sum(r*r)
         delta_0   = delta_new
-        t3 = mpi_wtime()
         do while( (i .lt. i_max) .and. (delta_new .gt. (epsil**2)*delta_0))
+           t3 = mpi_wtime()
             if (present(nnz_a)) then
                q = Ax_CSR(rp,ci,v,d)
             else
@@ -218,8 +216,12 @@ contains
             delta_new = sum(r*r)
             beta = delta_new/delta_old
             d = r + beta*d
+            t4 = mpi_wtime()
+!            write(*,*) 'CG Sample ', i
+!            write(*,*) 'Completion time ', t4-t3
             i = i + 1
         end do
+!        write(*,*) 'Exiting CG Method.'
 
         deallocate(r)
         deallocate(q)
@@ -559,7 +561,7 @@ contains
       real(dp), allocatable, dimension(:)    :: res
 
       integer(i4b)                           :: i, j, k, n, nnz, nval, mtype
-      integer(i4b)                           :: nrows, offset, extra, dest, source
+      integer(i4b)                           :: nrows, offset, dest, source, end
 
       n   = size(row_p)-1
       nnz = size(col_i)
@@ -568,10 +570,10 @@ contains
       allocate(res(n))
       res = 0.d0
 
-      if (numprocs > 1) then
+      if (numprocs < 1) then
          nval   = nnz/(numprocs-1)
-         extra  = mod(nnz,numprocs-1)
          offset = 1
+         res = 0.d0
 
          if (rank == master) then
             write(*,*) row_p(n+1)
@@ -586,15 +588,23 @@ contains
                do while ((row_p(offset+nrows) -row_p(offset)) <= nval .and. row_p(offset+nrows) <= nnz)
                   nrows = nrows + 1
                end do
-               write(*,*) 'dest, rowp(off), rowp(off+nrows) ',dest, row_p(offset), row_p(offset+nrows)
+               if (offset+nrows > n+1) then
+                  end = dest
+                  write(*,*) 'count too high ', end
+                  exit
+               else 
+                  end = numprocs-1
+               end if
+               write(*,*) 'dest, rowp(off), rowp(off+nrows) ',dest, row_p(offset), row_p(offset+nrows), offset, offset+nrows
                call mpi_send(nrows, 1, mpi_integer, dest, mtype, mpi_comm_world, ierr)
                call mpi_send(offset, 1, mpi_integer, dest, mtype, mpi_comm_world, ierr)
                offset = offset + nrows
             end do
 
             mtype = from_worker
-            do dest = 1, numprocs-1
+            do dest = 1, end-1
                source = dest
+               write(*,*) 'receiving from source ', source
                call mpi_recv(offset, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
                call mpi_recv(nrows, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
                call mpi_recv(res(offset:offset+nrows),nrows,mpi_double_precision, source, mtype, mpi_comm_world, status, ierr)
@@ -628,21 +638,8 @@ contains
             do k = row_p(i), row_p(i+1)-1
                res(i) = res(i) + val(k)*x(col_i(k))
             end do
-         if (i < 20) write(*,*) 'non: i, res(i) ', i, res(i)
          end do
       end if
-
-      ! do i = 1, 19
-      !    write(*,*) res(i)
-      ! end do
-
-      do i = 1, n+1
-         res(i) = 0.d0
-         do k = row_p(i), row_p(i+1)-1
-            res(i) = res(i) + val(k)*x(col_i(k))
-         end do
-         if (i < 20) write(*,*) 'free: i, res(i) ', i, res(i)
-      end do
 
     end function Ax_csr
 
@@ -663,10 +660,9 @@ contains
 
       do i = 1, n+1
          do k = col_p(i), col_p(i+1)-1
-            res(i) = res(i) + val(k)*x(i)
+            res(row_i(k)) = res(row_i(k)) + val(k)*x(i)
          end do
       end do
-
     end function Ax_csc
 
 end module linalg_mod

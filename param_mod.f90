@@ -1,6 +1,5 @@
 module param_mod
     use healpix_types
-    use init_mod
     use utility_mod
     use hashtbl
     implicit none
