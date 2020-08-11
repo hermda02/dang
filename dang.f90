@@ -60,7 +60,6 @@ program dang
     type(params)       :: par
 
     call init_mpi()
-
     call read_param_file(par)
 
     !----------------------------------------------------------------------------------------------------------
@@ -154,7 +153,7 @@ program dang
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
 
-    do k = 1, nmaps
+    do k = 2, nmaps
         
         if (rank == master) then
             if (k == 1) then
@@ -841,22 +840,15 @@ program dang
 
         t2 = mpi_wtime()
 
-        if (numprocs == z) then
-           j = 1 + rank
-           write(*,*) rank, j
+        do j = 1, z
+           write(*,*) j
            A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
-        else
-           do j = 1, z
-              if (rank == master) write(*,*) j
-              A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
-           end do
-        end if
-
+        end do
         nnz_a = count(A/=0)
 
         t3 = mpi_wtime()
 
-        if (rank == master) write(*,*) 'sparse matrix multiply: ', t3-t2
+        write(*,*) 'sparse matrix multiply: ', t3-t2
 
         ! Computation
         if (trim(method) == 'cholesky') then
@@ -889,9 +881,16 @@ program dang
         end do
 
         if (rank == master) write(*,*) 'Complete LAPACK routines '
+        t2 = mpi_wtime()
         mat_l = inv(A)
+        t3 = mpi_wtime()
+        write(*,*) 'inverted in ', t3-t2
+
+        if (rank == master) write(*,*) 'A inverted '
         call dpotrf('L',y,mat_l,y,info)
+        if (rank == master) write(*,*) 'Decomposed '
         call dtrmv('L','n','n',y,mat_l,y,rand,1)
+        if (rank == master) write(*,*) 'Vec multiplied '
 
         b = b + rand
 

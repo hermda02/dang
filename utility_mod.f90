@@ -1,6 +1,7 @@
 module utility_mod
     use healpix_types
     use mpi
+    use omp_lib
     implicit none
 !    include 'mpif.h'
 
@@ -18,7 +19,6 @@ module utility_mod
     integer(i4b)       :: from_worker = 2
     integer(i4b) status(mpi_status_size)
 
-
 contains 
 
    subroutine init_mpi()
@@ -26,11 +26,9 @@ contains
      call mpi_init(ierr)
      call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)
      call mpi_comm_size(MPI_COMM_WORLD, numprocs, ierr)
-     write(*,*) rank
      if (rank == 0) then
         write(*,'(a,i8)') ' The number of processors available = ', numprocs
      end if
-     stop
    end subroutine init_mpi
 
    ! Small utility for converting an integer to a string                                              

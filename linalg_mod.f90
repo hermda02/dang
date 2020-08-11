@@ -15,7 +15,7 @@ contains
         real(dp), dimension(size(A,1)) :: work  ! work array for LAPACK
         integer, dimension(size(A,1)) :: ipiv   ! pivot indices
         integer :: n, info
-    
+
         ! External procedures defined in LAPACK
         external DGETRF
         external DGETRI
@@ -35,7 +35,7 @@ contains
         ! DGETRI computes the inverse of a matrix using the LU factorization
         ! computed by DGETRF.
         call DGETRI(n, Ainv, n, ipiv, work, n, info)
-    
+
         if (info /= 0) then
         stop 'Matrix inversion failed!'
         end if
@@ -432,6 +432,9 @@ contains
 
       b = 0.d0
 
+      !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
+      
+      !$OMP DO SCHEDULE(GUIDED)
       do i = 1, n+1
          do k = col_p(i), col_p(i+1)-1
             col = i
@@ -445,11 +448,15 @@ contains
             end do
          end do
       end do
+      !$OMP END DO
+      !$OMP DO SCHEDULE(GUIDED)
       do i = 1, n
          do k = 1, n
             if (b(i,k) /= 0.d0) b(k,i) = b(i,k)
          end do
       end do
+      !$OMP END DO
+      !$OMP END PARALLEL
 
     end function compute_ATA_CSC
 
@@ -467,6 +474,9 @@ contains
 
       b = 0.d0
 
+      !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
+      
+      !$OMP DO SCHEDULE(GUIDED)
       do i = 1, n+1
          do k = row_p(i), row_p(i+1)-1
             row = i
@@ -480,11 +490,15 @@ contains
             end do
          end do
       end do
+      !$OMP END DO
+      !$OMP DO SCHEDULE(GUIDED)
       do i = 1, n
          do k = 1, n
             if (b(i,k) /= 0.d0) b(k,i) = b(i,k)
          end do
       end do
+      !$OMP END DO
+      !$OMP END PARALLEL
 
     end function compute_ATA_CSR
 
@@ -570,76 +584,16 @@ contains
       allocate(res(n))
       res = 0.d0
 
-      if (numprocs < 1) then
-         nval   = nnz/(numprocs-1)
-         offset = 1
-         res = 0.d0
-
-         if (rank == master) then
-            write(*,*) row_p(n+1)
-            write(*,*) 'n, nnz, nval ', n, nnz, nval
-            call mpi_bcast(val,nnz,mpi_double_precision,master,mpi_comm_world,ierr)
-            call mpi_bcast(x,n,mpi_double_precision,master,mpi_comm_world,ierr)
-            call mpi_bcast(row_p,n+1,mpi_integer,master,mpi_comm_world,ierr)
-            call mpi_bcast(col_i,nnz,mpi_integer,master,mpi_comm_world,ierr)
-            mtype  = FROM_MASTER
-            do dest = 1, numprocs-1
-               nrows = 1
-               do while ((row_p(offset+nrows) -row_p(offset)) <= nval .and. row_p(offset+nrows) <= nnz)
-                  nrows = nrows + 1
-               end do
-               if (offset+nrows > n+1) then
-                  end = dest
-                  write(*,*) 'count too high ', end
-                  exit
-               else 
-                  end = numprocs-1
-               end if
-               write(*,*) 'dest, rowp(off), rowp(off+nrows) ',dest, row_p(offset), row_p(offset+nrows), offset, offset+nrows
-               call mpi_send(nrows, 1, mpi_integer, dest, mtype, mpi_comm_world, ierr)
-               call mpi_send(offset, 1, mpi_integer, dest, mtype, mpi_comm_world, ierr)
-               offset = offset + nrows
-            end do
-
-            mtype = from_worker
-            do dest = 1, end-1
-               source = dest
-               write(*,*) 'receiving from source ', source
-               call mpi_recv(offset, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
-               call mpi_recv(nrows, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
-               call mpi_recv(res(offset:offset+nrows),nrows,mpi_double_precision, source, mtype, mpi_comm_world, status, ierr)
-            end do
-         end if
-
-         if (rank > master) then
-            mtype = from_master
-            write(*,*) 'receiving', rank
-            call mpi_recv(nrows, 1, mpi_integer, master, mtype, mpi_comm_world, status, ierr)
-            call mpi_recv(offset, 1, mpi_integer, master, mtype, mpi_comm_world, status, ierr)
-            write(*,*) rank, nrows, offset, nrows+offset
-
-            do i = offset, offset+nrows
-               res(i) = 0.d0
-               do k = row_p(i), row_p(i+1)-1
-                  res(i) = res(i) + val(k)*x(col_i(k))
-               end do
-               if (i < 20) write(*,*) 'par: i, res(i) ', i, res(i)
-            end do
-
-            mtype = from_worker
-            call mpi_send(offset, 1, mpi_integer, master, mtype, mpi_comm_world, ierr)
-            call mpi_send(nrows, 1, mpi_integer, master, mtype, mpi_comm_world, ierr)
-            call mpi_send(res,nrows,mpi_double_precision,master,mtype, mpi_comm_world,ierr)
-         end if
-
-      else
-         do i = 1, n+1
-            res(i) = 0.d0
-            do k = row_p(i), row_p(i+1)-1
-               res(i) = res(i) + val(k)*x(col_i(k))
-            end do
+      !$OMP PARALLEL PRIVATE(i,k)
+      !$OMP DO SCHEDULE(GUIDED)
+      do i = 1, n+1
+         res(i) = 0.d0
+         do k = row_p(i), row_p(i+1)-1
+            res(i) = res(i) + val(k)*x(col_i(k))
          end do
-      end if
+      end do
+      !$OMP END DO
+      !$OMP END PARALLEL
 
     end function Ax_csr
 
