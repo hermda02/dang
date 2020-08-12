@@ -46,7 +46,6 @@ program dang
     real(dp), allocatable, dimension(:)          :: dust_amps, temp_norm_01, temp_norm_02
     real(dp)                                     :: chisq
     character(len=80), dimension(180)            :: header
-    character(len=80), dimension(3)              :: tqu
     character(len=80), allocatable, dimension(:) :: joint_comps
     character(len=10)                            :: solver
     character(len=5)                             :: iter_str
