@@ -1,0 +1,73 @@
+# General Parameters
+#--------------------
+
+NUMGIBBS            = 1    # # of Gibbs iterations
+NUMSAMPLE           = 100   # # of iterations in the samplers
+OUTPUT_ITER         = 1     # Output maps every <- iterations
+OUTPUT_COMPS        = .true. # Option for outputting foregrounds for all bands
+SOLVER_TYPE         = 'cg' # Method possibilities are 'cg', 'lu', and 'cholesky'
+
+NUMBAND             = 5
+NUMCOMPS            = 1
+NUMTEMPS            = 1
+
+OUTPUT_DIRECTORY    = 'test_dir/sparse_test/sparse_test_v02' 
+DATA_DIRECTORY      = 'data/test_data/ame_pol/'
+MASKFILE            = 'data/mask_fullsky_n0004.fits'
+
+# Foreground Information
+#-----------------------
+
+COMP_LABEL01        = 'synch'
+COMP_TYPE01         = 'power-law'
+COMP_INCLUDE01      = .true.
+COMP_BETA01         = -3.10
+COMP_REF_FREQ01     = 45.0 
+
+COMP_PRIOR_GAUSS_BETA_MEAN01 = -3.10
+COMP_PRIOR_GAUSS_BETA_STD01  = 0.01
+COMP_PRIOR_UNI_BETA_LOW01    = -4.0
+COMP_PRIOR_UNI_BETA_HIGH01   = -2.5
+COMP_PRIOR_BETA_SAMP_NSIDE01 = 4
+
+JOINT_SAMPLE_GROUP01 = 'synch', 'template01'
+
+# Band Info
+#--------------------
+
+# Band 01
+BAND_LABEL01  = 'ame_pol_020'
+BAND_FILE01   = 'ame_pol_020_noised_n0008.fits'
+BAND_RMS01    = 'ame_pol_020_rms_n0008.fits'
+BAND_FREQ01   = 20.0    # In GHz
+
+# Band 02
+BAND_LABEL02  = 'ame_pol_030'
+BAND_FILE02   = 'ame_pol_030_noised_n0008.fits'
+BAND_RMS02    = 'ame_pol_030_rms_n0008.fits'
+BAND_FREQ02   = 30.0    # In GHz
+
+# Band 03
+BAND_LABEL03  = 'ame_pol_045'
+BAND_FILE03   = 'ame_pol_045_noised_n0008.fits'
+BAND_RMS03    = 'ame_pol_045_rms_n0008.fits'
+BAND_FREQ03   = 45.0    # In GHz
+
+# Band 04
+BAND_LABEL04  = 'ame_pol_070'
+BAND_FILE04   = 'ame_pol_070_noised_n0008.fits'
+BAND_RMS04    = 'ame_pol_070_rms_n0008.fits'
+BAND_FREQ04   = 70.0    # In GHz
+
+# Band 05
+BAND_LABEL05  = 'ame_pol_100'
+BAND_FILE05   = 'ame_pol_100_noised_n0008.fits'
+BAND_RMS05    = 'ame_pol_100_rms_n0008.fits'
+BAND_FREQ05   = 100.0    # In GHz
+
+# Template Information
+#--------------------
+
+NUMTEMP  = 1
+
+TEMPLATE_FILENAME01 = 'data/test_data/npipe6v20_353_map_Q_n0008.fits'
