@@ -6,6 +6,8 @@ NUMSAMPLE           = 100   # # of iterations in the samplers
 OUTPUT_ITER         = 1     # Output maps every <- iterations
 OUTPUT_COMPS        = .true. # Option for outputting foregrounds for all bands
 SOLVER_TYPE         = 'cg' # Method possibilities are 'cg', 'lu', and 'cholesky'
+SOLVER_MODE         = 'comp_sep'
+TQU                 = 'T'
 
 NUMBAND             = 5
 NUMCOMPS            = 1
@@ -28,7 +30,9 @@ COMP_PRIOR_GAUSS_BETA_MEAN01 = -3.10
 COMP_PRIOR_GAUSS_BETA_STD01  = 0.01
 COMP_PRIOR_UNI_BETA_LOW01    = -4.0
 COMP_PRIOR_UNI_BETA_HIGH01   = -2.5
-COMP_PRIOR_BETA_SAMP_NSIDE01 = 4
+COMP_BETA_SAMP_NSIDE01       = 4
+COMP_BETA_SAMPLE01           = .true.
+
 
 JOINT_SAMPLE_GROUP01 = 'synch', 'template01'
 
