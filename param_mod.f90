@@ -1,6 +1,5 @@
 module param_mod
     use healpix_types
-    use init_mod
     use utility_mod
     use hashtbl
     implicit none
@@ -13,6 +12,7 @@ module param_mod
         integer(i4b)       :: iter_out ! Out put maps every <- iterations
         logical(lgt)       :: output_fg
         character(len=512) :: outdir
+        character(len=16)  :: solver
 
         ! Data parameters
         integer(i4b)   :: numband
@@ -310,6 +310,7 @@ contains
         call get_parameter_hashtable(htbl, 'NUMSAMPLE', par_int=par%nsample)
         call get_parameter_hashtable(htbl, 'OUTPUT_ITER', par_int=par%iter_out)
         call get_parameter_hashtable(htbl, 'OUTPUT_COMPS', par_lgt=par%output_fg)
+        call get_parameter_hashtable(htbl, 'SOLVER_TYPE', par_string=par%solver)
         
         par%outdir = trim(par%outdir) // '/'
 

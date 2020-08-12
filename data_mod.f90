@@ -1,7 +1,6 @@
 module data_mod
   use healpix_types
   use utility_mod
-  use init_mod
   implicit none
   !// Make everything not specified as public invisible from outside the
   !// module

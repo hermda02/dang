@@ -3,7 +3,6 @@ module linalg_mod
     use pix_tools
     use fitstools
     use udgrade_nr
-    use init_mod
     use utility_mod
     implicit none
 
@@ -16,7 +15,7 @@ contains
         real(dp), dimension(size(A,1)) :: work  ! work array for LAPACK
         integer, dimension(size(A,1)) :: ipiv   ! pivot indices
         integer :: n, info
-    
+
         ! External procedures defined in LAPACK
         external DGETRF
         external DGETRI
@@ -36,7 +35,7 @@ contains
         ! DGETRI computes the inverse of a matrix using the LU factorization
         ! computed by DGETRF.
         call DGETRI(n, Ainv, n, ipiv, work, n, info)
-    
+
         if (info /= 0) then
         stop 'Matrix inversion failed!'
         end if
@@ -47,16 +46,28 @@ contains
         real(dp), dimension(:,:), intent(in)  :: mat
         real(dp), dimension(:,:), intent(out) :: low
         integer(i4b),             intent(in)  :: n
-        integer(i4b)                          :: ip, i, j
-        real(dp)                              :: s
+        integer(i4b)                          :: ip, i, j, k
+        real(dp)                              :: sum
 
         low(:,:)   = 0.d0
 
-        do i = 1, n
-        low(i,i) = sqrt(mat(i,i) - dot_product(low(i,1:i-1),low(i,1:i-1)) )
-        do j = i+1, n
-            low(j,i) = (mat(j,i) - dot_product(low(j,1:i-1),low(i,1:i-1)))/low(i,i)
-        end do
+        do j = 1, n
+           sum = 0.d0
+           do k = 1, j
+              sum = sum + low(j,k) * low(j,k)
+           end do
+           low(j,j) = sqrt(mat(j,j)- sum)
+           !$OMP PARALLEL PRIVATE(i,k,sum) shared(mat,low,j)
+           !$OMP DO SCHEDULE(static)
+           do i = j+1, n
+              sum = 0.d0
+              do k = 1, j
+                 sum = sum + low(i,k)*low(j,k)
+              end do
+              low(i,j) = (1.d0/low(j,j)*(mat(i,j)-sum))
+           end do
+           !$OMP END DO
+           !$OMP END PARALLEL
         end do
 
         ! This code would be used for the LDU decomp:
@@ -153,23 +164,33 @@ contains
 
     end subroutine backward_sub
 
-    subroutine compute_cg(A,x,b,n)
+    subroutine compute_cg(A,x,b,n,nnz_a)
         
         ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
         ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
 
         implicit none
 
-        real(dp), dimension(:,:), intent(in) :: A
-        real(dp), dimension(:), intent(in)   :: b
-        real(dp), dimension(:), intent(out)  :: x
-        integer(i4b), intent(in)             :: n
-        real(dp), allocatable, dimension(:)  :: r, q, d
-        real(dp)                             :: epsil, alpha, beta, delta_0
-        real(dp)                             :: delta_old, delta_new
-        integer(i4b)                         :: i_max, i
+        real(dp), dimension(:,:), intent(in)  :: A
+        real(dp), dimension(:), intent(in)    :: b
+        real(dp), dimension(:), intent(out)   :: x
+        integer(i4b), intent(in)              :: n
+        integer(i4b), optional, intent(in)    :: nnz_a
+        real(dp), allocatable, dimension(:)   :: r, q, d
+        real(dp)                              :: epsil, alpha, beta, delta_0
+        real(dp)                              :: delta_old, delta_new, t3, t4
+        integer(i4b)                          :: i_max, i, j
+
+        real(dp),allocatable,dimension(:)     :: v
+        integer(i4b),allocatable,dimension(:) :: rp, ci
+
 
         allocate(r(n),q(n),d(n))
+
+        if(present(nnz_a)) then
+           allocate(v(nnz_a),rp(n+1),ci(nnz_a))
+           call A_to_CSR(A,rp,ci,v)
+        end if
 
         x(:) = 0.0d0
         i_max = 10
@@ -177,17 +198,29 @@ contains
         i = 0
         epsil = 1.0d-16
 
-        r = b - matmul(A,x)
+        if (present(nnz_a)) then
+           r = b - Ax_CSR(rp,ci,v,x)
+        else
+           r = b - matmul(A,x)
+        end if
         d = r
         delta_new = sum(r*r)
         delta_0   = delta_new
-
         do while( (i .lt. i_max) .and. (delta_new .gt. (epsil**2)*delta_0))
-            q = matmul(A,d)
+           t3 = mpi_wtime()
+            if (present(nnz_a)) then
+               q = Ax_CSR(rp,ci,v,d)
+            else
+               q = matmul(A,d)
+            end if
             alpha = delta_new/(sum(d*q))
             x = x + alpha*d
             if (mod(i,50) == 0) then
-                r = b - matmul(A,x)
+               if (present(nnz_a)) then
+                  r = b - Ax_CSR(rp,ci,v,x)
+               else
+                  r = b - matmul(A,x)
+               end if
             else
                 r = r - alpha*q
             end if
@@ -195,8 +228,12 @@ contains
             delta_new = sum(r*r)
             beta = delta_new/delta_old
             d = r + beta*d
+            t4 = mpi_wtime()
+!            write(*,*) 'CG Sample ', i
+!            write(*,*) 'Completion time ', t4-t3
             i = i + 1
         end do
+!        write(*,*) 'Exiting CG Method.'
 
         deallocate(r)
         deallocate(q)
@@ -204,13 +241,85 @@ contains
 
     end subroutine compute_cg
 
+    subroutine compute_cg_precond(A,x,b,n,nnz_a)
+        
+      ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
+      ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
+
+      implicit none
+
+      real(dp), dimension(:,:), intent(in)  :: A
+      real(dp), dimension(:), intent(in)    :: b
+      real(dp), dimension(:), intent(out)   :: x
+      integer(i4b), intent(in)              :: n
+      integer(i4b), optional, intent(in)    :: nnz_a
+      real(dp), allocatable, dimension(:)   :: r, q, d
+      real(dp)                              :: epsil, alpha, beta, delta_0
+      real(dp)                              :: delta_old, delta_new, t3, t4
+      integer(i4b)                          :: i_max, i, j
+
+      real(dp),allocatable,dimension(:)     :: v
+      integer(i4b),allocatable,dimension(:) :: rp, ci
+
+
+      allocate(r(n),q(n),d(n))
+
+      if(present(nnz_a)) then
+         allocate(v(nnz_a),rp(n+1),ci(nnz_a))
+         call A_to_CSR(A,rp,ci,v)
+      end if
+
+      x(:) = 0.0d0
+      i_max = 10
+
+      i = 0
+      epsil = 1.0d-16
+
+      if (present(nnz_a)) then
+         r = b - Ax_CSR(rp,ci,v,x)
+      else
+         r = b - matmul(A,x)
+      end if
+      d = r
+      delta_new = sum(r*r)
+      delta_0   = delta_new
+      t3 = mpi_wtime()
+      do while( (i .lt. i_max) .and. (delta_new .gt. (epsil**2)*delta_0))
+          if (present(nnz_a)) then
+             q = Ax_CSR(rp,ci,v,d)
+          else
+             q = matmul(A,d)
+          end if
+          alpha = delta_new/(sum(d*q))
+          x = x + alpha*d
+          if (mod(i,50) == 0) then
+             if (present(nnz_a)) then
+                r = b - Ax_CSR(rp,ci,v,x)
+             else
+                r = b - matmul(A,x)
+             end if
+          else
+              r = r - alpha*q
+          end if
+          delta_old = delta_new
+          delta_new = sum(r*r)
+          beta = delta_new/delta_old
+          d = r + beta*d
+          i = i + 1
+      end do
+
+      deallocate(r)
+      deallocate(q)
+      deallocate(d)
+
+  end subroutine compute_cg_precond
+
     function mm_mpi(A,B)
       implicit none
 
       integer(i4b)   :: nworkers, source, dest, mtype
       integer(i4b)   :: cols, avecol, extra, offset
       integer(i4b)   :: m, n, p, ii, ij, ik
-      integer status(mpi_status_size)
 
       real(dp), dimension(:,:), intent(in)  :: A
       real(dp), dimension(:,:), intent(in)  :: B
@@ -259,8 +368,7 @@ contains
             source = ii
             call mpi_recv(offset, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
             call mpi_recv(cols, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
-            call mpi_recv(mm_mpi(1,offset), cols*m, mpi_double_precision, source, mtype, &
-                      mpi_comm_world, ierr)
+            call mpi_recv(mm_mpi(1,offset), cols*m, mpi_double_precision, source, mtype, mpi_comm_world, status, ierr)
          end do
       end if
 
@@ -292,10 +400,33 @@ contains
       end if
     end function mm_mpi
 
-    function compute_ATA(mat,type) result(B)
+    subroutine lower_tri_Ax(A,x,n)
+      implicit none
+      real(dp), dimension(:,:), intent(in)  :: A
+      real(dp), dimension(:), intent(inout) :: x
+      integer(i4b)                          :: i, j, k, n
+      real(dp)                              :: temp
+
+      do j = n,1,-1
+         temp = 0.d0
+         if (x(j) /= 0.d0) then
+            temp = x(j)
+            !$OMP PARALLEL PRIVATE(i)
+            !$OMP DO SCHEDULE(static)
+            do i = n, j+1, -1
+               x(i) = x(i) + temp*a(i,j)
+            end do
+            !$OMP END DO
+            !$OMP END PARALLEL
+            x(j) = x(j)*a(j,j)
+         end if
+      end do
+
+    end subroutine lower_tri_Ax
+
+    function compute_ATA(mat) result(B)
       implicit none
       real(dp), dimension(:,:), intent(in)  :: mat
-      character(len=3), intent(in)          :: type
       integer(i4b)                          :: ii, ij, ik, m, n
       real(dp), allocatable, dimension(:,:) :: B
       real(dp)                              :: q
@@ -305,133 +436,223 @@ contains
 
       m = size(mat(1,:))
       n = size(mat(:,1))
+     
+      allocate(B(m,m))
+      ! Compute A^T A
+      B(:,:) = 0.d0
 
-      if (trim(type) == 'ata') then
-         allocate(B(m,m))
-         ! Compute A^T A
-         B(:,:) = 0.d0
-
-!         call mpi_bcast()
-
-         do ii = 1, m
-            do ij = ii, m
-               q = 0.d0
-               do ik = 1, n
-                  q = q + mat(ik,ii)*mat(ik,ij)
-               end do
-               B(ii,ij) = q
-               B(ij,ii) = q
+      do ii = 1, m
+         do ij = ii, m
+            q = 0.d0
+            do ik = 1, n
+               q = q + mat(ik,ii)*mat(ik,ij)
             end do
+            B(ii,ij) = q
+            B(ij,ii) = q
          end do
-
-
-!      else if (trim(type) == 'aat') then
-         ! Compute A A^T
-!         allocate(B(n,n))
-
-      end if
+      end do
 
     end function compute_ATA
-
-    function compute_sparse_ATA(spar,type,n,m) result(B)
-      implicit none
-      real(dp), dimension(:,:),   intent(in) :: spar
-      character(len=3),           intent(in) :: type
-      integer(i4b),               intent(in) :: n, m
-      integer(i4b)                           :: i, l
-      integer(i4b)                           :: ii, ij, ik
-      real(dp), allocatable, dimension(:,: ) :: B
-      real(dp)                               :: q, row, col
-      
-      ! Little function to compute the product of a matrix with its transpose
-      ! saves time since the matrix is symmetric!
-
-      l = n
-
-      if (trim(type) == 'ata') then
-         allocate(B(m,m))
-         ! Compute A^T A
-         B(:,:) = 0.d0
-         do i = 1, l
-            col = spar(i,2)
-            if (spar(i,2) == spar(i-1,2)) then
-               cycle
-            end if
-            ij  = i
-            do while (ij < l+1 .and. spar(ij,2) == col)
-               ii  = 1
-               q = 0
-               do while (ii < l+1)
-                  if (spar(ii,1) > spar(ii-1,1)) then
-                     row = spar(ii,2)
-                     do while (spar(ii,1) > spar(ii-1,1))
-                        if (spar(ii,1) == spar(ij,1)) then
-                           q = q + spar(ii,3)*spar(ij,3)
-                        end if
-                        if (ii == l) b(row,col) = b(row,col) + q
-                        ii = ii + 1
-                     end do
-                  else if (spar(ii,1) <= spar(ii-1,1)) then
-                     !              write(*,fmt='(a,2(i3),f8.2)') 'row, col, x ', row, col, x
-                     !              write(*,fmt='(a,2(i3))') 'ii, ij', ii, ij
-                     b(row,col) = b(row,col) + q
-                     q          = 0
-                     row = spar(ii,2)
-                     if (spar(ii,1) == spar(ij,1)) then
-                        q = q + spar(ii,3)*spar(ij,3)
-                     end if
-                     ii = ii + 1
-                  end if
-               end do
-               ij = ij + 1          
-            end do
-         end do
-
-      end if
-
-    end function compute_sparse_ATA
 
     function compute_ATA_CSC(v,row_i,col_p) result(B)
       implicit none
       real(dp), dimension(:),     intent(in) :: v
       integer(i4b), dimension(:), intent(in) :: row_i, col_p
-      integer(i4b)                           :: n, col, row, i, ii, k, ik
+      integer(i4b)                           :: n, col, row, i, ii, k, ik, nnz
       real(dp), allocatable, dimension(:,:)  :: B
-      real(dp)                               :: x, y
 
-      n = size(col_p)-1
+      n   = size(col_p)-1
+      nnz = size(row_i)
 
       allocate(B(n,n))
 
       b = 0.d0
-      y = 0.d0
 
+      !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
+      
+      !$OMP DO SCHEDULE(GUIDED)
       do i = 1, n+1
          do k = col_p(i), col_p(i+1)-1
             col = i
             do ii = 1, n+1
-               x = 0
                row = ii
                do ik = col_p(ii), col_p(ii+1)-1
                   if (row_i(k) == row_i(ik)) then
                      b(row,col) = b(row,col) + v(k)*v(ik)
-!                     if (row == 193 .and. col == 193) then
-!                        y = y + v(k)*v(ik)
-!                        write(*,*) x
-!                     end if
                   end if
                end do
-!               b(row,col) = x
             end do
          end do
       end do
+      !$OMP END DO
+      !$OMP DO SCHEDULE(GUIDED)
       do i = 1, n
          do k = 1, n
             if (b(i,k) /= 0.d0) b(k,i) = b(i,k)
          end do
       end do
+      !$OMP END DO
+      !$OMP END PARALLEL
 
     end function compute_ATA_CSC
 
+    function compute_ATA_CSR(v,col_i,row_p) result(B)
+      implicit none
+      real(dp), dimension(:),     intent(in) :: v
+      integer(i4b), dimension(:), intent(in) :: col_i, row_p
+      integer(i4b)                           :: n, col, row, i, ii, k, ik, nnz
+      real(dp), allocatable, dimension(:,:)  :: B
+
+      n   = size(row_p)-1
+      nnz = size(col_i)
+
+      allocate(B(n,n))
+
+      b = 0.d0
+
+      !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
+      
+      !$OMP DO SCHEDULE(GUIDED)
+      do i = 1, n+1
+         do k = row_p(i), row_p(i+1)-1
+            row = i
+            do ii = 1, n+1
+               col = ii
+               do ik = row_p(ii), row_p(ii+1)
+                  if (col_i(k) == col_i(ik)) then
+                     b(row,col) = b(row,col) + v(k)*v(ik)
+                  end if
+               end do
+            end do
+         end do
+      end do
+      !$OMP END DO
+      !$OMP DO SCHEDULE(GUIDED)
+      do i = 1, n
+         do k = 1, n
+            if (b(i,k) /= 0.d0) b(k,i) = b(i,k)
+         end do
+      end do
+      !$OMP END DO
+      !$OMP END PARALLEL
+
+    end function compute_ATA_CSR
+
+    subroutine A_to_CSC(A,col_p,row_i,v)
+      implicit none
+      real(dp), dimension(:,:),   intent(in)  :: A
+      real(dp), dimension(:),     intent(out) :: v
+      integer(i4b), dimension(:), intent(out) :: col_p, row_i
+      integer(i4b)               :: vi, ci, ri, co, n, m, i ,j
+
+      m = size(A(1,:))
+      n = size(A(:,1))
+
+      vi  = 1
+      ci  = 1
+      ri  = 1
+      co  = 1
+      col_p(ci) = 1
+      ci  = ci + 1
+
+      do i = 1, n
+         do j = 1, m
+            if (A(j,i) /= 0.d0) then
+               v(vi) = A(j,i)
+               row_i(ri) = j
+               co = co + 1
+               vi = vi + 1
+               ri = ri + 1
+            end if
+         end do
+         col_p(ci) = co
+         ci = ci + 1
+      end do
+
+    end subroutine A_to_CSC
+
+    subroutine A_to_CSR(A,row_p,col_i,v)
+      implicit none
+      real(dp), dimension(:,:),   intent(in)  :: A
+      real(dp), dimension(:),     intent(out) :: v
+      integer(i4b), dimension(:), intent(out) :: row_p, col_i
+      integer(i4b)                            :: vi, ci, ri, ro, n, m, i, j
+
+      m = size(A(1,:))
+      n = size(A(:,1))
+
+      vi  = 1
+      ci  = 1
+      ri  = 1
+      ro  = 1
+      row_p(ri) = 1
+      ri  = ri + 1
+
+      do i = 1, n
+         do j = 1, m
+            if (A(i,j) /= 0.d0) then
+               v(vi)       = A(i,j)
+               col_i(ci) = j
+               ro  = ro + 1
+               vi  = vi + 1
+               ci  = ci + 1
+            end if
+         end do
+         row_p(ri) = ro
+         ri = ri + 1
+      end do
+  
+    end subroutine A_to_CSR
+
+    function Ax_csr(row_p,col_i,val,x) result(res)
+      implicit none
+      real(dp), dimension(:), intent(in)     :: val, x
+      integer(i4b), dimension(:), intent(in) :: row_p, col_i
+      real(dp), allocatable, dimension(:)    :: res
+
+      integer(i4b)                           :: i, j, k, n, nnz, nval, mtype
+      integer(i4b)                           :: nrows, offset, dest, source, end
+
+      n   = size(row_p)-1
+      nnz = size(col_i)
+
+
+      allocate(res(n))
+      res = 0.d0
+
+      !$OMP PARALLEL PRIVATE(i,k)
+      !$OMP DO SCHEDULE(GUIDED)
+      do i = 1, n+1
+         res(i) = 0.d0
+         do k = row_p(i), row_p(i+1)-1
+            res(i) = res(i) + val(k)*x(col_i(k))
+         end do
+      end do
+      !$OMP END DO
+      !$OMP END PARALLEL
+
+    end function Ax_csr
+
+    function Ax_csc(col_p,row_i,val,x) result(res)
+      ! Does not work currently...I don't think.
+      implicit none
+      real(dp), dimension(:), intent(in)     :: val, x
+      integer(i4b), dimension(:), intent(in) :: col_p, row_i
+      real(dp), allocatable, dimension(:)    :: res
+
+      integer(i4b)                           :: i, k, n
+
+      n = size(col_p)-1
+
+      allocate(res(n))
+
+      res = 0.d0
+
+      do i = 1, n+1
+         do k = col_p(i), col_p(i+1)-1
+            res(row_i(k)) = res(row_i(k)) + val(k)*x(i)
+         end do
+      end do
+    end function Ax_csc
 
 end module linalg_mod
