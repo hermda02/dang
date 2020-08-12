@@ -29,7 +29,7 @@ program dang
     !-----------------------------------------------------------------------------------------------------|  
       
     integer(i4b)       :: i, j, k, l, iter, npix, nside, nmaps, ordering, m
-    integer(i4b)       :: beta_samp_nside, nlheader, niter, nfgs, iterations
+    integer(i4b)       :: nlheader, niter, nfgs, iterations
     integer(i4b)       :: output_iter
     real(dp)           :: nullval
     real(dp)           :: missval = -1.6375d30
@@ -38,12 +38,12 @@ program dang
     character(len=128) :: template_file_01, template_file_02, mask_file, arg1
     character(len=128) :: mapfile, title, direct
   
-    real(dp), allocatable, dimension(:,:,:,:)    :: fg_amp
+    real(dp), allocatable, dimension(:,:,:,:)    :: fg_map
     real(dp), allocatable, dimension(:,:,:)      :: maps, rmss, model, res
-    real(dp), allocatable, dimension(:,:,:)      :: synch_map, dust_map, cmb_map, nodust
+    real(dp), allocatable, dimension(:,:,:)      :: nodust
     real(dp), allocatable, dimension(:,:)        :: template_01, template_02, map, rms
     real(dp), allocatable, dimension(:,:)        :: beta_s, T_d, beta_d, chi_map, mask, HI
-    real(dp), allocatable, dimension(:)          :: dust_amps, temp_norm_01, temp_norm_02
+    real(dp), allocatable, dimension(:)          :: temp01_amps, temp_norm_01, temp_norm_02
     real(dp)                                     :: chisq
     character(len=80), dimension(180)            :: header
     character(len=80), allocatable, dimension(:) :: joint_comps
@@ -67,7 +67,7 @@ program dang
     i                 = getsize_fits(template_file_01, nside=nside, ordering=ordering, nmaps=nmaps)
     npix              = nside2npix(nside) 
     nbands            = par%numband
-    nfgs              = par%ncomp
+    nfgs              = par%ncomp+par%ntemp
     nlheader          = size(header)
     nmaps             = nmaps
 
@@ -76,21 +76,19 @@ program dang
     output_iter       = par%iter_out             ! Output maps every <- # of iterations
     output_fg         = par%output_fg            ! Option for outputting foregrounds for all bands
     direct            = par%outdir               ! Output directory name
-    beta_samp_nside   = par%fg_samp_nside(1,1)   ! \beta_synch nside sampling
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Array allocation
     allocate(template_01(0:npix-1,nmaps), template_02(0:npix-1,nmaps), j_corr01(nbands), j_corr02(nbands))
     allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands), nodust(0:npix-1,nmaps,nbands))
     allocate(mask(0:npix-1,1), res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps))
-    allocate(fg_amp(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
+    allocate(fg_map(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
     allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps))
-    allocate(cmb_map(0:npix-1,nmaps,nbands), dust_map(0:npix-1,nmaps,nbands), synch_map(0:npix-1,nmaps,nbands))
-    allocate(dust_amps(nbands), temp_norm_01(nmaps), temp_norm_02(nmaps))
+    allocate(temp01_amps(nbands), temp_norm_01(3), temp_norm_02(3))
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
-    beta_s     = -3.10d0    ! Synchrotron beta initial guess
+    beta_s     = -3.00d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
     mask       = 1.d0
     !----------------------------------------------------------------------------------------------------------
@@ -146,7 +144,7 @@ program dang
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
 
-    do k = 1, nmaps
+    do k = par%pol_type(1), par%pol_type(size(par%pol_type))
         
         if (rank == master) then
             if (k == 1) then
@@ -163,55 +161,59 @@ program dang
 
         do iter = 1, niter
             call sample_joint_amp(npix,k,trim(solver))
-            dust_amps = fg_amp(0,k,:,2)
             ! -------------------------------------------------------------------------------------------------------------------
             ! Extrapolating A_synch to bands
             if (ANY(joint_comps=='synch')) then
                 do i = 0, npix-1
                     do j = 1, nbands
-                        fg_amp(i,k,j,1) = fg_amp(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,1,par%dat_nu(j),i,k)
+                        fg_map(i,k,j,1) = fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,1,par%dat_nu(j),i,k)
                     end do
                 end do
-                synch_map(:,k,:)        = fg_amp(:,k,:,1)
             end if
 
             ! Extrapolating A_dust to bands
             if (ANY(joint_comps=='dust')) then
                 do i = 0, npix-1
                     do j = 1, nbands
-                        fg_amp(i,k,j,3) = fg_amp(i,k,par%fg_ref_loc(2),3)*compute_spectrum(par,2,par%dat_nu(j),i,k)
+                        fg_map(i,k,j,3) = fg_map(i,k,par%fg_ref_loc(2),3)*compute_spectrum(par,2,par%dat_nu(j),i,k)
                     end do
                 end do
-                dust_map(:,k,:)         = fg_amp(:,k,:,3)
             end if
 
             ! Applying dust templates to make dust maps
             if (ANY(joint_comps=='template01')) then
                 do j = 1, nbands
-                    dust_map(:,k,j) = dust_amps(j)*template_01(:,k)
+                    fg_map(:,k,j,2) = temp01_amps(j)*template_01(:,k)
                 end do
             end if
 
-            nodust = maps-dust_map
             ! -------------------------------------------------------------------------------------------------------------------
-            call sample_index(par,nodust,beta_samp_nside,1,k)
-            do i = 0, npix-1
-                do j = 1, nbands
-                    fg_amp(i,k,j,1) = fg_amp(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,1,par%dat_nu(j),i,k)
-                end do
+            if (par%fg_samp_inc(1,1)) then
+               write(*,*) 'yep'
+               write(*,*) par%fg_samp_nside(1,1)
+               nodust(:,k,:) = maps(:,k,:)-fg_map(:,k,:,2)
+               call sample_index(par,nodust,par%fg_samp_nside(1,1),1,k)
+               do i = 0, npix-1
+                  do j = 1, nbands
+                     fg_map(i,k,j,1) = fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,1,par%dat_nu(j),i,k)
+                  end do
+               end do
+            end if
+            ! -------------------------------------------------------------------------------------------------------------------
+            
+            res = maps
+            do i = 1, nfgs
+               res(:,k,:)  = res(:,k,:) - fg_map(:,k,:,i)
             end do
-            synch_map(:,k,:)        = fg_amp(:,k,:,1)
-            ! -------------------------------------------------------------------------------------------------------------------
-            res       = maps - synch_map - dust_map
 
-            call compute_chisq(fg_amp,k,chisq)
+            call compute_chisq(fg_map,k)
 
             if (rank == master) then
                if (mod(iter, 1) == 0 .or. iter == 1) then
                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
                        iter, " - chisq: " , chisq, " - A_s: ",&
-                       fg_amp(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                       sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps/temp_norm_01(k)
+                       fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
+                       sum(beta_s(:,k))/npix, ' - A_d: ', temp01_amps/temp_norm_01(k)
                end if
                if (mod(iter,output_iter) .EQ. 0) then
                   call write_maps(k)
@@ -357,7 +359,7 @@ program dang
         real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov 
         real(dp), dimension(0:npix-1,nmaps)                    :: indx
         real(dp), dimension(0:npix-1)                          :: indx_sample
-        real(dp), allocatable, dimension(:,:,:)                :: data_low, fg_amp_low, rms_low
+        real(dp), allocatable, dimension(:,:,:)                :: data_low, fg_map_low, rms_low
         real(dp), allocatable, dimension(:,:)                  :: indx_low
         real(dp), allocatable, dimension(:)                    :: indx_sample_low
         real(dp), dimension(nbands)                            :: signal, tmp
@@ -386,7 +388,7 @@ program dang
         
         if (rank == master) then
            if (mod(iter,output_iter) .EQ. 0) then
-              write(*,*) 'Sampling ' // trim(self%fg_label(comp)) // ' beta at nside', beta_samp_nside
+              write(*,*) 'Sampling ' // trim(self%fg_label(comp)) // ' beta at nside', nside2
            end if
         end if
 
@@ -400,7 +402,7 @@ program dang
         else
             npix2 = nside2npix(nside2)
         end if
-        allocate(data_low(0:npix2-1,nmaps,nbands),fg_amp_low(0:npix2-1,nmaps,nbands))
+        allocate(data_low(0:npix2-1,nmaps,nbands),fg_map_low(0:npix2-1,nmaps,nbands))
         allocate(indx_low(0:npix2-1,nmaps),rms_low(0:npix2-1,nmaps,nbands))
         allocate(indx_sample_low(0:npix2-1))
 
@@ -414,13 +416,13 @@ program dang
               if (ordering == 1) then
                  call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
                  call convert_nest2ring(nside1,map2fit(:,:,j))
-                 call udgrade_ring(fg_amp(:,:,j,1),nside1,fg_amp_low(:,:,j),nside2)
-                 call convert_nest2ring(nside1,fg_amp(:,:,j,1))
+                 call udgrade_ring(fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
+                 call convert_nest2ring(nside1,fg_map(:,:,j,1))
                  call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
                  call convert_nest2ring(nside1,rmss(:,:,j))
               else
                  call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                 call udgrade_nest(fg_amp(:,:,j,1),nside1,fg_amp_low(:,:,j),nside2)
+                 call udgrade_nest(fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
                  call udgrade_nest(rmss(:,:,j),nside1,rms_low(:,:,j),nside2)
               end if
            end do
@@ -428,7 +430,7 @@ program dang
         else 
            do j = 1, nbands
               data_low(:,:,j)   = data(:,:,j)
-              fg_amp_low(:,:,j) = fg_amp(:,:,j,1)
+              fg_map_low(:,:,j) = fg_map(:,:,j,1)
               rms_low(:,:,j)    = rmss(:,:,j)
            end do
            indx_low = indx
@@ -445,7 +447,7 @@ program dang
 
             ! Chi-square from the most recent Gibbs chain update
             do j = 1, nbands
-                a = a + (((fg_amp_low(i,map_n,par%fg_ref_loc(1)) * compute_spectrum(self,comp,par%dat_nu(j),i,map_n,sol)) &
+                a = a + (((fg_map_low(i,map_n,par%fg_ref_loc(1)) * compute_spectrum(self,comp,par%dat_nu(j),i,map_n,sol)) &
                       - data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
             end do
             c = a
@@ -457,7 +459,7 @@ program dang
                 b         = 0.d0
 
                 do j = 1, nbands
-                    tmp(j) = fg_amp_low(i,map_n,par%fg_ref_loc(1))*compute_spectrum(self,comp,par%dat_nu(j),i,map_n,t)
+                    tmp(j) = fg_map_low(i,map_n,par%fg_ref_loc(1))*compute_spectrum(self,comp,par%dat_nu(j),i,map_n,t)
                     b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
                 end do
                 b = b
@@ -498,7 +500,7 @@ program dang
             beta_d(:,k) = indx_sample
         end if
         deallocate(data_low)
-        deallocate(fg_amp_low)
+        deallocate(fg_map_low)
         deallocate(indx_low)
         deallocate(rms_low)
         deallocate(indx_sample_low)
@@ -519,7 +521,7 @@ program dang
         real(dp), dimension(0:npix-1)                          :: sample_hi_T
         real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov
         real(dp), dimension(0:npix-1,nmaps)                    :: te
-        real(dp), allocatable, dimension(:,:,:)                :: band_low, fg_amp_low, rms_low
+        real(dp), allocatable, dimension(:,:,:)                :: band_low, fg_map_low, rms_low
         real(dp), allocatable, dimension(:,:)                  :: T_low
         real(dp), allocatable, dimension(:)                    :: sample_T_low
         real(dp), dimension(nbands)                            :: signal, tmp
@@ -536,7 +538,7 @@ program dang
         else
             npix2 = nside2npix(nside2)
         end if
-        allocate(band_low(0:npix2-1,nmaps,nbands),fg_amp_low(0:npix2-1,nmaps,nbands))
+        allocate(band_low(0:npix2-1,nmaps,nbands),fg_map_low(0:npix2-1,nmaps,nbands))
         allocate(T_low(0:npix2-1,nmaps),rms_low(0:npix2-1,nmaps,nbands))
         allocate(sample_T_low(0:npix2-1))
 
@@ -550,13 +552,13 @@ program dang
                 if (ordering == 1) then
                     call udgrade_ring(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
                     call convert_nest2ring(nside1,map2fit(:,:,j))
-                    call udgrade_ring(fg_amp(:,:,j,1),nside1,fg_amp_low(:,:,j),nside2)
-                    call convert_nest2ring(nside1,fg_amp(:,:,j,1))
+                    call udgrade_ring(fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
+                    call convert_nest2ring(nside1,fg_map(:,:,j,1))
                     call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
                     call convert_nest2ring(nside1,rmss(:,:,j))
                 else
                     call udgrade_nest(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
-                    call udgrade_nest(fg_amp(:,:,j,1),nside1,fg_amp_low(:,:,j),nside2)
+                    call udgrade_nest(fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
                     call udgrade_nest(rmss(:,:,j),nside1,rms_low(:,:,j),nside2)
                 end if
             end do
@@ -564,7 +566,7 @@ program dang
         else
             do j = 1, nbands
                 band_low(:,:,j)   = band(:,:,j)
-                fg_amp_low(:,:,j) = fg_amp(:,:,j,1)
+                fg_map_low(:,:,j) = fg_map(:,:,j,1)
                 rms_low(:,:,j)    = rmss(:,:,j)
             end do
             T_low = T_map
@@ -581,7 +583,7 @@ program dang
 
                 ! Chi-square from the most recent Gibbs chain update
                 do j = 1, nbands
-                    a = a + (((fg_amp_low(i,map_n,j) * HI(i,1)*planck(par%dat_nu(j)*1.d9,sol)) &
+                    a = a + (((fg_map_low(i,map_n,j) * HI(i,1)*planck(par%dat_nu(j)*1.d9,sol)) &
                         - band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2
                 end do
                 c   = a
@@ -591,7 +593,7 @@ program dang
                     t = rand_normal(self%fg_gauss(2,2,1), self%fg_gauss(2,2,2))
                     b = 0.d0
                     do j = 1, nbands
-                        tmp(j) = fg_amp_low(i,map_n,j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,t)
+                        tmp(j) = fg_map_low(i,map_n,j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,t)
                         b      = b + ((tmp(j)-band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
                     end do
                     b = b
@@ -631,7 +633,7 @@ program dang
         end if
 
         deallocate(band_low)
-        deallocate(fg_amp_low)
+        deallocate(fg_map_low)
         deallocate(T_low)
         deallocate(rms_low)
         deallocate(sample_T_low)
@@ -899,12 +901,12 @@ program dang
         do m = 1, size(joint_comps)
            if (joint_comps(m) == 'synch') then
               do i = 1, x
-                 fg_amp(i-1,map_n,par%fg_ref_loc(1),1) = b(w+i)
+                 fg_map(i-1,map_n,par%fg_ref_loc(1),1) = b(w+i)
               end do
               w = w + x
            else if (joint_comps(m) == 'dust') then
               do i = 1, x
-                 fg_amp(i-1,map_n,par%fg_ref_loc(2),3) = b(w+i)
+                 fg_map(i-1,map_n,par%fg_ref_loc(2),3) = b(w+i)
               end do
               w = w + x
            end if
@@ -915,10 +917,10 @@ program dang
               do while (l .lt. (nfit1))
                  do j= 1, z
                     if (j_corr01(j) .eqv. .true.) then
-                       fg_amp(:,map_n,j,2) = b(w+l)
+                       temp01_amps(j) = b(w+l)
                        l = l + 1
                     else
-                       fg_amp(:,map_n,j,2) = 0.d0
+                       temp01_amps(j) = 0.d0
                     end if
                  end do
               end do
@@ -927,7 +929,7 @@ program dang
               do while (l .lt. (nfit2))
                  do j= 1, z
                     if (j_corr02(j) .eqv. .true.) then
-                       fg_amp(:,map_n,j,2) = b(w+l)
+                       fg_map(:,map_n,j,2) = b(w+l)
                        l = l + 1
                     end if
                  end do
@@ -962,17 +964,17 @@ program dang
             do j = 1, nbands
                 title = trim(direct) // trim(par%dat_label(j)) // '_dust_fit_'// trim(tqu(nm)) & 
                         // '_' // trim(iter_str) // '.fits'
-                map(:,1)   = dust_map(:,nm,j)
+                map(:,1)   = temp01_amps(j)*template_01(:,nm)
                 call write_bintab(map,npix,1, header, nlheader, trim(title))
                 title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
                         // '_' // trim(iter_str) // '.fits'
-                map(:,1)   = fg_amp(:,nm,j,1)
+                map(:,1)   = fg_map(:,nm,j,1)
                 call write_bintab(map,npix,1, header, nlheader, trim(title))
             end do
         else 
             title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
                     // '_' // trim(iter_str) // '.fits'
-            map(:,1)   = fg_amp(:,nm,par%fg_ref_loc(1),1)
+            map(:,1)   = fg_map(:,nm,par%fg_ref_loc(1),1)
             call write_bintab(map,npix,1, header, nlheader, trim(title))
         end if
         do j = 1, nbands
@@ -987,7 +989,7 @@ program dang
         chi_map = 0.d0
         do i = 0, npix-1
             do j = 1, nbands
-                chi_map(i,nm) = chi_map(i,nm) + (maps(i,nm,j) - synch_map(i,nm,j) - dust_map(i,nm,j))**2.d0/rmss(i,nm,j)**2.d0
+               chi_map(i,nm) = chi_map(i,nm) + (maps(i,nm,j) - fg_map(i,nm,j,1) - fg_map(i,nm,j,2))**2.d0/rmss(i,nm,j)**2.d0
             end do
         end do
         chi_map(:,nm) = chi_map(:,nm)/(nbands+3)
@@ -1009,7 +1011,7 @@ program dang
         else
             open(30,file=title, status="new", action="write")
         endif
-        write(30,*) dust_map(100,k,par%fg_ref_loc(1))
+        write(30,*) fg_map(100,k,par%fg_ref_loc(1),2)
         close(30)
 
         title = trim(direct) // 'pixel_100_A_s.dat'
@@ -1019,7 +1021,7 @@ program dang
         else
             open(31,file=title, status="new", action="write")
         endif
-        write(31,*) fg_amp(100,k,par%fg_ref_loc(1),1)
+        write(31,*) fg_map(100,k,par%fg_ref_loc(1),1)
         close(31)
 
         title = trim(direct) // 'pixel_100_beta_s.dat'
@@ -1039,7 +1041,7 @@ program dang
         else
             open(33,file=title, status="new", action="write")
         endif
-        call compute_chisq(fg_amp,k,chisq)
+        call compute_chisq(fg_map,k)
         write(33,*) chisq
         close(33)
 
@@ -1050,7 +1052,7 @@ program dang
         else
             open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="new", action="write")
         endif
-        write(34,'(6(E17.8))') dust_amps
+        write(34,'(6(E17.8))') temp01_amps
         close(34)
 
     end subroutine write_data
@@ -1068,12 +1070,14 @@ program dang
       do i = 0, npix-1
         do j = 1, nbands
             s = 0.d0
-            signal = amp(i,map_n,j,1) + amp(i,map_n,j,2)*template_01(i,map_n)
-            s = s + signal
-            chisq = chisq + (((maps(i,map_n,j) - s)**2))/(rmss(i,map_n,j)**2)
+!            do m = 1, nfgs
+               signal = amp(i,map_n,j,1) + amp(i,map_n,j,2)
+               s = s + signal
+               chisq = chisq + (((maps(i,map_n,j) - s)**2))/(rmss(i,map_n,j)**2)
+ !           end do
         end do
       end do 
-      chisq = chisq/(sum(mask(:,map_n))+nbands+3) ! n-1 dof, npix + nbands + A_s + A_dust + A_cmb + \beta_s
+      chisq = chisq/(npix+nbands+3) ! n-1 dof, npix + nbands + A_s + A_dust + A_cmb + \beta_s
     end subroutine compute_chisq
 
   end program dang
