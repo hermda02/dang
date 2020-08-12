@@ -147,7 +147,7 @@ program dang
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
 
-    do k = 2, nmaps
+    do k = 1, nmaps
         
         if (rank == master) then
             if (k == 1) then
@@ -355,7 +355,7 @@ program dang
         integer(i4b),                               intent(in) :: map_n, nside2, comp
         real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data
         integer(i4b)                                           :: nside1, npix2
-        real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov
+        real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov 
         real(dp), dimension(0:npix-1,nmaps)                    :: indx
         real(dp), dimension(0:npix-1)                          :: indx_sample
         real(dp), allocatable, dimension(:,:,:)                :: data_low, fg_amp_low, rms_low
@@ -373,7 +373,7 @@ program dang
         ! Spectral index sampler, using the Metropolis-Hastings approach.
         !------------------------------------------------------------------------
 
-        map2fit = data
+!        map2fit = data
         cov     = rmss*rmss
 
         !------------------------------------------------------------------------
