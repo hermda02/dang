@@ -13,6 +13,9 @@ module param_mod
         logical(lgt)       :: output_fg
         character(len=512) :: outdir
         character(len=16)  :: solver
+        character(len=16)  :: mode
+        character(len=5)   :: tqu
+        integer(i4b), allocatable, dimension(:) :: pol_type
 
         ! Data parameters
         integer(i4b)   :: numband
@@ -33,7 +36,8 @@ module param_mod
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
         integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
-        integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg reference band
+        integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
+        logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_inc    ! Logical - sample fg parameter?
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
     end type params
@@ -95,6 +99,8 @@ contains
 
         call getarg(1,paramfile)
 
+        if (rank == master) write(*,*) 'Reading parameters from ', trim(paramfile)
+
         call get_file_length(paramfile,parfile_len)
         allocate(parfile_cache(parfile_len))
         call read_paramfile_to_ascii(paramfile,parfile_cache)
@@ -122,7 +128,6 @@ contains
         line_nr = 0
         depth   = 1
         units(depth) = getlun()
-        ! write(*,*) units(depth)
         filenames(depth) = paramfile
         open(units(depth),file=trim(paramfile),status="old")!,err=4)
         do while(depth >= 1)
@@ -170,7 +175,7 @@ contains
            key = get_token(toks(1), " ", 1, group="''" // '""')
            val = get_token(toks(2), " ", 1, group="''" // '""')
            call tolower(key)  ! we don't differentiate btw. upper and lower case                                                              
-           if (key=="") cycle !we don't need blank lines                                                                                      
+           if (key=="") cycle ! we don't need blank lines                                                                                      
            call put_hash_tbl_sll(htbl,trim(key),trim(val))
         end do
         return
@@ -275,8 +280,6 @@ contains
         
         deallocate(val)
         return
-        
-        !if (cpar%myid == cpar%root) then                                                                
          
     1   write(*,*) "Error: Could not find parameter '" // trim(parname) // "'"
         write(*,*) ""
@@ -300,6 +303,7 @@ contains
 
         type(hash_tbl_sll), intent(in)    :: htbl
         type(params),       intent(inout) :: par
+        integer(i4b)                      :: pol_count
 
         integer(i4b)     :: i, j, n, len_itext
         character(len=2) :: itext
@@ -311,6 +315,34 @@ contains
         call get_parameter_hashtable(htbl, 'OUTPUT_ITER', par_int=par%iter_out)
         call get_parameter_hashtable(htbl, 'OUTPUT_COMPS', par_lgt=par%output_fg)
         call get_parameter_hashtable(htbl, 'SOLVER_TYPE', par_string=par%solver)
+        call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
+        
+        ! Surely an inefficient way to decide which maps to use (T -> 1, Q -> 2, U -> 3), but it works
+        pol_count = 0
+        if (index(par%tqu,'T') /= 0) then
+            pol_count = pol_count + 1
+        end if
+        if (index(par%tqu,'Q') /= 0) then
+            pol_count = pol_count + 1
+        end if
+        if (index(par%tqu,'U') /= 0) then
+            pol_count = pol_count + 1
+        end if
+        allocate(par%pol_type(pol_count))
+        
+        pol_count = 0
+        if (index(par%tqu,'T') /= 0) then
+            pol_count = pol_count + 1
+            par%pol_type(pol_count) = 1
+        end if
+        if (index(par%tqu,'Q') /= 0) then
+            pol_count = pol_count + 1
+            par%pol_type(pol_count) = 2
+        end if
+        if (index(par%tqu,'U') /= 0) then
+            pol_count = pol_count + 1
+            par%pol_type(pol_count) = 3
+        end if
         
         par%outdir = trim(par%outdir) // '/'
 
@@ -367,7 +399,7 @@ contains
         allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
         allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_sample_amp(n))
         allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
-        allocate(par%fg_samp_nside(n,2))
+        allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
 
         allocate(par%temp_file(n))
         
@@ -384,16 +416,18 @@ contains
             call get_parameter_hashtable(htbl, 'COMP_INCLUDE'//itext, len_itext=len_itext, par_lgt=par%fg_inc(i))
 
             if (trim(par%fg_type(i)) == 'power-law') then
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
+                call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                     par_dp=par%fg_gauss(i,1,1))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
+                call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
                     par_dp=par%fg_gauss(i,1,2))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
+                call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
                     par_dp=par%fg_uni(i,1,1))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
+                call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
                     par_dp=par%fg_uni(i,1,2))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
+                call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
                     par_int=par%fg_samp_nside(i,1))
+                call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
+                    par_lgt=par%fg_samp_inc(i,1))
             else if (trim(par%fg_type(i)) == 'mbb') then
                call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                     par_dp=par%fg_gauss(i,1,1))

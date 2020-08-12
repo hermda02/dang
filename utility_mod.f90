@@ -3,7 +3,6 @@ module utility_mod
     use mpi
     use omp_lib
     implicit none
-!    include 'mpif.h'
 
     ! Constants
     real(dp)           :: k_B     = 1.3806503d-23
@@ -18,6 +17,7 @@ module utility_mod
     integer(i4b)       :: from_master = 1
     integer(i4b)       :: from_worker = 2
     integer(i4b) status(mpi_status_size)
+    character(len=80), dimension(3) :: tqu
 
 contains 
 
