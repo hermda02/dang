@@ -28,12 +28,12 @@ program dang
     ! frequency bands used here.                                                                          |
     !-----------------------------------------------------------------------------------------------------|  
       
-    integer(i4b)       :: i, j, k, l, iter, npix, nside, nmaps, ordering, ln
+    integer(i4b)       :: i, j, k, l, iter, npix, nside, nmaps, ordering, m
     integer(i4b)       :: beta_samp_nside, nlheader, niter, nfgs, iterations
-    integer(i4b)       :: output_iter, like_iter, m
+    integer(i4b)       :: output_iter
     real(dp)           :: nullval
     real(dp)           :: missval = -1.6375d30
-    logical(lgt)       :: anynull, double_precision, test, exist, output_fg
+    logical(lgt)       :: anynull, test, exist, output_fg
   
     character(len=128) :: template_file_01, template_file_02, mask_file, arg1
     character(len=128) :: mapfile, title, direct
@@ -51,10 +51,7 @@ program dang
     character(len=10)                            :: solver
     character(len=5)                             :: iter_str
     logical(lgt), allocatable, dimension(:)      :: j_corr01, j_corr02
-
     real(dp), allocatable, dimension(:,:)        :: mat_l, mat_u
-    real(dp), allocatable, dimension(:,:)        :: mat_test
-    real(dp), allocatable, dimension(:)          :: x, b, d
 
     ! Object Orient
     type(params)       :: par
@@ -65,8 +62,6 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     ! General paramters
     template_file_01  = par%temp_file(1)
-    ! template_file_02  = 'data/temp_synch_030_n0004.fits'
-    ! mask_file         = 'data/mask_fullsky_n0004.fits'
     tqu(1)            = 'T'
     tqu(2)            = 'Q'
     tqu(3)            = 'U'
@@ -668,7 +663,7 @@ program dang
         real(dp), allocatable, dimension(:,:)     :: A, val
         integer(i4b), allocatable, dimension(:,:) :: col_ptr, row_ind
         real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u
-        real(dp), allocatable, dimension(:)       :: b, c, d, rand
+        real(dp), allocatable, dimension(:)       :: b, c, d, rand, samp
         integer(i4b)                              :: x, y, z, nfit1, nfit2, w, l, m, n
         integer(i4b)                              :: vi, ci, ri, co, nnz, nnz_a
         integer(i4b)                              :: info
@@ -734,7 +729,7 @@ program dang
         allocate(A(y,y))
         allocate(b(y),c(y),d(y))
         allocate(mat_l(y,y),mat_u(y,y))
-        allocate(rand(y))
+        allocate(rand(y),samp(y))
         allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
 
         ! write(*,*) 'Initialize'
@@ -744,6 +739,7 @@ program dang
         c(:)              = 0.d0
         d(:)              = 0.d0
         rand(:)           = 0.d0
+        samp(:)           = 0.d0
         mat_l(:,:)        = 0.d0
 
         ! write(*,*) 'Fill Template Matrix'
@@ -880,17 +876,24 @@ program dang
            rand(i) = rand_normal(0.d0,1.d0)
         end do
 
-        if (rank == master) write(*,*) 'Complete LAPACK routines '
-        t2 = mpi_wtime()
-        mat_l = inv(A)
-        t3 = mpi_wtime()
-        write(*,*) 'inverted in ', t3-t2
+        write(*,*) 'Call Cholesky'
+        call cholesky_decomp(inv(A),mat_l,y)
 
-        if (rank == master) write(*,*) 'A inverted '
-        call dpotrf('L',y,mat_l,y,info)
-        if (rank == master) write(*,*) 'Decomposed '
-        call dtrmv('L','n','n',y,mat_l,y,rand,1)
-        if (rank == master) write(*,*) 'Vec multiplied '
+        write(*,*) 'multiply by random vector'
+        call lower_tri_Ax(mat_l,rand,y)
+        
+
+!        if (rank == master) write(*,*) 'Complete LAPACK routines '
+!        t2 = mpi_wtime()
+!        mat_l = inv(A)
+!        t3 = mpi_wtime()
+!        write(*,*) 'inverted in ', t3-t2
+
+!        if (rank == master) write(*,*) 'A inverted '
+!        call dpotrf('L',y,mat_l,y,info)
+!        if (rank == master) write(*,*) 'Decomposed '
+!        call dtrmv('L','n','n',y,mat_l,y,rand,1)
+!        if (rank == master) write(*,*) 'Vec multiplied '
 
         b = b + rand
 

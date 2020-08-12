@@ -46,16 +46,28 @@ contains
         real(dp), dimension(:,:), intent(in)  :: mat
         real(dp), dimension(:,:), intent(out) :: low
         integer(i4b),             intent(in)  :: n
-        integer(i4b)                          :: ip, i, j
-        real(dp)                              :: s
+        integer(i4b)                          :: ip, i, j, k
+        real(dp)                              :: sum
 
         low(:,:)   = 0.d0
 
-        do i = 1, n
-           low(i,i) = sqrt(mat(i,i) - dot_product(low(i,1:i-1),low(i,1:i-1)) )
-           do j = i+1, n
-              low(j,i) = (mat(j,i) - dot_product(low(j,1:i-1),low(i,1:i-1)))/low(i,i)
+        do j = 1, n
+           sum = 0.d0
+           do k = 1, j
+              sum = sum + low(j,k) * low(j,k)
            end do
+           low(j,j) = sqrt(mat(j,j)- sum)
+           !$OMP PARALLEL PRIVATE(i,k,sum) shared(mat,low,j)
+           !$OMP DO SCHEDULE(static)
+           do i = j+1, n
+              sum = 0.d0
+              do k = 1, j
+                 sum = sum + low(i,k)*low(j,k)
+              end do
+              low(i,j) = (1.d0/low(j,j)*(mat(i,j)-sum))
+           end do
+           !$OMP END DO
+           !$OMP END PARALLEL
         end do
 
         ! This code would be used for the LDU decomp:
@@ -387,6 +399,30 @@ contains
          call mpi_send(mm_mpi, cols*m, mpi_double_precision, master, mtype, mpi_comm_world, ierr)
       end if
     end function mm_mpi
+
+    subroutine lower_tri_Ax(A,x,n)
+      implicit none
+      real(dp), dimension(:,:), intent(in)  :: A
+      real(dp), dimension(:), intent(inout) :: x
+      integer(i4b)                          :: i, j, k, n
+      real(dp)                              :: temp
+
+      do j = n,1,-1
+         temp = 0.d0
+         if (x(j) /= 0.d0) then
+            temp = x(j)
+            !$OMP PARALLEL PRIVATE(i)
+            !$OMP DO SCHEDULE(static)
+            do i = n, j+1, -1
+               x(i) = x(i) + temp*a(i,j)
+            end do
+            !$OMP END DO
+            !$OMP END PARALLEL
+            x(j) = x(j)*a(j,j)
+         end if
+      end do
+
+    end subroutine lower_tri_Ax
 
     function compute_ATA(mat) result(B)
       implicit none
