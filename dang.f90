@@ -79,7 +79,6 @@ program dang
     direct            = par%outdir               ! Output directory name
     beta_samp_nside   = par%fg_samp_nside(1,1)   ! \beta_synch nside sampling
     !----------------------------------------------------------------------------------------------------------
-    proc_per_band = numprocs/nbands
     !----------------------------------------------------------------------------------------------------------
     ! Array allocation
     allocate(template_01(0:npix-1,nmaps), template_02(0:npix-1,nmaps), j_corr01(nbands), j_corr02(nbands))
@@ -88,13 +87,13 @@ program dang
     allocate(fg_amp(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
     allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps))
     allocate(cmb_map(0:npix-1,nmaps,nbands), dust_map(0:npix-1,nmaps,nbands), synch_map(0:npix-1,nmaps,nbands))
-    allocate(dust_amps(nbands), temp_norm_01(3), temp_norm_02(3))
+    allocate(dust_amps(nbands), temp_norm_01(nmaps), temp_norm_02(nmaps))
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
     beta_s     = -3.10d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
-
+    mask       = 1.d0
     !----------------------------------------------------------------------------------------------------------
     ! Read maps
 
@@ -130,7 +129,7 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Normalize template to avoid large values in the matrix equation
-    do k = 1, 3
+    do k = 1, nmaps
        temp_norm_01(k) = maxval(template_01(:,k))
        template_01(:,k)  = template_01(:,k)/temp_norm_01(k)
     end do
@@ -204,23 +203,22 @@ program dang
             end do
             synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
-
             res       = maps - synch_map - dust_map
 
-            call compute_chisq(fg_amp,k)
+            call compute_chisq(fg_amp,k,chisq)
 
             if (rank == master) then
                if (mod(iter, 1) == 0 .or. iter == 1) then
-                  write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
+                  write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
                        iter, " - chisq: " , chisq, " - A_s: ",&
                        fg_amp(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
                        sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps/temp_norm_01(k)
                end if
-
-               call write_data
                if (mod(iter,output_iter) .EQ. 0) then
                   call write_maps(k)
                end if
+
+               call write_data
             end if
         end do    
     end do
@@ -428,7 +426,7 @@ program dang
               end if
            end do
            rms_low = sqrt(rms_low / (npix/npix2))
-        else
+        else 
            do j = 1, nbands
               data_low(:,:,j)   = data(:,:,j)
               fg_amp_low(:,:,j) = fg_amp(:,:,j,1)
@@ -996,6 +994,7 @@ program dang
         chi_map(:,nm) = chi_map(:,nm)/(nbands+3)
         title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
         map(:,1)   = chi_map(:,nm)
+        ! write(*,*) 'chisq sum ', sum(chi_map(:,nm))
         call write_bintab(map,npix,1, header, nlheader, trim(title))
 
     end subroutine write_maps
@@ -1041,7 +1040,7 @@ program dang
         else
             open(33,file=title, status="new", action="write")
         endif
-        call compute_chisq(fg_amp,k)
+        call compute_chisq(fg_amp,k,chisq)
         write(33,*) chisq
         close(33)
 
@@ -1057,26 +1056,25 @@ program dang
 
     end subroutine write_data
   
-! Still need to rewrite vv
-
-    subroutine compute_chisq(amp,map_n)
+    subroutine compute_chisq(amp,map_n,chisq)
       use healpix_types
       implicit none
-      real(dp), dimension(0:npix-1,nmaps,nbands,3), intent(in)   :: amp
-      integer(i4b), intent(in)                                   :: map_n
-      real(dp)                                                   :: s, signal
-      integer(i4b)                                               :: m,n
+      real(dp), dimension(0:npix-1,nmaps,nbands,3), intent(in)    :: amp
+      integer(i4b),                                 intent(in)    :: map_n
+      real(dp),                                     intent(inout) :: chisq
+      real(dp)                                                    :: s, signal
+      integer(i4b)                                                :: i,j
   
       chisq = 0.d0
       do i = 0, npix-1
         do j = 1, nbands
             s = 0.d0
-            signal = amp(i,map_n,j,1)*mask(i,1) + amp(i,map_n,j,2)*template_01(i,map_n)*mask(i,1)
+            signal = amp(i,map_n,j,1) + amp(i,map_n,j,2)*template_01(i,map_n)
             s = s + signal
-            chisq = chisq + (((maps(i,map_n,j) - s)**2))/(rmss(i,map_n,j)**2)*mask(i,1)
+            chisq = chisq + (((maps(i,map_n,j) - s)**2))/(rmss(i,map_n,j)**2)
         end do
       end do 
-      chisq = chisq/(sum(mask(:,1))+nbands+3) ! n-1 dof, npix + nbands + A_s + A_dust + A_cmb + \beta_s
+      chisq = chisq/(sum(mask(:,map_n))+nbands+3) ! n-1 dof, npix + nbands + A_s + A_dust + A_cmb + \beta_s
     end subroutine compute_chisq
 
   end program dang
