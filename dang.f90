@@ -211,7 +211,7 @@ program dang
 
             if (rank == master) then
                if (mod(iter, 1) == 0 .or. iter == 1) then
-                  write(*,fmt='(i6, a, f10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
+                  write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
                        iter, " - chisq: " , chisq, " - A_s: ",&
                        fg_amp(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
                        sum(beta_s(:,k))/npix, ' - A_d: ', dust_amps/temp_norm_01(k)
@@ -1071,12 +1071,12 @@ program dang
       do i = 0, npix-1
         do j = 1, nbands
             s = 0.d0
-            signal = amp(i,map_n,j,1)*mask(i,1) + amp(i,map_n,j,2)*template_01(i,map_n)*mask(i,1)
+            signal = amp(i,map_n,j,1) + amp(i,map_n,j,2)*template_01(i,map_n)
             s = s + signal
-            chisq = chisq + (((maps(i,map_n,j) - s)**2))/(rmss(i,map_n,j)**2)*mask(i,1)
+            chisq = chisq + (((maps(i,map_n,j) - s)**2))/(rmss(i,map_n,j)**2)
         end do
       end do 
-      chisq = chisq/(sum(mask(:,1))+nbands+3) ! n-1 dof, npix + nbands + A_s + A_dust + A_cmb + \beta_s
+      chisq = chisq/(npix+nbands+3) ! n-1 dof, npix + nbands + A_s + A_dust + A_cmb + \beta_s
     end subroutine compute_chisq
 
   end program dang
