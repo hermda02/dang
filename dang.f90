@@ -89,8 +89,8 @@ program dang
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
     beta_s     = -3.10d0    ! Synchrotron beta initial guess
-    beta_d     = 1.60d0     ! Dust beta initial guess
-    mask       = 1.d0
+    beta_d     =  1.60d0    ! Dust beta initial guess
+    mask       =  1.d0
     !----------------------------------------------------------------------------------------------------------
     ! Read maps
 
