@@ -7,28 +7,29 @@ module param_mod
     type params
 
         ! Global parameters
-        integer(i4b)       :: ngibbs
-        integer(i4b)       :: nsample  ! For things like the metrop-hast alg
-        integer(i4b)       :: iter_out ! Out put maps every <- iterations
-        logical(lgt)       :: output_fg
-        character(len=512) :: outdir
-        character(len=16)  :: solver
-        character(len=16)  :: mode
-        character(len=5)   :: tqu
-        integer(i4b), allocatable, dimension(:) :: pol_type
+        integer(i4b)       :: ngibbs     ! Number of Gibbs iterations
+        integer(i4b)       :: nsample    ! For things like the metrop-hast alg
+        integer(i4b)       :: iter_out   ! Out put maps every <- iterations
+        logical(lgt)       :: output_fg  ! Do we output the foregrounds at each frequency?
+        character(len=512) :: outdir     ! Output directory
+        character(len=16)  :: solver     ! Linear system solver type
+        character(len=16)  :: mode       ! 'dang' mode ('comp_sep', 'HI_fit')
+        character(len=5)   :: tqu        ! Which pol_type to sample
+        integer(i4b), allocatable, dimension(:) :: pol_type ! Points above to map number
 
         ! Data parameters
-        integer(i4b)   :: numband
-        character(len=512) :: datadir
-        character(len=512), allocatable, dimension(:)   :: dat_label
-        character(len=512), allocatable, dimension(:)   :: dat_mapfile
-        character(len=512), allocatable, dimension(:)   :: dat_noisefile
-        real(dp),           allocatable, dimension(:)   :: dat_nu
+        integer(i4b)                                    :: numband       ! Number of bands
+        character(len=512)                              :: datadir       ! Directory to look for bandfiles in
+        character(len=512), allocatable, dimension(:)   :: dat_label     ! Band label
+        character(len=512), allocatable, dimension(:)   :: dat_mapfile   ! Band filename
+        character(len=512), allocatable, dimension(:)   :: dat_noisefile ! Band rms filename
+        real(dp),           allocatable, dimension(:)   :: dat_nu        ! Band frequency (in GHz)
 
         ! Component parameters
         integer(i4b)   :: ncomp                                             ! # of foregrounds
         integer(i4b)   :: ntemp                                             ! # of templates
         character(len=512), allocatable, dimension(:)     :: temp_file      ! Template Filename
+        logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates ift
         logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
         logical(lgt),       allocatable, dimension(:,:)   :: fg_sample_spec ! Logical - sample spec params
         logical(lgt),       allocatable, dimension(:)     :: fg_sample_amp  ! Logical - sample amplitude
@@ -384,11 +385,12 @@ contains
         type(hash_tbl_sll), intent(in)    :: htbl
         type(params),       intent(inout) :: par
 
-        integer(i4b)     :: i, j, n, n2, len_itext
+        integer(i4b)     :: i, j, n, n2, len_itext, len_jtext
         character(len=2) :: itext
         character(len=2) :: jtext
 
         len_itext = len(trim(itext))
+        len_jtext = len(trim(jtext))
 
         call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
         call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
@@ -401,11 +403,18 @@ contains
         allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
         allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
 
-        allocate(par%temp_file(n))
+        allocate(par%temp_file(n2))
+
+        allocate(par%temp_corr(n2,par%numband))
         
         do i = 1, n2
             call int2string(i, itext)
             call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext, len_itext=len_itext, par_string=par%temp_file(i))
+            do j = 1, par%numband
+                call int2string(j,jtext)
+                call get_parameter_hashtable(htbl, 'TEMPLATE'//trim(itext)//'_FIT'//jtext,&
+                                             len_itext=len_jtext,par_lgt=par%temp_corr(i,j))
+            end do
         end do
 
         do i = 1, n
