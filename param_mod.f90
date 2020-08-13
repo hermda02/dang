@@ -20,6 +20,7 @@ module param_mod
         ! Data parameters
         integer(i4b)                                    :: numband       ! Number of bands
         character(len=512)                              :: datadir       ! Directory to look for bandfiles in
+        character(len=512)                              :: mask_file      ! Mask filename
         character(len=512), allocatable, dimension(:)   :: dat_label     ! Band label
         character(len=512), allocatable, dimension(:)   :: dat_mapfile   ! Band filename
         character(len=512), allocatable, dimension(:)   :: dat_noisefile ! Band rms filename
@@ -41,6 +42,11 @@ module param_mod
         logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_inc    ! Logical - sample fg parameter?
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
+
+        real(dp)                                          :: thresh         ! Threshold for the HI fitting (sample pixels under thresh)
+        character(len=512)                                :: HI_file        ! HI map filename
+        real(dp)                                          :: HI_Td_init     ! HI fitting dust temp estimate
+
     end type params
 
 contains
@@ -316,6 +322,7 @@ contains
         call get_parameter_hashtable(htbl, 'OUTPUT_ITER', par_int=par%iter_out)
         call get_parameter_hashtable(htbl, 'OUTPUT_COMPS', par_lgt=par%output_fg)
         call get_parameter_hashtable(htbl, 'SOLVER_TYPE', par_string=par%solver)
+        call get_parameter_hashtable(htbl, 'SOLVER_MODE', par_string=par%mode)
         call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
         
         ! Surely an inefficient way to decide which maps to use (T -> 1, Q -> 2, U -> 3), but it works
@@ -363,7 +370,8 @@ contains
 
         call get_parameter_hashtable(htbl, 'NUMBAND',    par_int=par%numband)
         call get_parameter_hashtable(htbl, 'DATA_DIRECTORY', par_string=par%datadir)
-        
+        call get_parameter_hashtable(htbl, 'MASKFILE', par_string=par%mask_file)
+
         n = par%numband
 
         allocate(par%dat_mapfile(n),par%dat_label(n))
@@ -457,6 +465,12 @@ contains
             end if
             par%fg_ref_loc(i) = minloc(abs(par%dat_nu-par%fg_nu_ref(i)),1)
         end do
+
+        if (trim(par%mode) == 'HI_fit') then
+            call get_parameter_hashtable(htbl,'HI_THRESH', par_dp=par%thresh)
+            call get_parameter_hashtable(htbl,'HI_file',par_string=par%HI_file)
+            call get_parameter_hashtable(htbl,'T_MAP_INIT',par_dp=par%HI_Td_init)
+        end if
 
     end subroutine read_comp_params
 
