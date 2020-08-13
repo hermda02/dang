@@ -88,7 +88,7 @@ program dang
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
-    beta_s     = -3.00d0    ! Synchrotron beta initial guess
+    beta_s     = -3.10d0    ! Synchrotron beta initial guess
     beta_d     = 1.60d0     ! Dust beta initial guess
     mask       = 1.d0
     !----------------------------------------------------------------------------------------------------------
@@ -189,8 +189,6 @@ program dang
 
             ! -------------------------------------------------------------------------------------------------------------------
             if (par%fg_samp_inc(1,1)) then
-               write(*,*) 'yep'
-               write(*,*) par%fg_samp_nside(1,1)
                nodust(:,k,:) = maps(:,k,:)-fg_map(:,k,:,2)
                call sample_index(par,nodust,par%fg_samp_nside(1,1),1,k)
                do i = 0, npix-1
@@ -206,7 +204,7 @@ program dang
                res(:,k,:)  = res(:,k,:) - fg_map(:,k,:,i)
             end do
 
-            call compute_chisq(fg_map,k)
+            call compute_chisq(fg_map,k,chisq)
 
             if (rank == master) then
                if (mod(iter, 1) == 0 .or. iter == 1) then
@@ -1041,7 +1039,7 @@ program dang
         else
             open(33,file=title, status="new", action="write")
         endif
-        call compute_chisq(fg_map,k)
+        call compute_chisq(fg_map,k,chisq)
         write(33,*) chisq
         close(33)
 
