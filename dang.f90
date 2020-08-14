@@ -77,6 +77,7 @@ program dang
     output_fg         = par%output_fg            ! Option for outputting foregrounds for all bands
     direct            = par%outdir               ! Output directory name
     !----------------------------------------------------------------------------------------------------------
+    proc_per_band = numprocs/nbands
     !----------------------------------------------------------------------------------------------------------
     ! Array allocation
     allocate(template_01(0:npix-1,nmaps), template_02(0:npix-1,nmaps), j_corr01(nbands), j_corr02(nbands))
@@ -88,9 +89,9 @@ program dang
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
-    beta_s     = -3.10d0    ! Synchrotron beta initial guess
-    beta_d     =  1.60d0    ! Dust beta initial guess
-    mask       =  1.d0
+    beta_s     = -3.00d0    ! Synchrotron beta initial guess
+    beta_d     = 1.60d0     ! Dust beta initial guess
+
     !----------------------------------------------------------------------------------------------------------
     ! Read maps
 
@@ -126,7 +127,7 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Normalize template to avoid large values in the matrix equation
-    do k = 1, nmaps
+    do k = 1, 3
        temp_norm_01(k) = maxval(template_01(:,k))
        template_01(:,k)  = template_01(:,k)/temp_norm_01(k)
     end do
@@ -204,7 +205,7 @@ program dang
                res(:,k,:)  = res(:,k,:) - fg_map(:,k,:,i)
             end do
 
-            call compute_chisq(fg_map,k,chisq)
+            call compute_chisq(fg_map,k)
 
             if (rank == master) then
                if (mod(iter, 1) == 0 .or. iter == 1) then
@@ -213,11 +214,11 @@ program dang
                        fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
                        sum(beta_s(:,k))/npix, ' - A_d: ', temp01_amps/temp_norm_01(k)
                end if
+
+               call write_data
                if (mod(iter,output_iter) .EQ. 0) then
                   call write_maps(k)
                end if
-
-               call write_data
             end if
         end do    
     end do
@@ -354,7 +355,7 @@ program dang
         integer(i4b),                               intent(in) :: map_n, nside2, comp
         real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data
         integer(i4b)                                           :: nside1, npix2
-        real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov 
+        real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov
         real(dp), dimension(0:npix-1,nmaps)                    :: indx
         real(dp), dimension(0:npix-1)                          :: indx_sample
         real(dp), allocatable, dimension(:,:,:)                :: data_low, fg_map_low, rms_low
@@ -372,7 +373,7 @@ program dang
         ! Spectral index sampler, using the Metropolis-Hastings approach.
         !------------------------------------------------------------------------
 
-!        map2fit = data
+        map2fit = data
         cov     = rmss*rmss
 
         !------------------------------------------------------------------------
@@ -425,7 +426,7 @@ program dang
               end if
            end do
            rms_low = sqrt(rms_low / (npix/npix2))
-        else 
+        else
            do j = 1, nbands
               data_low(:,:,j)   = data(:,:,j)
               fg_map_low(:,:,j) = fg_map(:,:,j,1)
@@ -993,7 +994,6 @@ program dang
         chi_map(:,nm) = chi_map(:,nm)/(nbands+3)
         title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
         map(:,1)   = chi_map(:,nm)
-        ! write(*,*) 'chisq sum ', sum(chi_map(:,nm))
         call write_bintab(map,npix,1, header, nlheader, trim(title))
 
     end subroutine write_maps
@@ -1039,7 +1039,7 @@ program dang
         else
             open(33,file=title, status="new", action="write")
         endif
-        call compute_chisq(fg_map,k,chisq)
+        call compute_chisq(fg_map,k)
         write(33,*) chisq
         close(33)
 
@@ -1055,14 +1055,15 @@ program dang
 
     end subroutine write_data
   
-    subroutine compute_chisq(amp,map_n,chisq)
+! Still need to rewrite vv
+
+    subroutine compute_chisq(amp,map_n)
       use healpix_types
       implicit none
-      real(dp), dimension(0:npix-1,nmaps,nbands,3), intent(in)    :: amp
-      integer(i4b),                                 intent(in)    :: map_n
-      real(dp),                                     intent(inout) :: chisq
-      real(dp)                                                    :: s, signal
-      integer(i4b)                                                :: i,j
+      real(dp), dimension(0:npix-1,nmaps,nbands,3), intent(in)   :: amp
+      integer(i4b), intent(in)                                   :: map_n
+      real(dp)                                                   :: s, signal
+      integer(i4b)                                               :: m,n
   
       chisq = 0.d0
       do i = 0, npix-1
