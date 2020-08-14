@@ -75,3 +75,9 @@ BAND_FREQ05   = 100.0    # In GHz
 NUMTEMP  = 1
 
 TEMPLATE_FILENAME01 = 'data/test_data/npipe6v20_353_map_Q_n0008.fits'
+
+TEMPLATE01_FIT01    = .true.
+TEMPLATE01_FIT02    = .true.
+TEMPLATE01_FIT03    = .true.
+TEMPLATE01_FIT04    = .true.
+TEMPLATE01_FIT05    = .false.

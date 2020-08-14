@@ -49,7 +49,6 @@ program dang
     character(len=80), allocatable, dimension(:) :: joint_comps
     character(len=10)                            :: solver
     character(len=5)                             :: iter_str
-    logical(lgt), allocatable, dimension(:)      :: j_corr01, j_corr02
     real(dp), allocatable, dimension(:,:)        :: mat_l, mat_u
 
     ! Object Orient
@@ -80,7 +79,7 @@ program dang
     proc_per_band = numprocs/nbands
     !----------------------------------------------------------------------------------------------------------
     ! Array allocation
-    allocate(template_01(0:npix-1,nmaps), template_02(0:npix-1,nmaps), j_corr01(nbands), j_corr02(nbands))
+    allocate(template_01(0:npix-1,nmaps), template_02(0:npix-1,nmaps))
     allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands), nodust(0:npix-1,nmaps,nbands))
     allocate(mask(0:npix-1,1), res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps))
     allocate(fg_map(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
@@ -110,21 +109,6 @@ program dang
 !    call read_bintab(mask_file,mask,npix,1,nullval,anynull,header=header)
 !    call read_bintab(template_file_02,template_02,npix,nmaps,nullval,anynull,header=header)
 
-    !----------------------------------------------------------------------------------------------------------
-    !----------------------------------------------------------------------------------------------------------
-    ! Choose which bands for fitting templates
-    j_corr01(1) = .true.
-    j_corr01(2) = .true.
-    j_corr01(3) = .true.
-    j_corr01(4) = .true.
-    j_corr01(5) = .false.
-
-    j_corr02(1) = .false.
-    j_corr02(2) = .false.
-    j_corr02(3) = .false.
-    j_corr02(4) = .false.
-    j_corr02(5) = .false.
-    !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Normalize template to avoid large values in the matrix equation
     do k = 1, 3
@@ -362,9 +346,8 @@ program dang
         real(dp), allocatable, dimension(:,:)                  :: indx_low
         real(dp), allocatable, dimension(:)                    :: indx_sample_low
         real(dp), dimension(nbands)                            :: signal, tmp
-        real(dp), dimension(2)                                 :: x, pars, prior
+        real(dp), dimension(2)                                 :: x
         real(dp)                                               :: a, b, c, num, sam, t, p, sol
-        real(dp)                                               :: mu, sigma, d1, d2
 
         real(dp)                                               :: naccept   
         logical                                                :: exist
@@ -386,9 +369,9 @@ program dang
         end if
         
         if (rank == master) then
-           if (mod(iter,output_iter) .EQ. 0) then
-              write(*,*) 'Sampling ' // trim(self%fg_label(comp)) // ' beta at nside', nside2
-           end if
+            if (mod(iter,output_iter) .EQ. 0) then
+                write(*,*) 'Sampling ' // trim(self%fg_label(comp)) // ' beta at nside', nside2
+            end if
         end if
 
         !------------------------------------------------------------------------
@@ -508,13 +491,12 @@ program dang
 
 
     ! This architecture of this function has not been modified yet
-    function sample_HI_T(self, band, npix, map_n, sigma, T_map, nside2)
+    function sample_HI_T(self, band, nside2, T_map, map_n)
         implicit none
   
         class(params)                                          :: self
-        integer(i4b), intent(in)                               :: npix, map_n, nside2
+        integer(i4b), intent(in)                               :: map_n, nside2
         integer(i4b)                                           :: nside1, npix2
-        real(dp), intent(in)                                   :: sigma
         real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: band
         real(dp), dimension(0:npix-1,nmaps), intent(in)        :: T_map
         real(dp), dimension(0:npix-1)                          :: sample_hi_T
@@ -688,7 +670,7 @@ program dang
                 ! Count how many bands are not being fit
                 nfit1 = 0
                 do j = 1, nbands
-                    if (j_corr01(j) .eqv. .true.) then
+                     if (par%temp_corr(1,j)) then
                         nfit1 = nfit1 + 1
                     end if
                 end do
@@ -698,7 +680,7 @@ program dang
                 ! Count how many bands are not being fit
                 nfit2 = 0
                 do j = 1, nbands
-                    if (j_corr02(j) .eqv. .true.) then
+                    if (par%temp_corr(2,j)) then
                         nfit2 = nfit2 + 1
                     end if
                 end do
@@ -760,7 +742,7 @@ program dang
               col_ptr(ci,j) = co
               ci            = ci + 1
            end do
-           if (j_corr01(j) .eqv. .true.) then
+           if (par%temp_corr(1,j)) then
               do i = 1, x
                  val(vi,j)     = template_01(i-1,map_n)/rmss(i-1,map_n,j)
                  co            = co + 1
@@ -802,29 +784,29 @@ program dang
         end do
         do m = 1, size(joint_comps)
             if (joint_comps(m) == 'template01') then
-               l = 1
-               do j = 1, z
-                  if (j_corr01(j) .eqv. .true.) then
-                     do i = 1, x
-                        c(w+l) = c(w+l)+1.d0/(rmss(i-1,map_n,j)**2.d0)*maps(i-1,map_n,j)*&
-                                 template_01(i-1,map_n)
-                     end do
-                     l = l + 1
-                  end if
-               end do
-               w = w + l  
+                l = 1
+                do j = 1, z
+                    if (par%temp_corr(1,j)) then
+                        do i = 1, x
+                            c(w+l) = c(w+l)+1.d0/(rmss(i-1,map_n,j)**2.d0)*maps(i-1,map_n,j)*&
+                                     template_01(i-1,map_n)
+                        end do
+                        l = l + 1
+                    end if
+                end do
+                w = w + l  
             else if (joint_comps(m) == 'template02') then
-               l = 1
-               do j = 1, z
-                  if (j_corr02(j) .eqv. .true.) then
-                     do i = 1, x
-                        c(w+l) = c(w+l)+1.d0/(rmss(i-1,map_n,j)**2.d0)*maps(i-1,map_n,j)*&
-                                 template_02(i-1,map_n)
-                     end do
-                     l = l + 1
-                  end if
-               end do
-               w = w + l
+                l = 1
+                do j = 1, z
+                    if (par%temp_corr(2,j)) then
+                        do i = 1, x
+                            c(w+l) = c(w+l)+1.d0/(rmss(i-1,map_n,j)**2.d0)*maps(i-1,map_n,j)*&
+                                     template_02(i-1,map_n)
+                        end do
+                        l = l + 1
+                    end if
+                end do
+                w = w + l
             end if
         end do
 
@@ -915,7 +897,7 @@ program dang
               l = 1
               do while (l .lt. (nfit1))
                  do j= 1, z
-                    if (j_corr01(j) .eqv. .true.) then
+                    if (par%temp_corr(1,j)) then
                        temp01_amps(j) = b(w+l)
                        l = l + 1
                     else
@@ -927,7 +909,7 @@ program dang
               l = 1
               do while (l .lt. (nfit2))
                  do j= 1, z
-                    if (j_corr02(j) .eqv. .true.) then
+                    if (par%temp_corr(2,j)) then
                        fg_map(:,map_n,j,2) = b(w+l)
                        l = l + 1
                     end if
