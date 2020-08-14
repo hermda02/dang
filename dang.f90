@@ -264,9 +264,11 @@ program dang
                         iter, " - chisq: " , chisq, " - mean T_d: ", T_d_mean, ' - Amps: ', temp01_amps
                 end if
 
-                ! if (mod(iter,output_iter) .EQ. 0) then
-                call write_maps(k,par%mode)
-                ! end if
+                if (mod(iter,output_iter) .EQ. 0) then
+                    call write_maps(k,par%mode)
+                end if
+
+                call write_data(par%mode)
 
             end do
         else   

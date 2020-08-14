@@ -1,0 +1,100 @@
+# General Parameters
+#--------------------
+
+NUMGIBBS            = 100    # # of Gibbs iterations
+NUMSAMPLE           = 100   # # of iterations in the samplers
+OUTPUT_ITER         = 5     # Output maps every <- iterations
+OUTPUT_COMPS        = .true. # Option for outputting foregrounds for all bands
+SOLVER_TYPE         = 'cg' # Method possibilities are 'cg', 'lu', and 'cholesky'
+SOLVER_MODE         = 'HI_fit'
+TQU                 = 'T'
+
+NUMBAND             = 6
+NUMCOMPS            = 1
+NUMTEMPS            = 1
+
+OUTPUT_DIRECTORY    = 'test_dir/hi_test/hi_test_v02/' 
+DATA_DIRECTORY      = 'data/test_data/hi_data/'
+MASKFILE            = 'data/mask_fullsky_n0008.fits'
+HI_file             = 'data/HI_vel_filter_60arcmin_n0008.fits'
+
+# Band Info
+#--------------------
+
+# Band 01
+BAND_LABEL01  = 'npipe_353-5'
+BAND_FILE01   = 'npipe6v20_353-5_60arcmin_n0008_calibrated.fits'
+BAND_RMS01    = 'npipe6v20_353-5_n0008_rms_MJy.fits'
+BAND_FREQ01   = 353.0    # In GHz
+
+# Band 02
+BAND_LABEL02  = 'npipe_545-1'
+BAND_FILE02   = 'npipe6v20_545-1_60arcmin_n0008_calibrated.fits'
+BAND_RMS02    = 'npipe6v20_545-1_n0008_rms_MJy.fits'
+BAND_FREQ02   = 545.0    # In GHz
+
+# Band 03
+BAND_LABEL03  = 'npipe_857-1'
+BAND_FILE03   = 'npipe6v20_857-1_60arcmin_n0008_calibrated.fits'
+BAND_RMS03    = 'npipe6v20_857-1_n0008_rms_MJy.fits'
+BAND_FREQ03   = 857.0    # In GHz
+
+# Band 04
+BAND_LABEL04  = 'DIRBE_240um'
+BAND_FILE04   = 'DIRBE_240micron_60arcmin_n0008_calibrated.fits'
+BAND_RMS04    = 'DIRBE_240micron_n0008_rms_MJy.fits'
+BAND_FREQ04   = 1249.0    # In GHz
+
+# Band 05
+BAND_LABEL05  = 'DIRBE_140um'
+BAND_FILE05   = 'DIRBE_140micron_60arcmin_n0008_calibrated.fits'
+BAND_RMS05    = 'DIRBE_140micron_n0008_rms_MJy.fits'
+BAND_FREQ05   = 2414.0    # In GHz
+
+# Band 06
+BAND_LABEL06  = 'DIRBE_100um'
+BAND_FILE06   = 'DIRBE_100micron_60arcmin_n0008_calibrated.fits'
+BAND_RMS06    = 'DIRBE_100micron_n0008_rms_MJy.fits'
+BAND_FREQ06   = 2998.0    # In GHz
+
+# HI fitting information
+
+HI_THRESH  = 4.0d20
+T_MAP_INIT = 19.6d0
+T_MEAN     = 19.6d0
+T_STD      = 1.0d0
+
+# Template Information
+#--------------------
+
+NUMTEMP  = 1
+
+TEMPLATE_FILENAME01 = 'data/test_data/npipe6v20_353_map_Q_n0008.fits'
+
+TEMPLATE01_FIT01    = .true.
+TEMPLATE01_FIT02    = .true.
+TEMPLATE01_FIT03    = .true.
+TEMPLATE01_FIT04    = .true.
+TEMPLATE01_FIT05    = .false.
+TEMPLATE01_FIT06    = .false.
+
+# COMP_SEP INFORMATION 
+
+# Foreground Information
+#-----------------------
+
+COMP_LABEL01        = 'synch'
+COMP_TYPE01         = 'power-law'
+COMP_INCLUDE01      = .true.
+COMP_BETA01         = -3.10
+COMP_REF_FREQ01     = 45.0 
+
+COMP_PRIOR_GAUSS_BETA_MEAN01 = -3.10
+COMP_PRIOR_GAUSS_BETA_STD01  = 0.01
+COMP_PRIOR_UNI_BETA_LOW01    = -4.0
+COMP_PRIOR_UNI_BETA_HIGH01   = -2.5
+COMP_BETA_SAMP_NSIDE01       = 4
+COMP_BETA_SAMPLE01           = .true.
+
+
+JOINT_SAMPLE_GROUP01 = 'synch', 'template01'
