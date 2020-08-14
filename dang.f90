@@ -44,7 +44,7 @@ program dang
     real(dp), allocatable, dimension(:,:)        :: template_01, template_02, map, rms
     real(dp), allocatable, dimension(:,:)        :: beta_s, T_d, beta_d, chi_map, mask, HI
     real(dp), allocatable, dimension(:)          :: temp01_amps, temp02_amps, temp_norm_01, temp_norm_02
-    real(dp)                                     :: chisq
+    real(dp)                                     :: chisq, T_d_mean
     character(len=80), dimension(180)            :: header
     character(len=80), allocatable, dimension(:) :: joint_comps
     character(len=10)                            :: solver
@@ -76,7 +76,6 @@ program dang
     output_fg         = par%output_fg            ! Option for outputting foregrounds for all bands
     direct            = par%outdir               ! Output directory name
     !----------------------------------------------------------------------------------------------------------
-    proc_per_band = numprocs/nbands
     !----------------------------------------------------------------------------------------------------------
     ! Array allocation
     allocate(template_01(0:npix-1,nmaps), template_02(0:npix-1,nmaps))
@@ -84,19 +83,13 @@ program dang
     allocate(mask(0:npix-1,1), res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps))
     allocate(fg_map(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
     allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps))
-    allocate(temp01_amps(nbands), temp_norm_01(3), temp_norm_02(3))
+    allocate(temp01_amps(nbands), temp02_amps(nbands), temp_norm_01(3), temp_norm_02(3))
     allocate(HI(0:npix-1,nmaps))
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
-<<<<<<< HEAD
     beta_s     = -3.10d0    ! Synchrotron beta initial guess
     beta_d     =  1.60d0    ! Dust beta initial guess
-=======
-    beta_s     = -3.00d0    ! Synchrotron beta initial guess
-    beta_d     = 1.60d0     ! Dust beta initial guess
-
->>>>>>> 71bef3f071c2571beec610c81133b52f74fa97fe
     !----------------------------------------------------------------------------------------------------------
     ! Read maps
 
@@ -117,7 +110,7 @@ program dang
 
     !----------------------------------------------------------------------------------------------------------
     ! Normalize template to avoid large values in the matrix equation
-    do k = 1, 3
+    do k = 1, nmaps
        temp_norm_01(k) = maxval(template_01(:,k))
        template_01(:,k)  = template_01(:,k)/temp_norm_01(k)
     end do
@@ -194,10 +187,10 @@ program dang
                 
                 res = maps
                 do i = 1, nfgs
-                res(:,k,:)  = res(:,k,:) - fg_map(:,k,:,i)
+                    res(:,k,:)  = res(:,k,:) - fg_map(:,k,:,i)
                 end do
 
-                call compute_chisq(fg_map,k,chisq)
+                call compute_chisq(k,chisq,par%mode)
 
                 if (rank == master) then
                 if (mod(iter, 1) == 0 .or. iter == 1) then
@@ -207,11 +200,10 @@ program dang
                         sum(beta_s(:,k))/npix, ' - A_d: ', temp01_amps/temp_norm_01(k)
                 end if
                 if (mod(iter,output_iter) .EQ. 0) then
-                    call write_maps(k)
+                    call write_maps(k,par%mode)
                 end if
 
-<<<<<<< HEAD
-                call write_data
+                call write_data(par%mode)
                 end if
             end do    
 
@@ -230,33 +222,57 @@ program dang
                     n2fit = n2fit + 1
                 end if
             end do
-            
+
+            temp01_amps = 0.d0
+
             do j =1, nbands
                 temp01_amps(j) = temp_fit(maps(:,k,j),HI(:,1),rmss(:,k,j),mask(:,1),par%dat_nu(j))
             end do
 
+            write(*,*) 'Intial template amplitudes:'
+            write(*,fmt='(6(E12.4))') temp01_amps
+
+            do iter = 1, niter
+                call sample_HI_T(par,k)
+
+                T_d_mean = 0.d0
+                do i = 0, npix-1
+                    if (HI(i,1) > par%thresh) then
+                        cycle
+                    else
+                        T_d_mean = T_d_mean + T_d(i,1)
+                    end if
+                end do
+                T_d_mean = T_d_mean/n2fit
+
+                write(*,*) "Mean T_d: ", T_d_mean
+
+                do j =1, nbands
+                    temp01_amps(j) = temp_fit(maps(:,k,j),HI(:,1),rmss(:,k,j),mask(:,1),par%dat_nu(j))
+                end do
+
+                do i = 0, npix-1
+                    do j = 1, nbands
+                        res(i,k,j) = maps(i,k,j) - temp01_amps(j)*HI(i,k)*planck(par%dat_nu(j)*1.d9,T_d(i,1))
+                    end do
+                end do
+
+                call compute_chisq(k,chisq,par%mode)
+
+                if (mod(iter, 1) == 0 .or. iter == 1) then
+                    write(*,fmt='(i6, a, E10.3, a, f7.3, a, 6e12.4)')&
+                        iter, " - chisq: " , chisq, " - mean T_d: ", T_d_mean, ' - Amps: ', temp01_amps
+                end if
+
+                ! if (mod(iter,output_iter) .EQ. 0) then
+                call write_maps(k,par%mode)
+                ! end if
+
+            end do
         else   
             write(*,*) 'Unrecognized SOLVER_MODE (comp_sep, HI_fit)'
             stop
         end if
-=======
-            call compute_chisq(fg_map,k)
-
-            if (rank == master) then
-               if (mod(iter, 1) == 0 .or. iter == 1) then
-                  write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
-                       iter, " - chisq: " , chisq, " - A_s: ",&
-                       fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                       sum(beta_s(:,k))/npix, ' - A_d: ', temp01_amps/temp_norm_01(k)
-               end if
-
-               call write_data
-               if (mod(iter,output_iter) .EQ. 0) then
-                  call write_maps(k)
-               end if
-            end if
-        end do    
->>>>>>> 71bef3f071c2571beec610c81133b52f74fa97fe
     end do
     call mpi_finalize(ierr)
   
@@ -333,9 +349,11 @@ program dang
     
         if (present(freq)) then
             do i=0,npix-1
-                sum1   = sum1 + (data(i)*template(i)*planck(freq*1.d9,T_d(i,1)))/cov(i)*t_mask(i)
-                sum2   = sum2 + (template(i)**planck(freq*1.d9,T_d(i,1)))**2.d0/cov(i)*t_mask(i)
-                norm   = norm + (template(i)**planck(freq*1.d9,T_d(i,1)))**2.d0/cov(i)*t_mask(i)
+                if (HI(i,1) > par%thresh) cycle
+                p      = template(i)*planck(freq*1.d9,T_d(i,1))
+                sum1   = sum1 + (data(i)*p)/cov(i)*t_mask(i)
+                sum2   = sum2 + (p)**2.d0/cov(i)*t_mask(i)
+                norm   = norm + (p)**2.d0/cov(i)*t_mask(i)
             end do
             norm = norm/n2fit
         else
@@ -350,7 +368,7 @@ program dang
         if (sum1 < 0.d0) then
             amp = 0.d0
         else
-            amp   = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
+            amp   = sum1/sum2! + rand_normal(0.d0,1.d0)/sqrt(norm)
         end if
         temp_fit  = amp
   
@@ -400,7 +418,7 @@ program dang
         integer(i4b),                               intent(in) :: map_n, nside2, comp
         real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data
         integer(i4b)                                           :: nside1, npix2
-        real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov
+        real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov 
         real(dp), dimension(0:npix-1,nmaps)                    :: indx
         real(dp), dimension(0:npix-1)                          :: indx_sample
         real(dp), allocatable, dimension(:,:,:)                :: data_low, fg_map_low, rms_low
@@ -450,7 +468,6 @@ program dang
         allocate(indx_sample_low(0:npix2-1))
 
         if (nside1 /= nside2) then 
-<<<<<<< HEAD
             if (ordering == 1) then
                 call udgrade_ring(indx,nside1,indx_low,nside2)
             else
@@ -478,35 +495,6 @@ program dang
                 rms_low(:,:,j)    = rmss(:,:,j)
             end do
             indx_low = indx
-=======
-           if (ordering == 1) then
-              call udgrade_ring(indx,nside1,indx_low,nside2)
-           else
-              call udgrade_nest(indx,nside1,indx_low,nside2)
-           end if
-           do j = 1, nbands
-              if (ordering == 1) then
-                 call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                 call convert_nest2ring(nside1,map2fit(:,:,j))
-                 call udgrade_ring(fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
-                 call convert_nest2ring(nside1,fg_map(:,:,j,1))
-                 call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
-                 call convert_nest2ring(nside1,rmss(:,:,j))
-              else
-                 call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                 call udgrade_nest(fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
-                 call udgrade_nest(rmss(:,:,j),nside1,rms_low(:,:,j),nside2)
-              end if
-           end do
-           rms_low = sqrt(rms_low / (npix/npix2))
-        else
-           do j = 1, nbands
-              data_low(:,:,j)   = data(:,:,j)
-              fg_map_low(:,:,j) = fg_map(:,:,j,1)
-              rms_low(:,:,j)    = rmss(:,:,j)
-           end do
-           indx_low = indx
->>>>>>> 71bef3f071c2571beec610c81133b52f74fa97fe
         end if
 
         x(1) = 1.d0           
@@ -580,29 +568,28 @@ program dang
 
     end subroutine sample_index
 
-
     ! This architecture of this function has not been verified yet
-    function sample_HI_T(self, band, nside2, T_map, map_n)
+    subroutine sample_HI_T(self, map_n) !(self, band, nside2, map_n)
         implicit none
   
         class(params)                                          :: self
-        integer(i4b), intent(in)                               :: map_n, nside2
-        integer(i4b)                                           :: nside1, npix2
-        real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: band
-        real(dp), dimension(0:npix-1,nmaps), intent(in)        :: T_map
-        real(dp), dimension(0:npix-1)                          :: sample_hi_T
-        real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov
+        integer(i4b), intent(in)                               :: map_n!, nside2
+        integer(i4b)                                           :: nside1, npix2, nside2
+        ! real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: band
+        real(dp), dimension(0:npix-1,nmaps,nbands)             :: cov
         real(dp), dimension(0:npix-1,nmaps)                    :: te
-        real(dp), allocatable, dimension(:,:,:)                :: band_low, rms_low
+        real(dp), dimension(0:npix-1)                          :: te_sample
+        real(dp), allocatable, dimension(:,:,:)                :: maps_low, cov_low
         real(dp), allocatable, dimension(:,:)                  :: T_low
         real(dp), allocatable, dimension(:)                    :: sample_T_low
         real(dp), dimension(nbands)                            :: signal, tmp
         real(dp), dimension(2)                                 :: x
         real(dp)                                               :: a, b, c, num, sam, t, p, sol, naccept_t_d
 
-        te      = T_map
-        map2fit = band
+        te      = T_d
         cov     = rmss*rmss
+
+        nside2 = 8
 
         nside1 = npix2nside(npix)
         if (nside1 == nside2) then
@@ -610,41 +597,41 @@ program dang
         else
             npix2 = nside2npix(nside2)
         end if
-        allocate(band_low(0:npix2-1,nmaps,nbands))
-        allocate(T_low(0:npix2-1,nmaps),rms_low(0:npix2-1,nmaps,nbands))
+        allocate(maps_low(0:npix2-1,nmaps,nbands))
+        allocate(T_low(0:npix2-1,nmaps),cov_low(0:npix2-1,nmaps,nbands))
         allocate(sample_T_low(0:npix2-1))
 
-        if (nside1 /= nside2) then 
-            if (ordering == 1) then
-                call udgrade_ring(te,nside1,T_low,nside2)
-            else
-                call udgrade_nest(te,nside1,T_low,nside2)
-            end if
-            do j = 1, nbands
-                if (ordering == 1) then
-                    call udgrade_ring(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
-                    call convert_nest2ring(nside1,map2fit(:,:,j))
-                    call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
-                    call convert_nest2ring(nside1,rmss(:,:,j))
-                else
-                    call udgrade_nest(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
-                    call udgrade_nest(rmss(:,:,j),nside1,rms_low(:,:,j),nside2)
-                end if
-            end do
-            rms_low = sqrt(rms_low / (npix/npix2))
-        else
-            do j = 1, nbands
-                band_low(:,:,j)   = band(:,:,j)
-                rms_low(:,:,j)    = rmss(:,:,j)
-            end do
-            T_low = T_map
-        end if
+        ! if (nside1 /= nside2) then 
+        !     if (ordering == 1) then
+        !         call udgrade_ring(te,nside1,T_low,nside2)
+        !     else
+        !         call udgrade_nest(te,nside1,T_low,nside2)
+        !     end if
+        !     do j = 1, nbands
+        !         if (ordering == 1) then
+        !             call udgrade_ring(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
+        !             call convert_nest2ring(nside1,map2fit(:,:,j))
+        !             call udgrade_ring(cov(:,:,j),nside1,cov_low(:,:,j),nside2)
+        !             call convert_nest2ring(nside1,rmss(:,:,j))
+        !         else
+        !             call udgrade_nest(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
+        !             call udgrade_nest(rmss(:,:,j),nside1,cov_low(:,:,j),nside2)
+        !         end if
+        !     end do
+        !     cov_low = sqrt(cov_low / (npix/npix2))
+        ! else
+        do j = 1, nbands
+            maps_low(:,:,j)   = maps(:,:,j)
+            cov_low(:,:,j)    = cov(:,:,j)
+        end do
+        T_low = te
+        ! end if
 
         x(1) = 1.d0
         do i = 0, npix2-1
             if (mask(i,1) == 0.d0) then
                 sample_T_low(i) = missval
-               cycle
+                cycle
             else
                 a   = 0.d0
                 sol = T_low(i,map_n)
@@ -652,17 +639,17 @@ program dang
                 ! Chi-square from the most recent Gibbs chain update
                 do j = 1, nbands
                     a = a + (((temp01_amps(j)* HI(i,1)*planck(par%dat_nu(j)*1.d9,sol)) &
-                        - band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2
+                        - maps_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
                 end do
                 c   = a
 
                 do l = 1, iterations
                     ! Begin sampling from the prior
-                    t = rand_normal(self%fg_gauss(2,2,1), self%fg_gauss(2,2,2))
+                    t = rand_normal(par%HI_Td_mean,par%HI_Td_std)
                     b = 0.d0
                     do j = 1, nbands
                         tmp(j) = temp01_amps(j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,t)
-                        b      = b + ((tmp(j)-band_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
+                        b      = b + ((tmp(j)-maps_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
                     end do
                     b = b
 
@@ -687,21 +674,22 @@ program dang
         end do
         if (nside1 /= nside2) then
             if (ordering == 1) then
-                call udgrade_ring(sample_T_low,nside2, sample_hi_T,nside1)
+                call udgrade_ring(sample_T_low, nside2, te_sample, nside1)
                 call convert_nest2ring(nside2, sample_T_low)
             else
-                call udgrade_nest(sample_T_low,nside2, sample_hi_T,nside1)
+                call udgrade_nest(sample_T_low, nside2, te_sample, nside1)
             end if
         else
-             sample_HI_T =  sample_T_low
+            te_sample =  sample_T_low
         end if
+        T_d(:,1) = te_sample
 
-        deallocate(band_low)
+        deallocate(maps_low)
         deallocate(T_low)
-        deallocate(rms_low)
+        deallocate(cov_low)
         deallocate(sample_T_low)
 
-    end function sample_HI_T
+    end subroutine sample_HI_T
     ! ------------------------------------------------------------
 
     subroutine sample_joint_amp(npix, map_n, method)
@@ -1016,131 +1004,219 @@ program dang
 
     end subroutine sample_joint_amp
 
-    subroutine write_maps(nm)
+    subroutine write_maps(nm,mode)
         implicit none
 
-        integer(i4b), intent(in)    :: nm
-        real(dp), dimension(npix,1) :: map
+        integer(i4b), intent(in)          :: nm
+        character(len=16), intent(in)     :: mode
+        real(dp), dimension(0:npix-1,1)   :: map
 
-        write(iter_str, '(i0.5)') iter
-        if (output_fg .eqv. .true.) then
-            do j = 1, nbands
-                title = trim(direct) // trim(par%dat_label(j)) // '_dust_fit_'// trim(tqu(nm)) & 
+        if (trim(mode) == 'comp_sep') then
+
+            write(iter_str, '(i0.5)') iter
+            if (output_fg .eqv. .true.) then
+                do j = 1, nbands
+                    title = trim(direct) // trim(par%dat_label(j)) // '_dust_fit_'// trim(tqu(nm)) & 
+                            // '_' // trim(iter_str) // '.fits'
+                    map(:,1)   = temp01_amps(j)*template_01(:,nm)
+                    call write_bintab(map,npix,1, header, nlheader, trim(title))
+                    title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
+                            // '_' // trim(iter_str) // '.fits'
+                    map(:,1)   = fg_map(:,nm,j,1)
+                    call write_bintab(map,npix,1, header, nlheader, trim(title))
+                end do
+            else 
+                title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
                         // '_' // trim(iter_str) // '.fits'
-                map(:,1)   = temp01_amps(j)*template_01(:,nm)
+                map(:,1)   = fg_map(:,nm,par%fg_ref_loc(1),1)
                 call write_bintab(map,npix,1, header, nlheader, trim(title))
-                title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
+            end if
+            do j = 1, nbands
+                title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
                         // '_' // trim(iter_str) // '.fits'
-                map(:,1)   = fg_map(:,nm,j,1)
+                map(:,1)   = res(:,nm,j)
                 call write_bintab(map,npix,1, header, nlheader, trim(title))
             end do
-        else 
-            title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
-                    // '_' // trim(iter_str) // '.fits'
-            map(:,1)   = fg_map(:,nm,par%fg_ref_loc(1),1)
+            title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
+            map(:,1)   = beta_s(:,nm)
             call write_bintab(map,npix,1, header, nlheader, trim(title))
+            chi_map = 0.d0
+            do i = 0, npix-1
+                do j = 1, nbands
+                   chi_map(i,nm) = chi_map(i,nm) + (maps(i,nm,j) - fg_map(i,nm,j,1) - fg_map(i,nm,j,2))**2.d0/rmss(i,nm,j)**2.d0
+                end do
+            end do
+            chi_map(:,nm) = chi_map(:,nm)/(nbands+nfgs)
+            title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
+            map(:,1)   = chi_map(:,nm)
+            ! write(*,*) 'chisq sum ', sum(chi_map(:,nm))
+            call write_bintab(map,npix,1, header, nlheader, trim(title))
+
+        else if (trim(mode) == 'HI_fit') then
+            write(iter_str, '(i0.5)') iter
+            do j = 1, nbands
+                title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(iter_str) // '.fits'
+                do i=0,npix-1
+                    if (HI(i,1) > par%thresh) then
+                        map(i,1) = missval
+                    else
+                        map(i,1) = res(i,nm,j)
+                    end if
+                end do
+
+                call write_bintab(map,npix,1,header,nlheader,trim(title))
+
+                title = trim(direct) //  trim(par%dat_label(j)) // '_model_' // trim(iter_str) // '.fits'
+                do i = 0, npix-1
+                    if (HI(i,1) > par%thresh) then
+                        map(i,1) = missval
+                    else
+                        map(i,1) = temp01_amps(j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,T_d(i,1))
+                    end if
+                end do
+                call write_bintab(map,npix,1,header,nlheader,trim(title))
+            end do
+            title = trim(direct) // 'T_d_' // trim(iter_str) // '.fits'
+            call write_bintab(T_d,npix,1,header,nlheader,trim(title))
+            chi_map = 0.d0
+            do i = 0, npix-1
+                do j = 1, nbands
+                    if (HI(i,1) > par%thresh) then
+                        chi_map(i,nm) = missval
+                    else
+                        chi_map(i,nm) = chi_map(i,nm) + (maps(i,nm,j) - &
+                        temp01_amps(j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,T_d(i,1)))**2.d0/rmss(i,nm,j)**2.d0
+                                                        !   maps(i,k,j) - temp01_amps(j)*HI(i,k)*planck(par%dat_nu(j)*1.d9,T_d(i,1))
+                    end if
+                end do
+            end do
+            title = trim(direct) // 'chisq_' // trim(iter_str) // '.fits'
+            call write_bintab(map,npix,1,header,nlheader,trim(title))
         end if
-        do j = 1, nbands
-            title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
-                    // '_' // trim(iter_str) // '.fits'
-            map(:,1)   = res(:,nm,j)
-            call write_bintab(map,npix,1, header, nlheader, trim(title))
-        end do
-        title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
-        map(:,1)   = beta_s(:,nm)
-        call write_bintab(map,npix,1, header, nlheader, trim(title))
-        chi_map = 0.d0
-        do i = 0, npix-1
-            do j = 1, nbands
-               chi_map(i,nm) = chi_map(i,nm) + (maps(i,nm,j) - fg_map(i,nm,j,1) - fg_map(i,nm,j,2))**2.d0/rmss(i,nm,j)**2.d0
-            end do
-        end do
-        chi_map(:,nm) = chi_map(:,nm)/(nbands+3)
-        title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
-        map(:,1)   = chi_map(:,nm)
-        call write_bintab(map,npix,1, header, nlheader, trim(title))
 
     end subroutine write_maps
 
-
-    subroutine write_data
+    subroutine write_data(mode)
         implicit none
+        character(len=16), intent(in) :: mode
 
-        title = trim(direct) // 'pixel_100_A_d.dat'
-        inquire(file=title,exist=exist)
-        if (exist) then
-            open(30,file=title, status="old",position="append", action="write")
-        else
-            open(30,file=title, status="new", action="write")
-        endif
-        write(30,*) fg_map(100,k,par%fg_ref_loc(1),2)
-        close(30)
+        if (trim(mode) == 'comp_sep') then
 
-        title = trim(direct) // 'pixel_100_A_s.dat'
-        inquire(file=title,exist=exist)
-        if (exist) then
-            open(31,file=title, status="old",position="append", action="write")
-        else
-            open(31,file=title, status="new", action="write")
-        endif
-        write(31,*) fg_map(100,k,par%fg_ref_loc(1),1)
-        close(31)
+            title = trim(direct) // 'pixel_100_A_d.dat'
+            inquire(file=title,exist=exist)
+            if (exist) then
+                open(30,file=title, status="old",position="append", action="write")
+            else
+                open(30,file=title, status="new", action="write")
+            endif
+            write(30,*) fg_map(100,k,par%fg_ref_loc(1),2)
+            close(30)
 
-        title = trim(direct) // 'pixel_100_beta_s.dat'
-        inquire(file=title,exist=exist)
-        if (exist) then
-            open(32,file=title, status="old",position="append", action="write")
-        else
-            open(32,file=title, status="new", action="write")
-        endif
-        write(32,*) beta_s(100,k)
-        close(32)
+            title = trim(direct) // 'pixel_100_A_s.dat'
+            inquire(file=title,exist=exist)
+            if (exist) then
+                open(31,file=title, status="old",position="append", action="write")
+            else
+                open(31,file=title, status="new", action="write")
+            endif
+            write(31,*) fg_map(100,k,par%fg_ref_loc(1),1)
+            close(31)
 
-        title = trim(direct) // 'total_chisq.dat'
-        inquire(file=title,exist=exist)
-        if (exist) then
-            open(33,file=title, status="old",position="append", action="write")
-        else
-            open(33,file=title, status="new", action="write")
-        endif
-        call compute_chisq(fg_map,k)
-        write(33,*) chisq
-        close(33)
+            title = trim(direct) // 'pixel_100_beta_s.dat'
+            inquire(file=title,exist=exist)
+            if (exist) then
+                open(32,file=title, status="old",position="append", action="write")
+            else
+                open(32,file=title, status="new", action="write")
+            endif
+            write(32,*) beta_s(100,k)
+            close(32)
 
-        inquire(file=trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat',exist=exist)
-        if (exist) then
-            open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="old", &
-                        position="append", action="write")
-        else
-            open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="new", action="write")
-        endif
-        write(34,'(6(E17.8))') temp01_amps
-        close(34)
+            title = trim(direct) // 'total_chisq.dat'
+            inquire(file=title,exist=exist)
+            if (exist) then
+                open(33,file=title, status="old",position="append", action="write")
+            else
+                open(33,file=title, status="new", action="write")
+            endif
+            call compute_chisq(k,chisq,par%mode)
+            write(33,*) chisq
+            close(33)
+
+            inquire(file=trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat',exist=exist)
+            if (exist) then
+                open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="old", &
+                            position="append", action="write")
+            else
+                open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="new", action="write")
+            endif
+            write(34,'(6(E17.8))') temp01_amps
+            close(34)
+
+        else if (trim(mode) == 'HI_fit') then
+            title = trim(direct)//'HI_amplitudes.dat'
+            inquire(file=title,exist=exist)
+            if (exist) then
+                open(35,file=title,status="old",position="append",action="write") 
+            else
+                open(35,file=title,status="new",action="write")
+            end if
+            write(35,'(6(E17.8))')
+            close(35)
+
+            title = trim(direct)//'HI_chisq.dat'
+            inquire(file=title,exist=exist)
+            if (exist) then
+                open(36,file=title,status="old",position="append",action="write") 
+            else
+                open(36,file=title,status="new",action="write")
+            end if
+            call compute_chisq(k,chisq,par%mode)
+            write(36,'(E17.8)') chisq
+            close(36)
+
+        end if
 
     end subroutine write_data
   
-! Still need to rewrite vv
-
-    subroutine compute_chisq(amp,map_n)
+    subroutine compute_chisq(map_n,chisq,mode)
       use healpix_types
       implicit none
-      real(dp), dimension(0:npix-1,nmaps,nbands,3), intent(in)   :: amp
-      integer(i4b), intent(in)                                   :: map_n
-      real(dp)                                                   :: s, signal
-      integer(i4b)                                               :: m,n
+      integer(i4b),                                 intent(in)    :: map_n
+      character(len=16),                            intent(in)    :: mode
+      real(dp),                                     intent(inout) :: chisq
+      real(dp)                                                    :: s, signal
+      integer(i4b)                                                :: i,j
   
-      chisq = 0.d0
-      do i = 0, npix-1
-        do j = 1, nbands
-            s = 0.d0
-!            do m = 1, nfgs
-               signal = amp(i,map_n,j,1) + amp(i,map_n,j,2)
-               s = s + signal
-               chisq = chisq + (((maps(i,map_n,j) - s)**2))/(rmss(i,map_n,j)**2)
- !           end do
+      if (trim(mode) == 'comp_sep') then
+
+        chisq = 0.d0
+        do i = 0, npix-1
+            do j = 1, nbands
+                s = 0.d0
+                signal = fg_map(i,map_n,j,1) + fg_map(i,map_n,j,2)
+                s = s + signal
+                chisq = chisq + (((maps(i,map_n,j) - s)**2))/(rmss(i,map_n,j)**2)*mask(i,1)
+            end do
+        end do 
+        chisq = chisq/(npix+nbands+nfgs)
+
+    else if (trim(mode) == 'HI_fit') then
+        chisq = 0.d0
+        do i = 0, npix-1
+            if (HI(i,1) > par%thresh) then
+                cycle
+            else
+                do j = 1, nbands    
+                    ! s = temp01_amps(j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,T_d(i,1))
+                    ! chisq = chisq + (maps(i,map_n,j)-s)**2.d0/(rmss(i,map_n,j)**2.d0)*mask(i,1)
+                    chisq = chisq + (res(i,map_n,j))**2.d0/(rmss(i,map_n,j)**2.d0)
+                end do
+            end if
         end do
-      end do 
-      chisq = chisq/(npix+nbands+3) ! n-1 dof, npix + nbands + A_s + A_dust + A_cmb + \beta_s
+        chisq = chisq/(n2fit+1)
+    end if
+
     end subroutine compute_chisq
 
   end program dang
