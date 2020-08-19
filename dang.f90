@@ -102,6 +102,8 @@ program dang
         maps(:,:,j) = map
     end do
 
+    call convert_maps
+
     deallocate(map,rms)
 
     call read_bintab(template_file_01,template_01,npix,nmaps,nullval,anynull,header=header)
@@ -904,7 +906,7 @@ program dang
            stop
            mat_u(:,:)        = 0.d0
            if (rank == master) write(*,*) 'Joint sampling using Cholesky Decomp'
-           call cholesky_decomp(A,mat_l,y)
+           call cholesky_decomp(A,mat_l)!,y)
            mat_u  = transpose(mat_l)
            call forward_sub(mat_l,d,c)
            call backward_sub(mat_u,b,d)
@@ -929,7 +931,7 @@ program dang
         end do
 
         write(*,*) 'Call Cholesky'
-        call cholesky_decomp(inv(A),mat_l,y)
+        call cholesky_decomp(inv(A),mat_l)!,y)
 
         write(*,*) 'multiply by random vector'
         call lower_tri_Ax(mat_l,rand,y)
@@ -1006,95 +1008,119 @@ program dang
 
     end subroutine sample_joint_amp
 
+    subroutine convert_maps
+      implicit none
+      real(dp)  :: cmb_to_rj, y
+      
+      do j = 1, nbands
+         if (trim(par%dat_unit(j)) == 'uK_RJ') then
+            cycle
+         else if (trim(par%dat_unit(j)) == 'uK_cmb') then
+            write(*,*) 'Putting band ', trim(par%dat_label(j)), ' from uK_cmb to uK_RJ.'
+            y           = h*(par%dat_nu(j)*1.0d9) / (k_B*T_CMB)
+            cmb_to_rj   = (y**2.d0*exp(y))/(exp(y)-1)**2.d0
+            maps(:,:,j) = cmb_to_rj*maps(:,:,j)
+         else if (trim(par%dat_unit(j)) == 'MJy/sr') then
+            write(*,*) 'Unit conversion not for MJy/sr not added!'
+            stop
+         else
+            write(*,*) 'Not a unit, dumbass!'
+            stop
+         end if
+      end do
+      
+    end subroutine
+
+
     subroutine write_maps(nm,mode)
-        implicit none
+      implicit none
 
-        integer(i4b), intent(in)          :: nm
-        character(len=16), intent(in)     :: mode
-        real(dp), dimension(0:npix-1,1)   :: map
-
-        if (trim(mode) == 'comp_sep') then
-
-            write(iter_str, '(i0.5)') iter
-            if (output_fg .eqv. .true.) then
-                do j = 1, nbands
-                    title = trim(direct) // trim(par%dat_label(j)) // '_dust_fit_'// trim(tqu(nm)) & 
-                            // '_' // trim(iter_str) // '.fits'
-                    map(:,1)   = temp01_amps(j)*template_01(:,nm)
-                    call write_bintab(map,npix,1, header, nlheader, trim(title))
-                    title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
-                            // '_' // trim(iter_str) // '.fits'
-                    map(:,1)   = fg_map(:,nm,j,1)
-                    call write_bintab(map,npix,1, header, nlheader, trim(title))
-                end do
-            else 
-                title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
-                        // '_' // trim(iter_str) // '.fits'
-                map(:,1)   = fg_map(:,nm,par%fg_ref_loc(1),1)
-                call write_bintab(map,npix,1, header, nlheader, trim(title))
-            end if
+      integer(i4b), intent(in)          :: nm
+      character(len=16), intent(in)     :: mode
+      real(dp), dimension(0:npix-1,1)   :: map
+      
+      if (trim(mode) == 'comp_sep') then
+         
+         write(iter_str, '(i0.5)') iter
+         if (output_fg .eqv. .true.) then
             do j = 1, nbands
-                title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
-                        // '_' // trim(iter_str) // '.fits'
-                map(:,1)   = res(:,nm,j)
-                call write_bintab(map,npix,1, header, nlheader, trim(title))
+               title = trim(direct) // trim(par%dat_label(j)) // '_dust_fit_'// trim(tqu(nm)) & 
+                    // '_' // trim(iter_str) // '.fits'
+               map(:,1)   = temp01_amps(j)*template_01(:,nm)
+               call write_bintab(map,npix,1, header, nlheader, trim(title))
+               title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
+                    // '_' // trim(iter_str) // '.fits'
+               map(:,1)   = fg_map(:,nm,j,1)
+               call write_bintab(map,npix,1, header, nlheader, trim(title))
             end do
-            title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
-            map(:,1)   = beta_s(:,nm)
+         else 
+            title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
+                 // '_' // trim(iter_str) // '.fits'
+            map(:,1)   = fg_map(:,nm,par%fg_ref_loc(1),1)
             call write_bintab(map,npix,1, header, nlheader, trim(title))
-            chi_map = 0.d0
-            do i = 0, npix-1
-                do j = 1, nbands
-                   chi_map(i,nm) = chi_map(i,nm) + (maps(i,nm,j) - fg_map(i,nm,j,1) - fg_map(i,nm,j,2))**2.d0/rmss(i,nm,j)**2.d0
-                end do
-            end do
-            chi_map(:,nm) = chi_map(:,nm)/(nbands+nfgs)
-            title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
-            map(:,1)   = chi_map(:,nm)
-            ! write(*,*) 'chisq sum ', sum(chi_map(:,nm))
+         end if
+         do j = 1, nbands
+            title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
+                 // '_' // trim(iter_str) // '.fits'
+            map(:,1)   = res(:,nm,j)
             call write_bintab(map,npix,1, header, nlheader, trim(title))
-
-        else if (trim(mode) == 'HI_fit') then
-            write(iter_str, '(i0.5)') iter
+         end do
+         title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
+         map(:,1)   = beta_s(:,nm)
+         call write_bintab(map,npix,1, header, nlheader, trim(title))
+         chi_map = 0.d0
+         do i = 0, npix-1
             do j = 1, nbands
-                title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(iter_str) // '.fits'
-                do i=0,npix-1
-                    if (HI(i,1) > par%thresh) then
-                        map(i,1) = missval
-                    else
-                        map(i,1) = res(i,nm,j)
-                    end if
-                end do
-
-                call write_bintab(map,npix,1,header,nlheader,trim(title))
-
-                title = trim(direct) //  trim(par%dat_label(j)) // '_model_' // trim(iter_str) // '.fits'
-                do i = 0, npix-1
-                    if (HI(i,1) > par%thresh) then
-                        map(i,1) = missval
-                    else
-                        map(i,1) = temp01_amps(j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,T_d(i,1))
-                    end if
-                end do
-                call write_bintab(map,npix,1,header,nlheader,trim(title))
+               chi_map(i,nm) = chi_map(i,nm) + (maps(i,nm,j) - fg_map(i,nm,j,1) - fg_map(i,nm,j,2))**2.d0/rmss(i,nm,j)**2.d0
             end do
-            title = trim(direct) // 'T_d_' // trim(iter_str) // '.fits'
-            call write_bintab(T_d,npix,1,header,nlheader,trim(title))
-            chi_map = 0.d0
-            do i = 0, npix-1
-                do j = 1, nbands
-                    if (HI(i,1) > par%thresh) then
-                        chi_map(i,nm) = missval
-                    else
-                        chi_map(i,nm) = chi_map(i,nm) + (maps(i,nm,j) - &
-                        temp01_amps(j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,T_d(i,1)))**2.d0/rmss(i,nm,j)**2.d0
-                                                        !   maps(i,k,j) - temp01_amps(j)*HI(i,k)*planck(par%dat_nu(j)*1.d9,T_d(i,1))
-                    end if
-                end do
+         end do
+         chi_map(:,nm) = chi_map(:,nm)/(nbands+nfgs)
+         title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
+         map(:,1)   = chi_map(:,nm)
+         ! write(*,*) 'chisq sum ', sum(chi_map(:,nm))
+         call write_bintab(map,npix,1, header, nlheader, trim(title))
+         
+      else if (trim(mode) == 'HI_fit') then
+         write(iter_str, '(i0.5)') iter
+         do j = 1, nbands
+            title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(iter_str) // '.fits'
+            do i=0,npix-1
+               if (HI(i,1) > par%thresh) then
+                  map(i,1) = missval
+               else
+                  map(i,1) = res(i,nm,j)
+               end if
             end do
-            title = trim(direct) // 'chisq_' // trim(iter_str) // '.fits'
+            
             call write_bintab(map,npix,1,header,nlheader,trim(title))
-        end if
+            
+            title = trim(direct) //  trim(par%dat_label(j)) // '_model_' // trim(iter_str) // '.fits'
+            do i = 0, npix-1
+               if (HI(i,1) > par%thresh) then
+                  map(i,1) = missval
+               else
+                  map(i,1) = temp01_amps(j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,T_d(i,1))
+               end if
+            end do
+            call write_bintab(map,npix,1,header,nlheader,trim(title))
+         end do
+         title = trim(direct) // 'T_d_' // trim(iter_str) // '.fits'
+         call write_bintab(T_d,npix,1,header,nlheader,trim(title))
+         chi_map = 0.d0
+         do i = 0, npix-1
+            do j = 1, nbands
+               if (HI(i,1) > par%thresh) then
+                  chi_map(i,nm) = missval
+               else
+                  chi_map(i,nm) = chi_map(i,nm) + (maps(i,nm,j) - &
+                       temp01_amps(j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,T_d(i,1)))**2.d0/rmss(i,nm,j)**2.d0
+                  !   maps(i,k,j) - temp01_amps(j)*HI(i,k)*planck(par%dat_nu(j)*1.d9,T_d(i,1))
+               end if
+            end do
+         end do
+         title = trim(direct) // 'chisq_' // trim(iter_str) // '.fits'
+         call write_bintab(map,npix,1,header,nlheader,trim(title))
+      end if
 
     end subroutine write_maps
 
@@ -1152,7 +1178,7 @@ program dang
             else
                 open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="new", action="write")
             endif
-            write(34,'(6(E17.8))') temp01_amps
+            write(34,'(6(E17.8))') temp01_amps/temp_norm_01(k)
             close(34)
 
         else if (trim(mode) == 'HI_fit') then

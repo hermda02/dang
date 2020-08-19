@@ -25,6 +25,8 @@ module param_mod
         character(len=512), allocatable, dimension(:)   :: dat_mapfile   ! Band filename
         character(len=512), allocatable, dimension(:)   :: dat_noisefile ! Band rms filename
         real(dp),           allocatable, dimension(:)   :: dat_nu        ! Band frequency (in GHz)
+        character(len=512), allocatable, dimension(:)   :: dat_unit      ! Band units (uK_CMB, uK_RJ, MJy/sr)
+        
 
         ! Component parameters
         integer(i4b)   :: ncomp                                             ! # of foregrounds
@@ -378,6 +380,7 @@ contains
 
         allocate(par%dat_mapfile(n),par%dat_label(n))
         allocate(par%dat_noisefile(n),par%dat_nu(n))
+        allocate(par%dat_unit(n))
 
         do i = 1, n
             call int2string(i, itext)
@@ -385,7 +388,8 @@ contains
             call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%dat_mapfile(i))
             call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%dat_noisefile(i))
             call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%dat_nu(i))
-        end do
+            call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%dat_unit(i))
+         end do
 
     end subroutine read_data_params
 

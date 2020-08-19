@@ -41,15 +41,16 @@ contains
         end if
     end function inv
 
-    subroutine cholesky_decomp(mat,low,n)
+    subroutine cholesky_decomp(mat,low)
         implicit none
         real(dp), dimension(:,:), intent(in)  :: mat
         real(dp), dimension(:,:), intent(out) :: low
-        integer(i4b),             intent(in)  :: n
-        integer(i4b)                          :: ip, i, j, k
+        integer(i4b)                          :: ip, i, j, k, n, stat
         real(dp)                              :: sum
 
-        low(:,:)   = 0.d0
+        n   = size(mat(1,:))
+
+        low = 0.d0
 
         do j = 1, n
            sum = 0.d0
@@ -69,6 +70,9 @@ contains
            !$OMP END DO
            !$OMP END PARALLEL
         end do
+
+        ! low = mat
+        ! call dpotrf('L',n,low,n,stat)
 
         ! This code would be used for the LDU decomp:
         ! -------------------------------------------
