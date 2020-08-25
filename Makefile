@@ -1,33 +1,44 @@
-# -*- Makefile -*-
+# New Makefile attempt for super-dope optimized sickness
 
-FC      = ifort
-MFC     = mpiifort
-OPTIM   = -g -c
+F90       = ifort
+MPF90     = mpiifort
+F90FLAGS  = -g -c
 
-MPICHINC = -I/astro/local/opt/Intel/compilers_and_libraries_2018.3.222/linux/mpi/intel64/include
-#MPICH    = -L/astro/local/opt/Intel/compilers_and_libraries_2018.3.222/linux/mpi/intel64/lib -lmpi
-FITSDIR  = -L/mn/stornext/u3/hke/local/lib -lcfitsio
-LAPACK   = -L/mn/stornext/u3/hke/local/lib -llapack -lblas
-HEALPIX  = -L/mn/stornext/u3/hke/local/lib -lhealpix
-HEALINC  = -I/mn/stornext/u3/hke/local/include
-OUTPUT   = dang
+LOCAL=/mn/stornext/u3/hke/owl/local
 
-OBJS    = init_mod.o utility_mod.o hashtbl.o param_mod.o linalg_mod.o data_mod.o dang.o
+#LAPACK
+MKLPATH         = $(MKLROOT)
+LAPACK_INCLUDE  =
+LAPACK_LINK     = -shared-intel -Wl,-rpath,$(MKLPATH) -L$(MKLPATH)  -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread
 
+#CFITSIO
+CFITSIO_INCLUDE =
+CFITSIO_LINK    = -L$(LOCAL)/lib -lcfitsio
+
+# HEALPIX
+HEALPIX         = /mn/stornext/u3/hke/owl/local/src/dagsshealpix
+HEALPIX_INCLUDE = -I$(HEALPIX)/include
+HEALPIX_LINK    = -L$(HEALPIX)/lib -lhealpix
+
+#Combine them
+F90COMP         = $(F90FLAGS) $(LAPACK_INCLUDE) $(CFITSIO_INCLUDE) $(HEALPIX_INCLUDE)
+LINK            = $(HEALPIX_LINK) $(CFITSIO_LINK) $(LAPACK_LINK)
+OBJS            = utility_mod.o hashtbl.o param_mod.o linalg_mod.o data_mod.o dang.o
+OUTPUT          = dang
+
+# Executable
 dang: $(OBJS)
-	$(MFC) $(OBJS) $(HEALPIX) $(FITSDIR) $(LAPACK) -qopenmp -o $(OUTPUT)
+	$(MPF90) $(OBJS) -qopenmp -parallel -o $(OUTPUT) $(LINK)
 
 # Dependencies
-init_mod.o             : utility_mod.o
-linalg_mod.o           : utility_mod.o init_mod.o
-data_mod.o             : utility_mod.o init_mod.o
-#foreground_mod.o       : utility_mod.o init_mod.o
-param_mod.o            : utility_mod.o init_mod.o hashtbl.o
-dang.o : utility_mod.o init_mod.o param_mod.o linalg_mod.o data_mod.o #foreground_mod.o
+linalg_mod.o           : utility_mod.o
+data_mod.o             : utility_mod.o
+param_mod.o            : utility_mod.o hashtbl.o
+dang.o : utility_mod.o param_mod.o linalg_mod.o data_mod.o 
 
 # Compilation stage
 %.o : %.f90
-	$(MFC) -fpp $(OPTIM) $(HEALINC) $(LAPACK) $(CFITSIO) -qopenmp -parallel -c $<
+	$(MPF90) -fpp $(F90COMP) -qopenmp -parallel -c $<
 
 # Cleaning command
 .PHONY: clean

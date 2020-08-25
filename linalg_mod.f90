@@ -50,41 +50,8 @@ contains
 
         n   = size(mat(1,:))
 
-        low = 0.d0
-
-        do j = 1, n
-           sum = 0.d0
-           do k = 1, j
-              sum = sum + low(j,k) * low(j,k)
-           end do
-           low(j,j) = sqrt(mat(j,j)- sum)
-           !$OMP PARALLEL PRIVATE(i,k,sum) shared(mat,low,j)
-           !$OMP DO SCHEDULE(static)
-           do i = j+1, n
-              sum = 0.d0
-              do k = 1, j
-                 sum = sum + low(i,k)*low(j,k)
-              end do
-              low(i,j) = (1.d0/low(j,j)*(mat(i,j)-sum))
-           end do
-           !$OMP END DO
-           !$OMP END PARALLEL
-        end do
-
-        ! low = mat
-        ! call dpotrf('L',n,low,n,stat)
-
-        ! This code would be used for the LDU decomp:
-        ! -------------------------------------------
-        ! do i = 1, n
-        !     mat_s(i,i) = low(i,i)
-        ! end do
-
-        ! low  = matmul(low,inv(mat_s))
-        ! diag = mat_s**2
-
-        ! deallocate(mat_s)
-        ! -------------------------------------------
+        low = mat
+        call dpotrf('L',n,low,n,stat)
 
     end subroutine cholesky_decomp
 
@@ -109,6 +76,7 @@ contains
             do m = i, n
                 sum = 0
                 do j = 1, i
+
                     sum = sum + (L(i,j) * U(j,m))
                 U(i,m) = A(i,m) - sum
                 end do
@@ -168,17 +136,17 @@ contains
 
     end subroutine backward_sub
 
-    subroutine compute_cg(A,x,b,n,nnz_a)
+    subroutine compute_cg(A,x,b,n,nnz_a,iters,converge)
         
         ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
         ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
 
         implicit none
-
         real(dp), dimension(:,:), intent(in)  :: A
         real(dp), dimension(:), intent(in)    :: b
         real(dp), dimension(:), intent(out)   :: x
-        integer(i4b), intent(in)              :: n
+        integer(i4b), intent(in)              :: n,iters
+        real(dp), intent(in)                  :: converge
         integer(i4b), optional, intent(in)    :: nnz_a
         real(dp), allocatable, dimension(:)   :: r, q, d
         real(dp)                              :: epsil, alpha, beta, delta_0
@@ -197,7 +165,7 @@ contains
         end if
 
         x(:) = 0.0d0
-        i_max = 10
+        i_max = iters
 
         i = 0
         epsil = 1.0d-16
@@ -210,38 +178,43 @@ contains
         d = r
         delta_new = sum(r*r)
         delta_0   = delta_new
-        do while( (i .lt. i_max) .and. (delta_new .gt. (epsil**2)*delta_0))
+        do while( (i .lt. i_max) .and. (delta_new .gt. converge))!(epsil**2)*delta_0))
            t3 = mpi_wtime()
-            if (present(nnz_a)) then
-               q = Ax_CSR(rp,ci,v,d)
-            else
-               q = matmul(A,d)
-            end if
-            alpha = delta_new/(sum(d*q))
-            x = x + alpha*d
-            if (mod(i,50) == 0) then
-               if (present(nnz_a)) then
-                  r = b - Ax_CSR(rp,ci,v,x)
-               else
-                  r = b - matmul(A,x)
-               end if
-            else
-                r = r - alpha*q
-            end if
-            delta_old = delta_new
-            delta_new = sum(r*r)
-            beta = delta_new/delta_old
-            d = r + beta*d
-            t4 = mpi_wtime()
-!            write(*,*) 'CG Sample ', i
-!            write(*,*) 'Completion time ', t4-t3
-            i = i + 1
+           if (present(nnz_a)) then
+              q = Ax_CSR(rp,ci,v,d)
+           else
+              q = matmul(A,d)
+           end if
+           alpha = delta_new/(sum(d*q))
+           x = x + alpha*d
+           if (mod(i,50) == 0) then
+              if (present(nnz_a)) then
+                 r = b - Ax_CSR(rp,ci,v,x)
+              else
+                 r = b - matmul(A,x)
+              end if
+           else
+              r = r - alpha*q
+           end if
+           delta_old = delta_new
+           delta_new = sum(r*r)
+           beta = delta_new/delta_old
+           d = r + beta*d
+           t4 = mpi_wtime()
+           i = i + 1
+           write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Sample: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
         end do
-!        write(*,*) 'Exiting CG Method.'
+        
+        if(present(nnz_a)) then
+           deallocate(v)
+           deallocate(rp)
+           deallocate(ci)
+        end if
 
         deallocate(r)
         deallocate(q)
         deallocate(d)
+
 
     end subroutine compute_cg
 
@@ -274,7 +247,7 @@ contains
       end if
 
       x(:) = 0.0d0
-      i_max = 10
+      i_max = 1000
 
       i = 0
       epsil = 1.0d-16
@@ -497,6 +470,8 @@ contains
       end do
       !$OMP END DO
       !$OMP END PARALLEL
+
+!      deallocate(B)
 
     end function compute_ATA_CSC
 

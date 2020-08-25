@@ -10,6 +10,8 @@ module param_mod
         integer(i4b)       :: ngibbs     ! Number of Gibbs iterations
         integer(i4b)       :: nsample    ! For things like the metrop-hast alg
         integer(i4b)       :: iter_out   ! Out put maps every <- iterations
+        integer(i4b)       :: cg_iter    ! Maximum cg iterations
+        real(dp)           :: cg_converge! CG convergence criterion 
         logical(lgt)       :: output_fg  ! Do we output the foregrounds at each frequency?
         character(len=512) :: outdir     ! Output directory
         character(len=16)  :: solver     ! Linear system solver type
@@ -328,6 +330,8 @@ contains
         call get_parameter_hashtable(htbl, 'SOLVER_TYPE', par_string=par%solver)
         call get_parameter_hashtable(htbl, 'SOLVER_MODE', par_string=par%mode)
         call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
+        call get_parameter_hashtable(htbl, 'CG_ITER_MAX', par_int=par%cg_iter)
+        call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH', par_dp=par%cg_converge)
         
         ! Surely an inefficient way to decide which maps to use (T -> 1, Q -> 2, U -> 3), but it works
         pol_count = 0

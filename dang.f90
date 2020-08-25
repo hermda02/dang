@@ -70,6 +70,9 @@ program dang
     nlheader          = size(header)
     nmaps             = nmaps
 
+!    cg_iter           = par%cg_iter
+!    cg_converge       = par%cg_converge
+
     niter             = par%ngibbs               ! # of MC-MC iterations
     iterations        = par%nsample              ! # of iterations in the samplers
     output_iter       = par%iter_out             ! Output maps every <- # of iterations
@@ -725,6 +728,7 @@ program dang
         real(dp)                                  :: q
 
         if (rank == master) then
+           write(*,fmt='(a)') 'Starting joint sampling for synch and dust_template.'
            t1 = mpi_wtime()
         end if
 
@@ -835,7 +839,7 @@ program dang
            end if
         end do
 
-        if (rank == master) write(*,*) 'Compute RHS of matrix eqn.'
+        ! if (rank == master) write(*,*) 'Compute RHS of matrix eqn.'
         ! Computing the LHS and RHS of the linear equation
         ! RHS
         w = 0 
@@ -884,14 +888,14 @@ program dang
             end if
         end do
 
-        if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
+        ! if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
 
         !LHS
 
         t2 = mpi_wtime()
 
         do j = 1, z
-           write(*,*) j
+           ! write(*,*) j
            A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
         end do
         nnz_a = count(A/=0)
@@ -902,17 +906,15 @@ program dang
 
         ! Computation
         if (trim(method) == 'cholesky') then
-           write(*,*) 'Currently deprecated -- replace with LAPACK'
-           stop
            mat_u(:,:)        = 0.d0
            if (rank == master) write(*,*) 'Joint sampling using Cholesky Decomp'
-           call cholesky_decomp(A,mat_l)!,y)
+           call cholesky_decomp(A,mat_l)
            mat_u  = transpose(mat_l)
            call forward_sub(mat_l,d,c)
            call backward_sub(mat_u,b,d)
         else if (trim(method) == 'cg') then
            if (rank == master) write(*,*) 'Joint sampling using CG'
-           call compute_cg(A,b,c,y,nnz_a)
+           call compute_cg(A,b,c,y,nnz_a,par%cg_iter,par%cg_converge)
         else if (trim(method) == 'lu') then
            write(*,*) 'Currently deprecated -- replace with LAPACK'
            stop
@@ -930,25 +932,18 @@ program dang
            rand(i) = rand_normal(0.d0,1.d0)
         end do
 
+        t2 = mpi_wtime()
         write(*,*) 'Call Cholesky'
-        call cholesky_decomp(inv(A),mat_l)!,y)
+        call cholesky_decomp(inv(A),mat_l)
+        t3 = mpi_wtime()
+        write(*,*) 'Cholesky completed in ', t3-t2
 
+        t2 = mpi_wtime()
         write(*,*) 'multiply by random vector'
         call lower_tri_Ax(mat_l,rand,y)
+        t3 = mpi_wtime()
+        write(*,*) 'lower_tri_Ax completed in ', t3-t2
         
-
-!        if (rank == master) write(*,*) 'Complete LAPACK routines '
-!        t2 = mpi_wtime()
-!        mat_l = inv(A)
-!        t3 = mpi_wtime()
-!        write(*,*) 'inverted in ', t3-t2
-
-!        if (rank == master) write(*,*) 'A inverted '
-!        call dpotrf('L',y,mat_l,y,info)
-!        if (rank == master) write(*,*) 'Decomposed '
-!        call dtrmv('L','n','n',y,mat_l,y,rand,1)
-!        if (rank == master) write(*,*) 'Vec multiplied '
-
         b = b + rand
 
         ! Output amplitudes to the appropriate variables
