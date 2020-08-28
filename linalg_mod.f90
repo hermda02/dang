@@ -16,6 +16,8 @@ contains
         integer, dimension(size(A,1)) :: ipiv   ! pivot indices
         integer :: n, info
 
+        real(dp) :: t1,t2
+
         ! External procedures defined in LAPACK
         external DGETRF
         external DGETRI
@@ -27,7 +29,6 @@ contains
         ! DGETRF computes an LU factorization of a general M-by-N matrix A
         ! using partial pivoting with row interchanges.
         call DGETRF(n, n, Ainv, n, ipiv, info)
-    
         if (info /= 0) then
         stop 'Matrix is numerically singular!'
         end if
@@ -35,7 +36,6 @@ contains
         ! DGETRI computes the inverse of a matrix using the LU factorization
         ! computed by DGETRF.
         call DGETRI(n, Ainv, n, ipiv, work, n, info)
-
         if (info /= 0) then
         stop 'Matrix inversion failed!'
         end if
@@ -46,11 +46,12 @@ contains
         real(dp), dimension(:,:), intent(in)  :: mat
         real(dp), dimension(:,:), intent(out) :: low
         integer(i4b)                          :: ip, i, j, k, n, stat
-        real(dp)                              :: sum
+        real(dp)                              :: sum,t1,t2
 
         n   = size(mat(1,:))
 
         low = mat
+
         call dpotrf('L',n,low,n,stat)
 
     end subroutine cholesky_decomp
@@ -101,15 +102,19 @@ contains
         real(dp), dimension(:,:), intent(in)  :: L
         real(dp), dimension(:),   intent(in)  :: bf
         real(dp), dimension(:),   intent(out) :: xf
-        integer(i4b)                          :: i, n, m
+        integer(i4b)                          :: i, j, n
 
         n = size(bf)
 
         do i = 1, n
             xf(i) = bf(i)
-            do m = 1, i-1
-                xf(i) = xf(i)-l(i,m)*xf(m) 
+            !$OMP PARALLEL PRIVATE(j)
+            !$OMP DO SCHEDULE(static)
+            do j = 1, i-1
+                xf(i) = xf(i)-l(i,j)*xf(j) 
             end do
+            !$OMP END DO
+            !$OMP END PARALLEL
             xf(i) = xf(i)/L(i,i)
         end do
 
@@ -121,16 +126,20 @@ contains
         real(dp), dimension(:,:), intent(in)  :: U
         real(dp), dimension(:),   intent(in)  :: bb
         real(dp), dimension(:),   intent(out) :: xb
-        integer(i4b)                          :: n, m, i
+        integer(i4b)                          :: i, j, n
 
         n = size(bb)
         xb(n) = bb(n)/U(n,n)
 
         do i = n-1, 1, -1
             xb(i) = bb(i)
-            do m = n, i+1, -1
-                xb(i) = xb(i) - U(i,m)*xb(m)
+            !$OMP PARALLEL PRIVATE(i)
+            !$OMP DO SCHEDULE(static)
+            do j = n, i+1, -1
+                xb(i) = xb(i) - U(i,j)*xb(j)
             end do
+            !$OMP END DO
+            !$OMP END PARALLEL
             xb(i) = xb(i)/U(i,i)
         end do
 
@@ -202,7 +211,7 @@ contains
            d = r + beta*d
            t4 = mpi_wtime()
            i = i + 1
-           write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Sample: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+           write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
         end do
         
         if(present(nnz_a)) then
@@ -291,229 +300,143 @@ contains
 
   end subroutine compute_cg_precond
 
-    function mm_mpi(A,B)
-      implicit none
+  subroutine lower_tri_Ax(A,x,n)
+    implicit none
+    real(dp), dimension(:,:), intent(in)  :: A
+    real(dp), dimension(:), intent(inout) :: x
+    integer(i4b)                          :: i, j, k, n
+    real(dp)                              :: temp
 
-      integer(i4b)   :: nworkers, source, dest, mtype
-      integer(i4b)   :: cols, avecol, extra, offset
-      integer(i4b)   :: m, n, p, ii, ij, ik
-
-      real(dp), dimension(:,:), intent(in)  :: A
-      real(dp), dimension(:,:), intent(in)  :: B
-      real(dp), dimension(size(A(:,1)),size(B(1,:))) :: mm_mpi
-
-      m = size(A(:,1)) !number of rows in A
-      n = size(A(1,:)) !number of columns in A (rows of B)
-      p = size(B(1,:)) !number of columns of B 
-
-      if (size(A(1,:)) /= size(B(:,1))) then
-         if (rank == master) then
-            write(*,*) 'Matrix sizes do not conform!'
-            stop
-         end if
-      end if
-
-      nworkers = numprocs - 1
-
-      !----------------------- MASTER TASK ------------------------
-      if (rank == master) then
-
-         ! Send out matrix information to the workers
-         avecol = p/nworkers
-         extra  = mod(p,nworkers)
-         offset = 1
-         mtype  = FROM_MASTER
-
-         do dest=1,nworkers
-            if (dest .le. extra) then
-               cols = avecol + 1
-            else
-               cols = avecol
-            end if
-            write(*,*) '  sending ', cols, ' cols to task ', dest
-            call mpi_send(offset, 1, MPI_INTEGER, dest, mtype, MPI_COMM_WORLD, ierr)
-            call mpi_send(cols, 1, mpi_integer, dest, mtype, mpi_comm_world, ierr)
-            call mpi_send(a, m*n, mpi_double_precision, dest, mtype, mpi_comm_world, ierr)
-            call mpi_send(b(1,offset), cols*n, mpi_double_precision, dest, mtype, &
-                      mpi_comm_world, ierr)
-            offset = offset + cols
-         end do
-
-         ! Aaand receive results from the workers
-         mtype = from_worker
-         do ii=1, nworkers
-            source = ii
-            call mpi_recv(offset, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
-            call mpi_recv(cols, 1, mpi_integer, source, mtype, mpi_comm_world, status, ierr)
-            call mpi_recv(mm_mpi(1,offset), cols*m, mpi_double_precision, source, mtype, mpi_comm_world, status, ierr)
-         end do
-      end if
-
-      ! ------------------- WORKER TASK ---------------------------
+    do j = n,1,-1
+       temp = 0.d0
+       if (x(j) /= 0.d0) then
+          temp = x(j)
+          !$OMP PARALLEL PRIVATE(i)
+          !$OMP DO SCHEDULE(static)
+          do i = n, j+1, -1
+             x(i) = x(i) + temp*a(i,j)
+          end do
+          !$OMP END DO
+          !$OMP END PARALLEL
+          x(j) = x(j)*a(j,j)
+       end if
+    end do
+    
+  end subroutine lower_tri_Ax
   
-      if (rank > master) then
-         ! Receive data from master
-         mtype = from_master
-         call mpi_recv(offset, 1, mpi_integer, master, mtype, mpi_comm_world, status, ierr)
-         call mpi_recv(cols, 1, mpi_integer,  master, mtype, mpi_comm_world, status, ierr)
-         call mpi_recv(a, m*n, mpi_double_precision, master, mtype, mpi_comm_world, status, ierr)
-         call mpi_recv(b, cols*n, mpi_double_precision, master, mtype, mpi_comm_world, status, ierr)
-
-         ! Multiply matrices
-         do ik = 1, cols
-            do ii = 1, m
-               mm_mpi(ii,ik) = 0.0
-               do ij=1, n
-                  mm_mpi(ii,ik) = mm_mpi(ii,ik) + a(ii,ij)*b(ij,ik)
-               end do
-            end do
-         end do
-         
-         mtype = from_worker
-         ! and send the results back
-         call mpi_send(offset, 1, mpi_integer, master, mtype, mpi_comm_world, ierr)
-         call mpi_send(cols, 1, mpi_integer, master, mtype, mpi_comm_world, ierr)
-         call mpi_send(mm_mpi, cols*m, mpi_double_precision, master, mtype, mpi_comm_world, ierr)
-      end if
-    end function mm_mpi
-
-    subroutine lower_tri_Ax(A,x,n)
-      implicit none
-      real(dp), dimension(:,:), intent(in)  :: A
-      real(dp), dimension(:), intent(inout) :: x
-      integer(i4b)                          :: i, j, k, n
-      real(dp)                              :: temp
-
-      do j = n,1,-1
-         temp = 0.d0
-         if (x(j) /= 0.d0) then
-            temp = x(j)
-            !$OMP PARALLEL PRIVATE(i)
-            !$OMP DO SCHEDULE(static)
-            do i = n, j+1, -1
-               x(i) = x(i) + temp*a(i,j)
-            end do
-            !$OMP END DO
-            !$OMP END PARALLEL
-            x(j) = x(j)*a(j,j)
-         end if
-      end do
-
-    end subroutine lower_tri_Ax
-
-    function compute_ATA(mat) result(B)
-      implicit none
-      real(dp), dimension(:,:), intent(in)  :: mat
-      integer(i4b)                          :: ii, ij, ik, m, n
-      real(dp), allocatable, dimension(:,:) :: B
-      real(dp)                              :: q
+  function compute_ATA(mat) result(B)
+    implicit none
+    real(dp), dimension(:,:), intent(in)  :: mat
+    integer(i4b)                          :: ii, ij, ik, m, n
+    real(dp), allocatable, dimension(:,:) :: B
+    real(dp)                              :: q
       
-      ! Little function to compute the product of a matrix with its transpose
+    ! Little function to compute the product of a matrix with its transpose
       ! saves time since the matrix is symmetric!
+    
+    m = size(mat(1,:))
+    n = size(mat(:,1))
+    
+    allocate(B(m,m))
+    ! Compute A^T A
+    B(:,:) = 0.d0
 
-      m = size(mat(1,:))
-      n = size(mat(:,1))
-     
-      allocate(B(m,m))
-      ! Compute A^T A
-      B(:,:) = 0.d0
+    do ii = 1, m
+       do ij = ii, m
+          q = 0.d0
+          do ik = 1, n
+             q = q + mat(ik,ii)*mat(ik,ij)
+          end do
+          B(ii,ij) = q
+          B(ij,ii) = q
+       end do
+    end do
 
-      do ii = 1, m
-         do ij = ii, m
-            q = 0.d0
-            do ik = 1, n
-               q = q + mat(ik,ii)*mat(ik,ij)
-            end do
-            B(ii,ij) = q
-            B(ij,ii) = q
-         end do
-      end do
+  end function compute_ATA
 
-    end function compute_ATA
+  function compute_ATA_CSC(v,row_i,col_p) result(B)
+    implicit none
+    real(dp), dimension(:),     intent(in) :: v
+    integer(i4b), dimension(:), intent(in) :: row_i, col_p
+    integer(i4b)                           :: n, col, row, i, ii, k, ik, nnz
+    real(dp), allocatable, dimension(:,:)  :: B
+    
+    n   = size(col_p)-1
+    nnz = size(row_i)
+    
+    allocate(B(n,n))
+    
+    b = 0.d0
+    
+    !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
+!    if (OMP_GET_THREAD_NUM() == 0) write(*,*) 'loop 1'
+    !$OMP DO SCHEDULE(DYNAMIC)
+    do i = 1, n+1
+       !!$OMP DO SCHEDULE(DYNAMIC)
+       do k = col_p(i), col_p(i+1)-1
+          col = i
+          do ii = 1, n+1
+             row = ii
+             do ik = col_p(ii), col_p(ii+1)-1
+                if (row_i(k) == row_i(ik)) then
+                   b(row,col) = b(row,col) + v(k)*v(ik)
+                end if
+             end do
+          end do
+       end do
+       !!$OMP END DO
+    end do
+    !$OMP END DO
+ !   if (OMP_GET_THREAD_NUM() == 0) write(*,*) 'loop 2'
+    !$OMP DO SCHEDULE(DYNAMIC)
+    do i = 1, n
+       do k = 1, n
+          if (b(i,k) /= 0.d0) b(k,i) = b(i,k)
+       end do
+    end do
+    !$OMP END DO
+    !$OMP END PARALLEL
+    
+  end function compute_ATA_CSC
 
-    function compute_ATA_CSC(v,row_i,col_p) result(B)
-      implicit none
-      real(dp), dimension(:),     intent(in) :: v
-      integer(i4b), dimension(:), intent(in) :: row_i, col_p
-      integer(i4b)                           :: n, col, row, i, ii, k, ik, nnz
-      real(dp), allocatable, dimension(:,:)  :: B
-
-      n   = size(col_p)-1
-      nnz = size(row_i)
-
-      allocate(B(n,n))
-
-      b = 0.d0
-
-      !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
-      
-      !$OMP DO SCHEDULE(GUIDED)
-      do i = 1, n+1
-         do k = col_p(i), col_p(i+1)-1
-            col = i
-            do ii = 1, n+1
-               row = ii
-               do ik = col_p(ii), col_p(ii+1)-1
-                  if (row_i(k) == row_i(ik)) then
-                     b(row,col) = b(row,col) + v(k)*v(ik)
-                  end if
-               end do
-            end do
-         end do
-      end do
-      !$OMP END DO
-      !$OMP DO SCHEDULE(GUIDED)
-      do i = 1, n
-         do k = 1, n
-            if (b(i,k) /= 0.d0) b(k,i) = b(i,k)
-         end do
-      end do
-      !$OMP END DO
-      !$OMP END PARALLEL
-
-!      deallocate(B)
-
-    end function compute_ATA_CSC
-
-    function compute_ATA_CSR(v,col_i,row_p) result(B)
-      implicit none
-      real(dp), dimension(:),     intent(in) :: v
-      integer(i4b), dimension(:), intent(in) :: col_i, row_p
-      integer(i4b)                           :: n, col, row, i, ii, k, ik, nnz
-      real(dp), allocatable, dimension(:,:)  :: B
-
-      n   = size(row_p)-1
-      nnz = size(col_i)
-
-      allocate(B(n,n))
-
-      b = 0.d0
-
-      !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
-      
-      !$OMP DO SCHEDULE(GUIDED)
-      do i = 1, n+1
-         do k = row_p(i), row_p(i+1)-1
-            row = i
-            do ii = 1, n+1
-               col = ii
-               do ik = row_p(ii), row_p(ii+1)
-                  if (col_i(k) == col_i(ik)) then
-                     b(row,col) = b(row,col) + v(k)*v(ik)
-                  end if
-               end do
-            end do
-         end do
-      end do
-      !$OMP END DO
-      !$OMP DO SCHEDULE(GUIDED)
-      do i = 1, n
-         do k = 1, n
-            if (b(i,k) /= 0.d0) b(k,i) = b(i,k)
-         end do
-      end do
-      !$OMP END DO
-      !$OMP END PARALLEL
+  function compute_ATA_CSR(v,col_i,row_p) result(B)
+    implicit none
+    real(dp), dimension(:),     intent(in) :: v
+    integer(i4b), dimension(:), intent(in) :: col_i, row_p
+    integer(i4b)                           :: n, col, row, i, ii, k, ik, nnz
+    real(dp), allocatable, dimension(:,:)  :: B
+    
+    n   = size(row_p)-1
+    nnz = size(col_i)
+    
+    allocate(B(n,n))
+    
+    b = 0.d0
+    
+    !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
+    !$OMP DO SCHEDULE(STATIC)
+    do i = 1, n+1
+       do k = row_p(i), row_p(i+1)-1
+          row = i
+          do ii = 1, n+1
+             col = ii
+             do ik = row_p(ii), row_p(ii+1)
+                if (col_i(k) == col_i(ik)) then
+                   b(row,col) = b(row,col) + v(k)*v(ik)
+                end if
+             end do
+          end do
+       end do
+    end do
+    !$OMP END DO
+    !$OMP DO SCHEDULE(STATIC)
+    do i = 1, n
+       do k = 1, n
+          if (b(i,k) /= 0.d0) b(k,i) = b(i,k)
+       end do
+    end do
+    !$OMP END DO
+    !$OMP END PARALLEL
 
     end function compute_ATA_CSR
 

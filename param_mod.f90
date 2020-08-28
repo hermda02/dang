@@ -112,7 +112,9 @@ contains
 
         call getarg(1,paramfile)
 
+        write(*,*) ''
         if (rank == master) write(*,*) 'Reading parameters from ', trim(paramfile)
+        write(*,*) ''
 
         call get_file_length(paramfile,parfile_len)
         allocate(parfile_cache(parfile_len))

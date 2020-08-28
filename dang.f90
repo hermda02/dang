@@ -106,7 +106,7 @@ program dang
     end do
 
     call convert_maps
-
+    
     deallocate(map,rms)
 
     call read_bintab(template_file_01,template_01,npix,nmaps,nullval,anynull,header=header)
@@ -135,18 +135,21 @@ program dang
 
     do k = par%pol_type(1), par%pol_type(size(par%pol_type))
         
-        if (rank == master) then
-            if (k == 1) then
-                write(*,*) 'Sampling Temperature'
-                write(*,*) '-----------------------'
-            else if (k == 2) then
-                write(*,*) 'Stokes Q'
-                write(*,*) '-----------------------'
-            else if (k == 3) then
-                write(*,*) 'Stokes U'
-                write(*,*) '-----------------------'
-            end if
-        end if
+       if (rank == master) then
+          if (k == 1) then
+             write(*,*)
+             write(*,*) 'Sampling Temperature'
+             write(*,*) '-----------------------'
+          else if (k == 2) then
+             write(*,*)
+             write(*,*) 'Stokes Q'
+             write(*,*) '-----------------------'
+          else if (k == 3) then
+             write(*,*)
+             write(*,*) 'Stokes U'
+             write(*,*) '-----------------------'
+          end if
+       end if
 
         if (trim(par%mode) == 'comp_sep') then
 
@@ -203,6 +206,7 @@ program dang
                         iter, " - chisq: " , chisq, " - A_s: ",&
                         fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
                         sum(beta_s(:,k))/npix, ' - A_d: ', temp01_amps/temp_norm_01(k)
+                    write(*,fmt='(a)') '---------------------------------------------'
                 end if
                 if (mod(iter,output_iter) .EQ. 0) then
                     call write_maps(k,par%mode)
@@ -766,8 +770,6 @@ program dang
             end if
         end do
 
-!        if (rank == master) write(*,*) 'Allocate'
-
         !------------------------------------------------------------------------------|
         ! Since A is sparse (mostly 0s), we'll try to save time and memory by          |
         ! putting all of the values, with 'pointers' into a smaller array              |
@@ -790,7 +792,7 @@ program dang
         allocate(rand(y),samp(y))
         allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
 
-        ! write(*,*) 'Initialize'
+!        write(*,*) 'Initialize'
         ! Initialize arrays
         A(:,:)            = 0.d0
         b(:)              = 0.d0
@@ -800,7 +802,7 @@ program dang
         samp(:)           = 0.d0
         mat_l(:,:)        = 0.d0
 
-        ! write(*,*) 'Fill Template Matrix'
+!        write(*,*) 'Fill Template Matrix'
         ! Fill template matrix
  
         l  = 1
@@ -839,7 +841,7 @@ program dang
            end if
         end do
 
-        ! if (rank == master) write(*,*) 'Compute RHS of matrix eqn.'
+!        if (rank == master) write(*,*) 'Compute RHS of matrix eqn.'
         ! Computing the LHS and RHS of the linear equation
         ! RHS
         w = 0 
@@ -888,32 +890,32 @@ program dang
             end if
         end do
 
-        ! if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
+!        if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
 
         !LHS
 
         t2 = mpi_wtime()
 
         do j = 1, z
-           ! write(*,*) j
+           !write(*,*) j
            A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
         end do
         nnz_a = count(A/=0)
 
         t3 = mpi_wtime()
 
-        write(*,*) 'sparse matrix multiply: ', t3-t2
+        write(*,fmt='(a,E12.4,a)') 'Sparse matrix multiply: ', t3-t2, 's.'
 
         ! Computation
         if (trim(method) == 'cholesky') then
            mat_u(:,:)        = 0.d0
-           if (rank == master) write(*,*) 'Joint sampling using Cholesky Decomp'
+           if (rank == master) write(*,fmt='(a)') 'Joint sampling using Cholesky Decomposition.'
            call cholesky_decomp(A,mat_l)
            mat_u  = transpose(mat_l)
            call forward_sub(mat_l,d,c)
            call backward_sub(mat_u,b,d)
         else if (trim(method) == 'cg') then
-           if (rank == master) write(*,*) 'Joint sampling using CG'
+           if (rank == master) write(*,*) 'Joint sampling using CG.'
            call compute_cg(A,b,c,y,nnz_a,par%cg_iter,par%cg_converge)
         else if (trim(method) == 'lu') then
            write(*,*) 'Currently deprecated -- replace with LAPACK'
@@ -927,24 +929,18 @@ program dang
         ! Draw a sample by cholesky decompsing A^-1, and multiplying 
         ! the subsequent lower triangular by a vector of random numbers
 
-        if (rank == master) write(*,*) 'Draw a sample for iteration ', iter
+        if (rank == master) write(*,fmt='(a,i6)') 'Draw a sample for iteration ', iter
         do i = 1, y
            rand(i) = rand_normal(0.d0,1.d0)
         end do
 
         t2 = mpi_wtime()
-        write(*,*) 'Call Cholesky'
-        call cholesky_decomp(inv(A),mat_l)
+        call cholesky_decomp(A,mat_l)
         t3 = mpi_wtime()
-        write(*,*) 'Cholesky completed in ', t3-t2
-
-        t2 = mpi_wtime()
-        write(*,*) 'multiply by random vector'
-        call lower_tri_Ax(mat_l,rand,y)
-        t3 = mpi_wtime()
-        write(*,*) 'lower_tri_Ax completed in ', t3-t2
+        write(*,fmt='(a,E12.4,a)') 'Cholesky completed in ', t3-t2, 's.'
+        call forward_sub(mat_l,d,rand)
         
-        b = b + rand
+        b = b + d
 
         ! Output amplitudes to the appropriate variables
         w = 0
@@ -1125,17 +1121,18 @@ program dang
 
         if (trim(mode) == 'comp_sep') then
 
-            title = trim(direct) // 'pixel_100_A_d.dat'
+            title = trim(direct) // 'pixel_100_A_d_' // trim(tqu(k)) // '.dat'
             inquire(file=title,exist=exist)
             if (exist) then
                 open(30,file=title, status="old",position="append", action="write")
             else
                 open(30,file=title, status="new", action="write")
+                write(30,*) 
             endif
             write(30,*) fg_map(100,k,par%fg_ref_loc(1),2)
             close(30)
 
-            title = trim(direct) // 'pixel_100_A_s.dat'
+            title = trim(direct) // 'pixel_100_A_s_' // trim(tqu(k)) // '.dat'
             inquire(file=title,exist=exist)
             if (exist) then
                 open(31,file=title, status="old",position="append", action="write")
@@ -1145,7 +1142,7 @@ program dang
             write(31,*) fg_map(100,k,par%fg_ref_loc(1),1)
             close(31)
 
-            title = trim(direct) // 'pixel_100_beta_s.dat'
+            title = trim(direct) // 'pixel_100_beta_s_' // trim(tqu(k)) // '.dat'
             inquire(file=title,exist=exist)
             if (exist) then
                 open(32,file=title, status="old",position="append", action="write")
@@ -1155,7 +1152,7 @@ program dang
             write(32,*) beta_s(100,k)
             close(32)
 
-            title = trim(direct) // 'total_chisq.dat'
+            title = trim(direct) // 'total_chisq.dat_' // trim(tqu(k)) // '.dat'
             inquire(file=title,exist=exist)
             if (exist) then
                 open(33,file=title, status="old",position="append", action="write")
