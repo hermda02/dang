@@ -899,6 +899,7 @@ program dang
         do j = 1, z
            !write(*,*) j
            A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
+           !write(*,*) "finished band ", j
         end do
         nnz_a = count(A/=0)
 
@@ -939,7 +940,7 @@ program dang
         t3 = mpi_wtime()
         write(*,fmt='(a,E12.4,a)') 'Cholesky completed in ', t3-t2, 's.'
         call forward_sub(mat_l,d,rand)
-        
+       
         b = b + d
 
         ! Output amplitudes to the appropriate variables

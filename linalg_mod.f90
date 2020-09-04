@@ -211,7 +211,11 @@ contains
            d = r + beta*d
            t4 = mpi_wtime()
            i = i + 1
-           write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+           if (delta_new .gt. converge) then
+              write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+           else
+              write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+           end if
         end do
         
         if(present(nnz_a)) then
@@ -224,13 +228,14 @@ contains
         deallocate(q)
         deallocate(d)
 
-
     end subroutine compute_cg
 
     subroutine compute_cg_precond(A,x,b,n,nnz_a)
         
       ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
       ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
+
+      ! HAS NOT BEEN COMPLETED YET
 
       implicit none
 
@@ -361,15 +366,18 @@ contains
     integer(i4b)                           :: n, col, row, i, ii, k, ik, nnz
     real(dp), allocatable, dimension(:,:)  :: B
     
+!    write(*,*) "Enter ATA"
+
     n   = size(col_p)-1
     nnz = size(row_i)
-    
+
+!    write(*,*) "ATA Allocate B"
     allocate(B(n,n))
     
     b = 0.d0
     
     !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
-!    if (OMP_GET_THREAD_NUM() == 0) write(*,*) 'loop 1'
+    !if (OMP_GET_THREAD_NUM() == 0) write(*,*) 'loop 1'
     !$OMP DO SCHEDULE(DYNAMIC)
     do i = 1, n+1
        !!$OMP DO SCHEDULE(DYNAMIC)
@@ -387,7 +395,7 @@ contains
        !!$OMP END DO
     end do
     !$OMP END DO
- !   if (OMP_GET_THREAD_NUM() == 0) write(*,*) 'loop 2'
+    !if (OMP_GET_THREAD_NUM() == 0) write(*,*) 'loop 2'
     !$OMP DO SCHEDULE(DYNAMIC)
     do i = 1, n
        do k = 1, n
@@ -396,6 +404,8 @@ contains
     end do
     !$OMP END DO
     !$OMP END PARALLEL
+
+    !write(*,*) "Done."
     
   end function compute_ATA_CSC
 
