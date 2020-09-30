@@ -8,51 +8,111 @@ module linalg_mod
 
 contains
 
-    function inv(A) result(Ainv)
-        real(dp), dimension(:,:), intent(in) :: A
-        real(dp), dimension(size(A,1),size(A,2)) :: Ainv
-    
-        real(dp), dimension(size(A,1)) :: work  ! work array for LAPACK
-        integer, dimension(size(A,1)) :: ipiv   ! pivot indices
-        integer :: n, info
+    subroutine invert_matrix_dp(matrix, cholesky, status, ln_det)
+      implicit none
+      
+      real(dp), dimension(1:,1:), intent(inout)         :: matrix
+      logical(lgt),               intent(in),  optional :: cholesky
+      integer(i4b),               intent(out), optional :: status
+      real(dp),                   intent(out), optional :: ln_det
+      
+      integer(i4b)     :: i, j, n, lda, info, lwork
+      logical(lgt)     :: use_cholesky
+      character(len=1) :: uplo
+      integer(i4b), allocatable, dimension(:)   :: ipiv
+      real(dp),     allocatable, dimension(:)   :: work
+      
+      if(present(status)) status = 0
+      use_cholesky = .false.; if (present(cholesky)) use_cholesky = cholesky
+      n     = size(matrix(1,:))
+      lda   = n
+      lwork = n
+      info  = 0
+      uplo  = 'l'
+      allocate(ipiv(n))
+      allocate(work(n))
+      
+      if (use_cholesky) then
+         call DPOTRF(uplo, n, matrix, lda, info)
+         if (present(ln_det)) then
+            ln_det = 0.d0
+            do i = 1, n
+               if (matrix(i,i) > 0.d0) then
+                  ln_det = ln_det + 2.d0*log(matrix(i,i))
+               else
+                  ln_det = -1.d30
+                  exit
+               end if
+            end do
+         end if
+      else
+         call DGETRF(n, n, matrix, lda, ipiv, info)
+      end if
+      if (info /= 0) then
+         if(present(status)) then
+            status = info
+            return
+         end if
+         write(*,*) 'DGETRF: Factorization failed. Info = ', info
+         stop
+      else
+         
+         if (use_cholesky) then
+            call DPOTRI(uplo, n, matrix, lda, info)
+         else
+            call DGETRI(n, matrix, lda, ipiv, work, lwork, info)
+         end if
+         
+         if (info /= 0) then
+            if(present(status)) then
+               status = info
+               return
+            end if
+            write(*,*) 'DGETRI: Inversion failed. Info = ', info
+            stop
+         end if
+         
+      end if
 
-        real(dp) :: t1,t2
+      if (use_cholesky) then
+         do i = 1, n
+            do j = i+1, n
+               matrix(i,j) = matrix(j,i)
+            end do
+         end do
+      end if
+      
+      deallocate(work)
+      deallocate(ipiv)
 
-        ! External procedures defined in LAPACK
-        external DGETRF
-        external DGETRI
-    
-        ! Store A in Ainv to prevent it from being overwritten by LAPACK
-        Ainv = A
-        n = size(A,1)
-    
-        ! DGETRF computes an LU factorization of a general M-by-N matrix A
-        ! using partial pivoting with row interchanges.
-        call DGETRF(n, n, Ainv, n, ipiv, info)
-        if (info /= 0) then
-        stop 'Matrix is numerically singular!'
-        end if
-    
-        ! DGETRI computes the inverse of a matrix using the LU factorization
-        ! computed by DGETRF.
-        call DGETRI(n, Ainv, n, ipiv, work, n, info)
-        if (info /= 0) then
-        stop 'Matrix inversion failed!'
-        end if
-    end function inv
+    end subroutine invert_matrix_dp
+
+    subroutine invert_tri(tri,uplo,inv)
+      implicit none
+      real(dp), dimension(:,:), intent(in)  :: tri
+      character(len=1),         intent(in)  :: uplo
+      real(dp), dimension(:,:), intent(out) :: inv
+      integer(i4b)                          :: n, info
+
+      n   = size(tri(1,:))
+
+      inv = tri
+
+      call dtrtri(uplo,'N',n,inv,n,info)
+
+    end subroutine invert_tri
 
     subroutine cholesky_decomp(mat,low)
         implicit none
         real(dp), dimension(:,:), intent(in)  :: mat
         real(dp), dimension(:,:), intent(out) :: low
-        integer(i4b)                          :: ip, i, j, k, n, stat
-        real(dp)                              :: sum,t1,t2
+        integer(i4b)                          :: n, info
 
         n   = size(mat(1,:))
 
         low = mat
 
-        call dpotrf('L',n,low,n,stat)
+        call dpotrf('L',n,low,n,info)
 
     end subroutine cholesky_decomp
 
@@ -159,13 +219,14 @@ contains
         integer(i4b), optional, intent(in)    :: nnz_a
         real(dp), allocatable, dimension(:)   :: r, q, d
         real(dp)                              :: epsil, alpha, beta, delta_0
-        real(dp)                              :: delta_old, delta_new, t3, t4
+        real(dp)                              :: delta_old, delta_new, t3, t4, t5, t6
         integer(i4b)                          :: i_max, i, j
 
         real(dp),allocatable,dimension(:)     :: v
         integer(i4b),allocatable,dimension(:) :: rp, ci
 
 
+        t5 = mpi_wtime()
         allocate(r(n),q(n),d(n))
 
         if(present(nnz_a)) then
@@ -217,7 +278,9 @@ contains
               write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
            end if
         end do
-        
+        t6 = mpi_wtime()
+
+        write(*,fmt='(a,e12.5,a)') 'CG Total time: ', t6-t5, 's.'
         if(present(nnz_a)) then
            deallocate(v)
            deallocate(rp)
@@ -366,26 +429,33 @@ contains
     integer(i4b)                           :: n, col, row, i, ii, k, ik, nnz
     real(dp), allocatable, dimension(:,:)  :: B
     
-!    write(*,*) "Enter ATA"
-
     n   = size(col_p)-1
     nnz = size(row_i)
 
-!    write(*,*) "ATA Allocate B"
     allocate(B(n,n))
     
     b = 0.d0
     
     !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
-    !if (OMP_GET_THREAD_NUM() == 0) write(*,*) 'loop 1'
     !$OMP DO SCHEDULE(DYNAMIC)
-    do i = 1, n+1
+    do i = 1, n
        !!$OMP DO SCHEDULE(DYNAMIC)
        do k = col_p(i), col_p(i+1)-1
+          if (k > nnz) then
+             write(*,*) 'k too big'
+             !stop
+             exit
+          end if
           col = i
-          do ii = 1, n+1
+          do ii = 1, n
              row = ii
              do ik = col_p(ii), col_p(ii+1)-1
+                if (ik > nnz) then
+                   !write(*,*) ik
+                   write(*,*) 'ik too big'
+                   !stop
+                   exit
+                end if
                 if (row_i(k) == row_i(ik)) then
                    b(row,col) = b(row,col) + v(k)*v(ik)
                 end if
@@ -395,7 +465,6 @@ contains
        !!$OMP END DO
     end do
     !$OMP END DO
-    !if (OMP_GET_THREAD_NUM() == 0) write(*,*) 'loop 2'
     !$OMP DO SCHEDULE(DYNAMIC)
     do i = 1, n
        do k = 1, n
@@ -405,8 +474,6 @@ contains
     !$OMP END DO
     !$OMP END PARALLEL
 
-    !write(*,*) "Done."
-    
   end function compute_ATA_CSC
 
   function compute_ATA_CSR(v,col_i,row_p) result(B)
@@ -534,7 +601,7 @@ contains
 
       !$OMP PARALLEL PRIVATE(i,k)
       !$OMP DO SCHEDULE(GUIDED)
-      do i = 1, n+1
+      do i = 1, n
          res(i) = 0.d0
          do k = row_p(i), row_p(i+1)-1
             res(i) = res(i) + val(k)*x(col_i(k))
@@ -560,7 +627,7 @@ contains
 
       res = 0.d0
 
-      do i = 1, n+1
+      do i = 1, n
          do k = col_p(i), col_p(i+1)-1
             res(row_i(k)) = res(row_i(k)) + val(k)*x(i)
          end do

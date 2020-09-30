@@ -116,9 +116,18 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     ! Normalize template to avoid large values in the matrix equation
     do k = 1, nmaps
-       temp_norm_01(k) = maxval(template_01(:,k))
-       template_01(:,k)  = template_01(:,k)/temp_norm_01(k)
+       temp_norm_01(k)  = maxval(template_01(:,k))
+       template_01(:,k) = template_01(:,k)/temp_norm_01(k)
     end do
+
+    do j = 1, nbands
+       do k = 1, nmaps
+          do i = 0, npix-1
+             if (maps(i,k,j) == missval) maps(i,k,j) = 0.d0
+          end do
+       end do
+    end do
+
 
     !----------------------------------------------------------------------------------------------------------
     ! Joint Sampler Info
@@ -211,7 +220,7 @@ program dang
                 if (mod(iter,output_iter) .EQ. 0) then
                     call write_maps(k,par%mode)
                 end if
-
+                
                 call write_data(par%mode)
                 end if
             end do    
@@ -443,7 +452,7 @@ program dang
         logical                                                :: exist
 
         !------------------------------------------------------------------------
-        ! Spectral index sampler, using the Metropolis-Hastings approach.
+        ! Spectral index sampler, using the Metropolis approach.
         !------------------------------------------------------------------------
 
         map2fit = data
@@ -527,6 +536,7 @@ program dang
             do l = 1, iterations
 
                 ! Sampling from the prior
+                !t         = rand_normal(sol, self%fg_gauss(comp,1,2))
                 t         = rand_normal(self%fg_gauss(comp,1,1), self%fg_gauss(comp,1,2))
                 b         = 0.d0
 
@@ -656,6 +666,7 @@ program dang
 
                 do l = 1, iterations
                     ! Begin sampling from the prior
+                    ! t = rand_normal(sol,par%HI_Td_std)
                     t = rand_normal(par%HI_Td_mean,par%HI_Td_std)
                     b = 0.d0
                     do j = 1, nbands
@@ -724,7 +735,7 @@ program dang
         real(dp), allocatable, dimension(:,:)     :: A, val
         integer(i4b), allocatable, dimension(:,:) :: col_ptr, row_ind
         real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u
-        real(dp), allocatable, dimension(:)       :: b, c, d, rand, samp
+        real(dp), allocatable, dimension(:)       :: b, c, d, rand, samp, unc
         integer(i4b)                              :: x, y, z, nfit1, nfit2, w, l, m, n
         integer(i4b)                              :: vi, ci, ri, co, nnz, nnz_a
         integer(i4b)                              :: info
@@ -786,13 +797,19 @@ program dang
 
         nnz = x + x 
 
+        ! write(*,*) nfit1
+        ! write(*,*) x, y, z, nnz
+        ! do j = 1, z
+        !    write(*,*) j, par%temp_corr(1,j)
+        ! end do
+
         allocate(A(y,y))
         allocate(b(y),c(y),d(y))
         allocate(mat_l(y,y),mat_u(y,y))
         allocate(rand(y),samp(y))
         allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
 
-!        write(*,*) 'Initialize'
+        ! write(*,*) 'Initialize'
         ! Initialize arrays
         A(:,:)            = 0.d0
         b(:)              = 0.d0
@@ -802,7 +819,7 @@ program dang
         samp(:)           = 0.d0
         mat_l(:,:)        = 0.d0
 
-!        write(*,*) 'Fill Template Matrix'
+        ! write(*,*) 'Fill Template Matrix'
         ! Fill template matrix
  
         l  = 1
@@ -811,7 +828,7 @@ program dang
            ci = 1
            ri = 1
            co = 1
-           col_ptr(ci,:) = 1
+           col_ptr(ci,j) = 1
            ci = ci + 1
            do m = 1,x 
               val(vi,j)     = compute_spectrum(par,1,par%dat_nu(j),m-1,map_n)/rmss(m-1,map_n,j)
@@ -830,18 +847,25 @@ program dang
                  vi            = vi + 1
                  ri            = ri + 1
               end do
-              col_ptr(m:ci+l-1,j)  = col_ptr(m,j)
+              col_ptr(x:ci+l-1,j)  = col_ptr(x,j)
               col_ptr(ci+l-1,j)    = co
               col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
               l = l + 1
+              ! write(*,*) 'its fine, true', j, l, ci+l-1
            else
-              col_ptr(m:ci+l-1,j)  = col_ptr(m,j)
-              col_ptr(ci+l-1,j)    = co
-              col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
+              if (ci+l-1 > y+1) then
+                 ! write(*,*) 'out of bounds'
+                 cycle
+              else
+                 col_ptr(m:ci+l-1,j)  = col_ptr(m,j)
+                 col_ptr(ci+l-1,j)    = co
+                 col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
+                 ! write(*,*) 'its fine, false', j, l, ci+l-1
+              end if
            end if
         end do
 
-!        if (rank == master) write(*,*) 'Compute RHS of matrix eqn.'
+        ! write(*,*) 'Compute RHS of matrix eqn.'
         ! Computing the LHS and RHS of the linear equation
         ! RHS
         w = 0 
@@ -890,16 +914,15 @@ program dang
             end if
         end do
 
-!        if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
-
+        ! if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
         !LHS
 
         t2 = mpi_wtime()
 
         do j = 1, z
-           !write(*,*) j
+           ! write(*,*) j
            A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
-           !write(*,*) "finished band ", j
+           ! write(*,*) "finished band ", j
         end do
         nnz_a = count(A/=0)
 
@@ -986,7 +1009,31 @@ program dang
 
         if (rank == master) then
            t3 = mpi_wtime()
-           write(*,*) 'Joint Sampler completed in ', t3-t1, 's.'
+           write(*,fmt='(a,f10.3,a)') 'Joint Sampler completed in ', t3-t1, 's.'
+        end if
+
+        if (par%output_unc .and. iter == niter) then
+           allocate(unc(nfit1))
+
+           write(*,*) 'Dust amplitude uncertainties: '
+        
+           call invert_matrix_dp(A,.true.)
+
+           write(*,*) 'Done inverting.'
+           do j = 1, nfit1
+              unc(j) = sqrt(A(x+j,x+j))
+           end do
+
+           inquire(file=trim(direct) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat',exist=exist)
+           if (exist) then
+              open(40,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="old", &
+                   position="append", action="write")
+           else
+              open(40,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="new", action="write")
+           endif
+           write(40,'(6(E17.8))') unc
+           close(40)
+
         end if
 
         ! Sure to deallocate all arrays here to free up memory
@@ -1069,7 +1116,6 @@ program dang
          chi_map(:,nm) = chi_map(:,nm)/(nbands+nfgs)
          title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
          map(:,1)   = chi_map(:,nm)
-         ! write(*,*) 'chisq sum ', sum(chi_map(:,nm))
          call write_bintab(map,npix,1, header, nlheader, trim(title))
          
       else if (trim(mode) == 'HI_fit') then
@@ -1153,7 +1199,7 @@ program dang
             write(32,*) beta_s(100,k)
             close(32)
 
-            title = trim(direct) // 'total_chisq.dat_' // trim(tqu(k)) // '.dat'
+            title = trim(direct) // 'total_chisq_' // trim(tqu(k)) // '.dat'
             inquire(file=title,exist=exist)
             if (exist) then
                 open(33,file=title, status="old",position="append", action="write")
@@ -1171,7 +1217,7 @@ program dang
             else
                 open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="new", action="write")
             endif
-            write(34,'(6(E17.8))') temp01_amps/temp_norm_01(k)
+            write(34,'(10(E17.8))') temp01_amps/temp_norm_01(k)
             close(34)
 
         else if (trim(mode) == 'HI_fit') then

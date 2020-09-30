@@ -13,6 +13,7 @@ module param_mod
         integer(i4b)       :: cg_iter    ! Maximum cg iterations
         real(dp)           :: cg_converge! CG convergence criterion 
         logical(lgt)       :: output_fg  ! Do we output the foregrounds at each frequency?
+        logical(lgt)       :: output_unc ! Do we output uncertainty of template fit?
         character(len=512) :: outdir     ! Output directory
         character(len=16)  :: solver     ! Linear system solver type
         character(len=16)  :: mode       ! 'dang' mode ('comp_sep', 'HI_fit')
@@ -334,6 +335,7 @@ contains
         call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
         call get_parameter_hashtable(htbl, 'CG_ITER_MAX', par_int=par%cg_iter)
         call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH', par_dp=par%cg_converge)
+        call get_parameter_hashtable(htbl, 'OUTPUT_TEMP_UNCERTAINTY', par_lgt=par%output_unc)
         
         ! Surely an inefficient way to decide which maps to use (T -> 1, Q -> 2, U -> 3), but it works
         pol_count = 0
