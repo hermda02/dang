@@ -724,7 +724,7 @@ program dang
         real(dp), allocatable, dimension(:,:)     :: A, val
         integer(i4b), allocatable, dimension(:,:) :: col_ptr, row_ind
         real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u
-        real(dp), allocatable, dimension(:)       :: b, c, d, rand, samp
+        real(dp), allocatable, dimension(:)       :: b, c, d, rand, samp, unc
         integer(i4b)                              :: x, y, z, nfit1, nfit2, w, l, m, n
         integer(i4b)                              :: vi, ci, ri, co, nnz, nnz_a
         integer(i4b)                              :: info
@@ -987,6 +987,30 @@ program dang
         if (rank == master) then
            t3 = mpi_wtime()
            write(*,*) 'Joint Sampler completed in ', t3-t1, 's.'
+        end if
+
+        if (par%output_unc .and. iter == niter) then
+           allocate(unc(nfit1))
+
+           write(*,*) 'Dust amplitude uncertainties: '
+        
+           call invert_matrix_dp(A,.true.)
+
+           write(*,*) 'Done inverting.'
+           do j = 1, nfit1
+              unc(j) = sqrt(A(x+j,x+j))
+           end do
+
+           inquire(file=trim(direct) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat',exist=exist)
+           if (exist) then
+              open(40,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="old", &
+                   position="append", action="write")
+           else
+              open(40,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="new", action="write")
+           endif
+           write(40,'(6(E17.8))') unc
+           close(40)
+
         end if
 
         ! Sure to deallocate all arrays here to free up memory
