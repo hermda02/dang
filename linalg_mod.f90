@@ -8,38 +8,84 @@ module linalg_mod
 
 contains
 
-    function inv(A) result(Ainv)
-        real(dp), dimension(:,:), intent(in) :: A
-        real(dp), dimension(size(A,1),size(A,2)) :: Ainv
-    
-        real(dp), dimension(size(A,1)) :: work  ! work array for LAPACK
-        integer, dimension(size(A,1)) :: ipiv   ! pivot indices
-        integer :: n, info
+    subroutine invert_matrix_dp(matrix, cholesky, status, ln_det)
+      implicit none
+      
+      real(dp), dimension(1:,1:), intent(inout)         :: matrix
+      logical(lgt),               intent(in),  optional :: cholesky
+      integer(i4b),               intent(out), optional :: status
+      real(dp),                   intent(out), optional :: ln_det
+      
+      integer(i4b)     :: i, j, n, lda, info, lwork
+      logical(lgt)     :: use_cholesky
+      character(len=1) :: uplo
+      integer(i4b), allocatable, dimension(:)   :: ipiv
+      real(dp),     allocatable, dimension(:)   :: work
+      
+      if(present(status)) status = 0
+      use_cholesky = .false.; if (present(cholesky)) use_cholesky = cholesky
+      n     = size(matrix(1,:))
+      lda   = n
+      lwork = n
+      info  = 0
+      uplo  = 'l'
+      allocate(ipiv(n))
+      allocate(work(n))
+      
+      if (use_cholesky) then
+         call DPOTRF(uplo, n, matrix, lda, info)
+         if (present(ln_det)) then
+            ln_det = 0.d0
+            do i = 1, n
+               if (matrix(i,i) > 0.d0) then
+                  ln_det = ln_det + 2.d0*log(matrix(i,i))
+               else
+                  ln_det = -1.d30
+                  exit
+               end if
+            end do
+         end if
+      else
+         call DGETRF(n, n, matrix, lda, ipiv, info)
+      end if
+      if (info /= 0) then
+         if(present(status)) then
+            status = info
+            return
+         end if
+         write(*,*) 'DGETRF: Factorization failed. Info = ', info
+         stop
+      else
+         
+         if (use_cholesky) then
+            call DPOTRI(uplo, n, matrix, lda, info)
+         else
+            call DGETRI(n, matrix, lda, ipiv, work, lwork, info)
+         end if
+         
+         if (info /= 0) then
+            if(present(status)) then
+               status = info
+               return
+            end if
+            write(*,*) 'DGETRI: Inversion failed. Info = ', info
+            stop
+         end if
+         
+      end if
 
-        real(dp) :: t1,t2
+      if (use_cholesky) then
+         do i = 1, n
+            do j = i+1, n
+               matrix(i,j) = matrix(j,i)
+            end do
+         end do
+      end if
+      
+      deallocate(work)
+      deallocate(ipiv)
 
-        ! External procedures defined in LAPACK
-        external DGETRF
-        external DGETRI
-    
-        ! Store A in Ainv to prevent it from being overwritten by LAPACK
-        Ainv = A
-        n = size(A,1)
-    
-        ! DGETRF computes an LU factorization of a general M-by-N matrix A
-        ! using partial pivoting with row interchanges.
-        call DGETRF(n, n, Ainv, n, ipiv, info)
-        if (info /= 0) then
-        stop 'Matrix is numerically singular!'
-        end if
-    
-        ! DGETRI computes the inverse of a matrix using the LU factorization
-        ! computed by DGETRF.
-        call DGETRI(n, Ainv, n, ipiv, work, n, info)
-        if (info /= 0) then
-        stop 'Matrix inversion failed!'
-        end if
-    end function inv
+    end subroutine invert_matrix_dp
 
     subroutine cholesky_decomp(mat,low)
         implicit none
