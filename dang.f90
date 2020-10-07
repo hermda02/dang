@@ -536,8 +536,8 @@ program dang
             do l = 1, iterations
 
                 ! Sampling from the prior
-                !t         = rand_normal(sol, self%fg_gauss(comp,1,2))
-                t         = rand_normal(self%fg_gauss(comp,1,1), self%fg_gauss(comp,1,2))
+                t         = rand_normal(sol, self%fg_gauss(comp,1,2))
+                !t         = rand_normal(self%fg_gauss(comp,1,1), self%fg_gauss(comp,1,2))
                 b         = 0.d0
 
                 do j = 1, nbands
@@ -734,8 +734,9 @@ program dang
         character(len=*),          intent(in)     :: method
         real(dp), allocatable, dimension(:,:)     :: A, val
         integer(i4b), allocatable, dimension(:,:) :: col_ptr, row_ind
-        real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u
-        real(dp), allocatable, dimension(:)       :: b, c, d, rand, samp, unc
+        real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u, unc_a_s
+        real(dp), allocatable, dimension(:)       :: b, c, d, rand, samp, unc_a_d
+        character(len=256)                        :: title
         integer(i4b)                              :: x, y, z, nfit1, nfit2, w, l, m, n
         integer(i4b)                              :: vi, ci, ri, co, nnz, nnz_a
         integer(i4b)                              :: info
@@ -796,12 +797,6 @@ program dang
         !------------------------------------------------------------------------------|
 
         nnz = x + x 
-
-        ! write(*,*) nfit1
-        ! write(*,*) x, y, z, nnz
-        ! do j = 1, z
-        !    write(*,*) j, par%temp_corr(1,j)
-        ! end do
 
         allocate(A(y,y))
         allocate(b(y),c(y),d(y))
@@ -1013,15 +1008,19 @@ program dang
         end if
 
         if (par%output_unc .and. iter == niter) then
-           allocate(unc(nfit1))
+           allocate(unc_a_d(nfit1))
+           allocate(unc_a_s(0:npix-1,1))
 
            write(*,*) 'Dust amplitude uncertainties: '
         
            call invert_matrix_dp(A,.true.)
 
            write(*,*) 'Done inverting.'
+           do j = 1, x
+              unc_a_s(j-1,1) = sqrt(A(j,j))
+           end do
            do j = 1, nfit1
-              unc(j) = sqrt(A(x+j,x+j))
+              unc_a_d(j) = sqrt(A(x+j,x+j))
            end do
 
            inquire(file=trim(direct) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat',exist=exist)
@@ -1031,8 +1030,11 @@ program dang
            else
               open(40,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="new", action="write")
            endif
-           write(40,'(6(E17.8))') unc
+           write(40,'(6(E17.8))') unc_a_d
            close(40)
+
+           title = trim(direct) // 'a_synch_uncertainty_'// trim(tqu(k)) // '.fits'
+           call write_bintab(unc_a_s,npix,1, header, nlheader, trim(title))
 
         end if
 
