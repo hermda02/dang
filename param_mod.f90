@@ -38,13 +38,14 @@ module param_mod
         logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates ift
         logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
         logical(lgt),       allocatable, dimension(:,:)   :: fg_sample_spec ! Logical - sample spec params
-        logical(lgt),       allocatable, dimension(:)     :: fg_sample_amp  ! Logical - sample amplitude
+        logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_inc    ! Logical - sample fg parameter?
+        logical(lgt),       allocatable, dimension(:)     :: fg_samp_amp    ! Logical - sample fg amplitude
+        logical(lgt)                                      :: joint_sample   ! Logical - jointly sample fg amplitudes
         character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
         integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
         integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
-        logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_inc    ! Logical - sample fg parameter?
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
 
@@ -411,17 +412,20 @@ contains
         character(len=2) :: itext
         character(len=2) :: jtext
 
+        write(*,*) "Read component parameters."
+
         len_itext = len(trim(itext))
         len_jtext = len(trim(jtext))
 
         call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
         call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
+        call get_parameter_hashtable(htbl, 'JOINT_SAMPLE', par_lgt=par%joint_sample)
         n  = par%ncomp
         n2 = par%ntemp
 
 
         allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
-        allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_sample_amp(n))
+        allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_samp_amp(n))
         allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
         allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
 
@@ -445,6 +449,7 @@ contains
             call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i))
             call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
             call get_parameter_hashtable(htbl, 'COMP_INCLUDE'//itext, len_itext=len_itext, par_lgt=par%fg_inc(i))
+            call get_parameter_hashtable(htbl, 'COMP_SAMPLE_AMP'//itext, len_itext=len_itext, par_lgt=par%fg_samp_amp(i))
 
             if (trim(par%fg_type(i)) == 'power-law') then
                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
