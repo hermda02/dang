@@ -1,11 +1,10 @@
-module param_mod
+module dang_param_mod
     use healpix_types
     use utility_mod
     use hashtbl
     implicit none
 
-    type params
-
+    type, public :: params
         ! Global parameters
         integer(i4b)       :: ngibbs     ! Number of Gibbs iterations
         integer(i4b)       :: nsample    ! For things like the metrop-hast alg
@@ -607,4 +606,4 @@ contains
         end if
     end subroutine tokenize
 
-end module param_mod
+end module dang_param_mod

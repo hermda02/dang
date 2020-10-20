@@ -23,7 +23,7 @@ HEALPIX_LINK    = -L$(HEALPIX)/lib -lhealpix
 #Combine them
 F90COMP         = $(F90FLAGS) $(LAPACK_INCLUDE) $(CFITSIO_INCLUDE) $(HEALPIX_INCLUDE)
 LINK            = $(HEALPIX_LINK) $(CFITSIO_LINK) $(LAPACK_LINK)
-OBJS            = utility_mod.o hashtbl.o param_mod.o linalg_mod.o data_mod.o dang.o
+OBJS            = utility_mod.o hashtbl.o dang_param_mod.o linalg_mod.o dang_component_mod.o dang_data_mod.o sample_mod.o dang.o
 OUTPUT          = dang
 
 # Executable
@@ -32,9 +32,11 @@ dang: $(OBJS)
 
 # Dependencies
 linalg_mod.o           : utility_mod.o
-data_mod.o             : utility_mod.o
-param_mod.o            : utility_mod.o hashtbl.o
-dang.o : utility_mod.o param_mod.o linalg_mod.o data_mod.o 
+dang_data_mod.o        : utility_mod.o
+dang_param_mod.o       : utility_mod.o hashtbl.o
+dang_component_mod.o   : utility_mod.o dang_param_mod.o
+sample_mod.o           : utility_mod.o dang_param_mod.o linalg_mod.o dang_data_mod.o dang_component_mod.o 
+dang.o : utility_mod.o dang_param_mod.o linalg_mod.o sample_mod.o dang_data_mod.o
 
 # Compilation stage
 %.o : %.f90
