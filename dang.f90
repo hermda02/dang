@@ -217,12 +217,15 @@ program dang
           call sample_index(par,comp,dang_data,nodust,par%fg_samp_nside(1,1),1,-1)
           do i = 0, npix-1
              do j = 1, nbands
-                dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
+                do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+                   dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
+                end do
              end do
           end do
        end if
        ! -------------------------------------------------------------------------------------------------------------------
-             
+
+
        res = dang_data%sig_map
        do k = par%pol_type(1), par%pol_type(size(par%pol_type))
           do j = 1, nfgs

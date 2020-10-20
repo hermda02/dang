@@ -415,7 +415,7 @@ contains
         allocate(rand(y),samp(y))
         allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
 
-        write(*,*) 'Initialize'
+        ! write(*,*) 'Initialize'
         ! Initialize arrays
         A(:,:)            = 0.d0
         b(:)              = 0.d0
@@ -425,7 +425,7 @@ contains
         samp(:)           = 0.d0
         mat_l(:,:)        = 0.d0
 
-        write(*,*) 'Fill Template Matrix'
+        ! write(*,*) 'Fill Template Matrix'
         ! Fill template matrix
  
         l  = 1
@@ -471,7 +471,7 @@ contains
            end if
         end do
 
-        write(*,*) 'Compute RHS of matrix eqn.'
+        ! write(*,*) 'Compute RHS of matrix eqn.'
         ! Computing the LHS and RHS of the linear equation
         ! RHS
         w = 0 
