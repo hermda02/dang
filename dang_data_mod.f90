@@ -15,9 +15,12 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:,:)   :: sig_map
     real(dp), allocatable, dimension(:,:,:)   :: rms_map
     real(dp), allocatable, dimension(:,:,:)   :: res_map
-    real(dp), allocatable, dimension(:,:,:)   :: chi_map
+    real(dp), allocatable, dimension(:,:)     :: chi_map
     real(dp), allocatable, dimension(:,:,:,:) :: fg_map
 
+    real(dp), allocatable, dimension(:,:,:)   :: temps
+
+    real(dp), allocatable, dimension(:,:,:)   :: temp_amps
   end type data
 
 contains
@@ -43,8 +46,27 @@ contains
     allocate(self%sig_map(0:npix-1,nmaps,nbands))
     allocate(self%rms_map(0:npix-1,nmaps,nbands))
     allocate(self%res_map(0:npix-1,nmaps,nbands))
-    allocate(self%chi_map(0:npix-1,nmaps,nbands))
+    allocate(self%chi_map(0:npix-1,nmaps))
 
   end subroutine init_data_maps
+
+  subroutine init_template(self,npix,nmaps,ntemp)
+    implicit none
+    type(data)               :: self
+    integer(i4b), intent(in) :: npix, nmaps, ntemp
+
+    allocate(self%temps(0:npix-1,nmaps,ntemp))
+
+  end subroutine init_template
+
+  subroutine init_temp_amps(self,nbands,nmaps,ntemp)
+    implicit none
+    type(data)               :: self
+    integer(i4b), intent(in) :: nbands, nmaps, ntemp
+
+    allocate(self%temp_amps(nbands,nmaps,ntemp))
+
+  end subroutine init_temp_amps
+
 
 end module dang_data_mod

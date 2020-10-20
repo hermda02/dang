@@ -2,7 +2,7 @@
 
 F90       = ifort
 MPF90     = mpiifort
-F90FLAGS  = -g -c
+F90FLAGS  = -g -C
 
 LOCAL=/mn/stornext/u3/hke/owl/local
 

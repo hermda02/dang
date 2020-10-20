@@ -14,6 +14,25 @@ module dang_component_mod
 
 contains 
 
+  subroutine init_synch(self,npix,nmaps)
+    implicit none
+    type(component)               :: self
+    integer(i4b), intent(in) :: npix, nmaps
+
+    allocate(self%beta_s(0:npix-1,nmaps))
+
+  end subroutine init_synch
+
+  subroutine init_dust(self,npix,nmaps)
+    implicit none
+    type(component)               :: self
+    integer(i4b), intent(in) :: npix, nmaps
+
+    allocate(self%beta_d(0:npix-1,nmaps))
+    allocate(self%T_d(0:npix-1,nmaps))
+
+  end subroutine init_dust
+
     function planck(fre,T)
         implicit none
         real(dp), intent(in)  :: fre
