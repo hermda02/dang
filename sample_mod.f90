@@ -459,6 +459,8 @@ contains
 
         end if
 
+        write(*,*) 'Exit joint_sampler'
+
         ! Sure to deallocate all arrays here to free up memory
         deallocate(A)
         deallocate(b)
