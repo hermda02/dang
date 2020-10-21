@@ -45,8 +45,7 @@ program dang
     real(dp), allocatable, dimension(:,:)        :: beta_s, T_d, beta_d, chi_map, mask, HI
     real(dp), allocatable, dimension(:)          :: temp01_amps, temp02_amps, temp_norm_01, temp_norm_02
     real(dp)                                     :: chisq, T_d_mean
-    character(len=80), dimension(180)            :: header
-    character(len=80), allocatable, dimension(:) :: joint_comps
+    character(len=80), allocatable, dimension(:) :: joint_poltype
     character(len=10)                            :: solver
     character(len=5)                             :: iter_str
     real(dp), allocatable, dimension(:,:)        :: mat_l, mat_u
@@ -77,15 +76,12 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Array allocation
-    allocate(template_01(0:npix-1,nmaps), template_02(0:npix-1,nmaps))
-    allocate(maps(0:npix-1,nmaps,nbands), rmss(0:npix-1,nmaps,nbands), nodust(0:npix-1,nmaps,nbands))
-    allocate(mask(0:npix-1,1), res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps))
-    allocate(fg_map(0:npix-1,nmaps,nbands,nfgs), beta_s(0:npix-1,nmaps))
-    allocate(T_d(0:npix-1,nmaps), beta_d(0:npix-1,nmaps))
-    allocate(temp01_amps(nbands), temp02_amps(nbands), temp_norm_01(3), temp_norm_02(3))
+    allocate(mask(0:npix-1,1), nodust(0:npix-1,nmaps,nbands))
+    allocate(temp_norm_01(3), temp_norm_02(3))
     allocate(HI(0:npix-1,nmaps))
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
+    allocate(joint_poltype(2))
     !----------------------------------------------------------------------------------------------------------
     beta_s     = -3.10d0    ! Synchrotron beta initial guess
     beta_d     =  1.60d0    ! Dust beta initial guess
@@ -135,43 +131,28 @@ program dang
     joint_comps(1) = 'synch'
     joint_comps(2) = 'template01'
 
+    joint_poltype(1) = 'Q'
+    joint_poltype(2) = 'U'
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
 
-    do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+    dang_data%fg_map    = 0.0
+    dang_data%temp_amps = 0.0
+
+    do iter = 1, niter
+       ! do k = par%pol_type(1), par%pol_type(size(par%pol_type))
         
-       if (rank == master) then
-          if (k == 1) then
-             write(*,*)
-             write(*,*) 'Sampling Temperature'
-             write(*,*) '-----------------------'
-          else if (k == 2) then
-             write(*,*)
-             write(*,*) 'Stokes Q'
-             write(*,*) '-----------------------'
-          else if (k == 3) then
-             write(*,*)
-             write(*,*) 'Stokes U'
-             write(*,*) '-----------------------'
-          end if
-       end if
-       fg_map = 0.0
-       temp01_amps = 0.0
-       if (trim(par%mode) == 'comp_sep') then
-          do iter = 1, niter
-             ! -------------------------------------------------------------------------------------------------------------------
-             if (par%joint_sample) then
-                call sample_joint_amp(npix,k,trim(solver))
-                ! Extrapolating A_synch to bands
-                if (ANY(joint_comps=='synch')) then
-                   do i = 0, npix-1
-                      do j = 1, nbands
-                         ! if (mask(i,k) == 0.d0) then
-                         ! fg_map(i,k,j,1) = missval
-                         fg_map(i,k,j,1) = fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,1,par%dat_nu(j),i,k)
-                      end do
+       ! -------------------------------------------------------------------------------------------------------------------
+       if (par%joint_sample) then
+          call sample_joint_amp(par,dang_data,comp,2,trim(solver),joint_poltype)
+          ! Extrapolating A_synch to bands
+          do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+             if (ANY(comp%joint=='synch')) then
+                do i = 0, npix-1
+                   do j = 1, nbands
+                      dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
                    end do
                 end if
                 
@@ -209,11 +190,9 @@ program dang
                    end do
                 end do
              end if
-             ! -------------------------------------------------------------------------------------------------------------------
-             ! -------------------------------------------------------------------------------------------------------------------
-             if (par%fg_samp_inc(1,1)) then
-                nodust(:,k,:) = maps(:,k,:)-fg_map(:,k,:,2)
-                call sample_index(par,nodust,par%fg_samp_nside(1,1),1,k)
+             
+             ! Applying dust templates to make dust maps
+             if (ANY(comp%joint=='template01')) then
                 do i = 0, npix-1
                    do j = 1, nbands
                       !if (mask(i,k) == 0.d0  .or. mask(i,k) == missval) then
@@ -224,27 +203,28 @@ program dang
                    end do
                 end do
              end if
-             ! -------------------------------------------------------------------------------------------------------------------
-             
-             res = maps
-             do j = 1, nfgs
-                res(:,k,:)  = res(:,k,:) - fg_map(:,k,:,j)
+          end do
+       end if
+       ! -------------------------------------------------------------------------------------------------------------------
+       ! -------------------------------------------------------------------------------------------------------------------
+       if (par%fg_samp_amp(1)) then
+          dang_data%fg_map(:,k,par%fg_ref_loc(1),1) =  sample_spec_amp(par,comp,dang_data%sig_map,dang_data%rms_map,1,k)
+          do i = 0, npix-1
+             do j = 1, nbands
+                dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
              end do
-             
-             call compute_chisq(k,chisq,par%mode)
-             
-             if (rank == master) then
-                if (mod(iter, 1) == 0 .or. iter == 1) then
-                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
-                        iter, " - chisq: " , chisq, " - A_s: ",&
-                        fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                        sum(beta_s(:,k))/npix, ' - A_d: ', temp01_amps/temp_norm_01(k)
-                   write(*,fmt='(a)') '---------------------------------------------'
-                end if
-                if (mod(iter,output_iter) .EQ. 0) then
-                   call write_maps(k,par%mode)
-                end if
-                call write_data(par%mode)
+          end do
+       end if
+       ! -------------------------------------------------------------------------------------------------------------------
+       do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+          call compute_chisq(k,chisq,par%mode)
+
+          if (rank == master) then
+             if (mod(iter, 1) == 0 .or. iter == 1) then
+                write(*,fmt='(i6, a, E10.3, a, f7.3, a, a, 6e10.3)')&
+                     iter, " - chisq: " , chisq, " - A_s: ", dang_data%fg_map(100,k,par%fg_ref_loc(1),1),& 
+                     " Pol_type = " // trim(tqu(k)), ' - A_d: ', dang_data%temp_amps(:,k,1)/temp_norm_01(k)
+                write(*,fmt='(a)') '---------------------------------------------'
              end if
           end do
           
