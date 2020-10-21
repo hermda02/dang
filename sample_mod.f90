@@ -430,7 +430,6 @@ contains
  
         l  = 1
         do j = 1, z
-           write(*,*) j
            vi = 1
            ci = 1
            ri = 1
