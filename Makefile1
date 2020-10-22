@@ -9,16 +9,16 @@ HEALPIX = -L/usr/local/src/Healpix_3.50/lib -lhealpix
 HEALINC = -I/usr/local/src/Healpix_3.50/include
 OUTPUT  = dang
 
-OBJS    = init_mod.o linalg_mod.o foreground_mod.o data_mod.o dang.o
+OBJS    = utility_mod.o hashtbl.o param_mod.o linalg_mo.o data_mod.o dang.o
 
-fit_ame: $(OBJS)
+dang: $(OBJS)
 	$(FC) $(OBJS) $(HEALPIX) $(FITSDIR) $(LAPACK) -fopenmp -o $(OUTPUT)
 
 # Dependencies
-linalg_mod.o           : init_mod.o
-data_mod.o             : init_mod.o
-foreground_mod.o       : init_mod.o
-dang.o : linalg_mod.o data_mod.o foreground_mod.o
+linalg_mod.o           : utility_mod.o
+data_mod.o             : utility_mod.o
+param_mod.o            : utility_mod.o
+dang.o : utility_mod.o param_mod.o linalg_mod.o data_mod.o
 
 # Compilation stage
 %.o : %.f90
