@@ -205,26 +205,6 @@ contains
 
     end subroutine backward_sub
 
-    subroutine multiply_with_A(vec,nbands)
-      implicit none
-      real(dp), dimension(:), intent(inout)  :: vec
-      real(dp), allocatable, dimension(:)    :: v_temp
-      integer(i4b), intent(in)               :: nbands
-      integer(i4b)                           :: n
-
-      n = size(vec)
-
-      allocate(v_temp(n))
-
-      v_temp = vec
-
-      do i =, 1 nbands
-         ! for each band, multiply vector by each matrix T_nu`n_nu^-1, T_nu^T
-
-      end do
-
-    end subroutine multiply_with_a
-
     subroutine compute_cg(A,x,b,n,nnz_a,iters,converge)
         
         ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
