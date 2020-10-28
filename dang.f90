@@ -84,7 +84,7 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     ! Array allocation
     allocate(mask(0:npix-1,1), nodust(0:npix-1,nmaps,nbands))!, res(0:npix-1,nmaps,nbands), chi_map(0:npix-1,nmaps))
-    allocate(temp_norm_01(3), temp_norm_02(3))!,temp01_amps(nbands,nmaps), temp02_amps(nbands,nmaps),)
+    !allocate(temp_norm_01(3), temp_norm_02(3))!,temp01_amps(nbands,nmaps), temp02_amps(nbands,nmaps),)
     allocate(HI(0:npix-1,nmaps),joint_poltype(2))
     allocate(map(0:npix-1,nmaps))
     allocate(rms(0:npix-1,nmaps))
@@ -123,10 +123,10 @@ program dang
 
     !----------------------------------------------------------------------------------------------------------
     ! Normalize template to avoid large values in the matrix equation
-    do k = 1, nmaps
-       temp_norm_01(k)        = maxval(dang_data%temps(:,k,1))
-       dang_data%temps(:,k,1) = dang_data%temps(:,k,1)/temp_norm_01(k)
-    end do
+    !do k = 1, nmaps
+    !   temp_norm_01(k)        = maxval(dang_data%temps(:,k,1))
+    !   dang_data%temps(:,k,1) = dang_data%temps(:,k,1)/temp_norm_01(k)
+    !end do
 
     do j = 1, nbands
        do k = 1, nmaps
@@ -162,7 +162,7 @@ program dang
           ! Extrapolating A_synch to bands
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
              if (ANY(comp%joint=='synch')) then
-                write(*,*) 'Extrapolating A_synch to bands'
+                !write(*,*) 'Extrapolating A_synch to bands'
                 do i = 0, npix-1
                    do j = 1, nbands
                       dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
@@ -172,7 +172,7 @@ program dang
                 
              ! Extrapolating A_dust to bands
              if (ANY(comp%joint=='dust')) then
-                write(*,*) 'Extrapolating A_dust to bands'
+                !write(*,*) 'Extrapolating A_dust to bands'
                 do i = 0, npix-1
                    do j = 1, nbands
                       dang_data%fg_map(i,k,j,3) = dang_data%fg_map(i,k,par%fg_ref_loc(2),3)*compute_spectrum(par,comp,2,par%dat_nu(j),i,k)
@@ -182,7 +182,7 @@ program dang
                 
              ! Applying dust templates to make dust maps
              if (ANY(comp%joint=='template01')) then
-                write(*,*) 'Extrapolating temps to bands'
+                !write(*,*) 'Extrapolating temps to bands'
                 do i = 0, npix-1
                    do j = 1, nbands
                       dang_data%fg_map(i,k,j,2) = dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
@@ -202,57 +202,56 @@ program dang
           end do
        end if
        do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-       
           call compute_chisq(k,chisq,par%mode)
        
           if (rank == master) then
              if (mod(iter, 1) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, E10.3, a, f7.3, a, a, 6e10.3)')&
                      iter, " - chisq: " , chisq, " - A_s: ", dang_data%fg_map(100,k,par%fg_ref_loc(1),1),& 
-                     " Pol_type = " // trim(tqu(k)), ' - A_d: ', dang_data%temp_amps(:,k,1)/temp_norm_01(k)
+                     " Pol_type = " // trim(tqu(k)), ' - A_d: ', dang_data%temp_amps(:,k,1)!/temp_norm_01(k)
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
           end if
        end do
-    end do
-    ! -------------------------------------------------------------------------------------------------------------------
-    ! Jointly sample synchrotron beta
-    ! -------------------------------------------------------------------------------------------------------------------
-    if (par%fg_samp_inc(1,1)) then
-       write(*,*) 'Jointly sample synch beta'
-       nodust(:,:,:) = dang_data%sig_map(:,:,:)-dang_data%fg_map(:,:,:,2)
-       call sample_index(par,comp,dang_data,nodust,par%fg_samp_nside(1,1),1,-1)
-       do i = 0, npix-1
-          do j = 1, nbands
-             do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-                dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
+       ! -------------------------------------------------------------------------------------------------------------------
+       ! Jointly sample synchrotron beta
+       ! -------------------------------------------------------------------------------------------------------------------
+       if (par%fg_samp_inc(1,1)) then
+          write(*,*) 'Jointly sample synch beta'
+          nodust(:,:,:) = dang_data%sig_map(:,:,:)-dang_data%fg_map(:,:,:,2)
+          call sample_index(par,comp,dang_data,nodust,par%fg_samp_nside(1,1),1,-1)
+          do i = 0, npix-1
+             do j = 1, nbands
+                do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+                   dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
+                end do
              end do
           end do
-       end do
-    end if
-    ! -------------------------------------------------------------------------------------------------------------------
-    
-    res = dang_data%sig_map
-    do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-       do j = 1, nfgs
-          res(:,k,:)  = res(:,k,:) - dang_data%fg_map(:,k,:,j)
-       end do
-       
-       call compute_chisq(k,chisq,par%mode)
-       
-       if (rank == master) then
-          if (mod(iter, 1) == 0 .or. iter == 1) then
-             write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
-                  iter, " - chisq: " , chisq, " - A_s: ",&
-                  dang_data%fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                  sum(comp%beta_s(:,k))/npix, ' - A_d: ', dang_data%temp_amps(:,k,1)/temp_norm_01(k)
-             write(*,fmt='(a)') '---------------------------------------------'
-          end if
-          if (mod(iter,output_iter) .EQ. 0) then
-             call write_maps(k,par%mode)
-          end if
-          call write_data(par%mode)
        end if
+       ! -------------------------------------------------------------------------------------------------------------------
+       
+       dang_data%res_map = dang_data%sig_map
+       do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+          do j = 1, nfgs
+             dang_data%res_map(:,k,:)  = dang_data%res_map(:,k,:) - dang_data%fg_map(:,k,:,j)
+          end do
+          
+          call compute_chisq(k,chisq,par%mode)
+          
+          if (rank == master) then
+             if (mod(iter, 1) == 0 .or. iter == 1) then
+                write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
+                     iter, " - chisq: " , chisq, " - A_s: ",&
+                     dang_data%fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
+                     sum(comp%beta_s(:,k))/npix, ' - A_d: ', dang_data%temp_amps(:,k,1)!/temp_norm_01(k)
+                write(*,fmt='(a)') '---------------------------------------------'
+             end if
+             if (mod(iter,output_iter) .EQ. 0) then
+                call write_maps(k,par%mode)
+             end if
+             call write_data(par%mode)
+          end if
+       end do
     end do
     call mpi_finalize(ierr)
        
@@ -293,7 +292,7 @@ contains
          do j = 1, nbands
             title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
                  // '_' // trim(iter_str) // '.fits'
-            map(:,1)   = res(:,nm,j)
+            map(:,1)   = dang_data%res_map(:,nm,j)
             call write_bintab(map,npix,1, header, nlheader, trim(title))
          end do
          title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
@@ -414,7 +413,7 @@ contains
             else
                 open(34,file = trim(direct) // 'dust_' // trim(tqu(k)) // '_amplitudes.dat', status="new", action="write")
             endif
-            write(34,'(10(E17.8))') dang_data%temp_amps(:,k,1)/temp_norm_01(k)
+            write(34,'(10(E17.8))') dang_data%temp_amps(:,k,1)!/temp_norm_01(k)
             close(34)
 
         else if (trim(mode) == 'HI_fit') then

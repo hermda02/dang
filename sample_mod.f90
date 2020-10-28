@@ -148,9 +148,10 @@ contains
               ci            = ci + 1
            end do
            if (size(poltype) == 2) then
-              do m = 1,x 
-                 val(vi,j)     = compute_spectrum(para,compo,1,para%dat_nu(j),m-1,map_n)/dat%rms_map(m-1,map_n,j)
-                 row_ind(ri,j) = m+x
+              do m = x+1,2*x 
+                 val(vi,j)     = compute_spectrum(para,compo,1,para%dat_nu(j),m-x-1,map_n+1)/dat%rms_map(m-x-1,map_n+1,j)
+                 row_ind(ri,j) = m
+!                 write(*,*) vi, ri, co, val(vi,j)
                  co            = co + 1
                  vi            = vi + 1
                  ri            = ri + 1
@@ -161,6 +162,10 @@ contains
            if (para%temp_corr(1,j)) then
               do i = 1, x
                  val(vi,j)     = dat%temps(i-1,map_n,1)/dat%rms_map(i-1,map_n,j)
+ !                if (i < 6) then
+ !                   write(*,*) i, vi, ri
+ !                   write(*,*) val(vi,j),dat%temps(i-1,map_n,1), dat%rms_map(i-1,map_n,j)
+ !                end if
                  co            = co + 1
                  row_ind(ri,j) = i
                  vi            = vi + 1
@@ -168,16 +173,16 @@ contains
               end do
               if (size(poltype) == 2) then
                  do i = 1, x
-                    val(vi,j)     = dat%temps(i-1,map_n+1,1)/dat%rms_map(i-1,map_n,j)
+                    val(vi,j)     = dat%temps(i-1,map_n+1,1)/dat%rms_map(i-1,map_n+1,j)
                     co            = co + 1
                     row_ind(ri,j) = i+x
                     vi            = vi + 1
                     ri            = ri + 1
                  end do
               end if              
-              col_ptr(x:ci+l-1,j)  = col_ptr(x,j)
-              col_ptr(ci+l-1,j)    = co
-              col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
+              col_ptr(2*x:ci+l-1,j)  = col_ptr(2*x,j)
+              col_ptr(ci+l-1,j)      = co
+              col_ptr(ci+l-1:,j)     = col_ptr(ci+l-1,j)
               l = l + 1
            else
               if (ci+l-1 > y+1) then
@@ -187,18 +192,11 @@ contains
                  col_ptr(m:ci+l-1,j)  = col_ptr(m,j)
                  col_ptr(ci+l-1,j)    = co
                  col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
+                 ! write(*,*) ci+l-1,co
                  ! write(*,*) 'its fine, false', j, l, ci+l-1
               end if
            end if
         end do
-
-        !write(*,*) 'nnz', nnz
-        !write(*,*) 'x', x
-        write(*,*) 'y', y
-        !write(*,*) 'vi', vi
-        !write(*,*) 'ri', ci
-        !write(*,*) 'ci', ci
-        !stop
 
         ! write(*,*) 'Compute RHS of matrix eqn.'
         ! Computing the LHS and RHS of the linear equation
@@ -282,13 +280,13 @@ contains
             end if
         end do
 
-        ! if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
+        if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
         !LHS
 
         t2 = mpi_wtime()
 
         do j = 1, z
-           ! write(*,*) j
+           write(*,*) j
            A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
            ! write(*,*) "finished band ", j
         end do
@@ -308,7 +306,8 @@ contains
            call backward_sub(mat_u,b,d)
         else if (trim(method) == 'cg') then
            if (rank == master) write(*,*) 'Joint sampling using CG.'
-           call compute_cg(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
+           !call compute_cg(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
+           call compute_cg_precond(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
         else if (trim(method) == 'lu') then
            write(*,*) 'Currently deprecated -- replace with LAPACK'
            stop
@@ -437,26 +436,48 @@ contains
            call invert_matrix_dp(A,.true.)
 
            write(*,*) 'Done inverting.'
-           do j = 1, x
-              unc_a_s(j-1,1) = sqrt(A(j,j))
-           end do
-           do j = 1, nfit1
-              unc_a_d(j) = sqrt(A(x+j,x+j))
-           end do
 
-           inquire(file=trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat',exist=exist)
-           if (exist) then
-              open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="old", &
-                   position="append", action="write")
-           else
-              open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="new", action="write")
-           endif
-           write(40,'(6(E17.8))') unc_a_d
-           close(40)
+           
+           if (size(poltype) == 1) then
+              do j = 1, x
+                 unc_a_s(j-1,1) = sqrt(A(j,j))
+              end do
+              do j = 1, nfit1
+                 unc_a_d(j) = sqrt(A(x+j,x+j))
+              end do
+              inquire(file=trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat',exist=exist)
+              if (exist) then
+                 open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="old", &
+                      position="append", action="write")
+              else
+                 open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="new", action="write")
+              endif
+              write(40,'(6(E17.8))') unc_a_d
+              close(40)
 
-           title = trim(para%outdir) // 'a_synch_uncertainty_'// trim(tqu(k)) // '.fits'
-           call write_bintab(unc_a_s,dat%npix,1, header, nlheader, trim(title))
+              title = trim(para%outdir) // 'a_synch_uncertainty_'// trim(tqu(k)) // '.fits'
+              call write_bintab(unc_a_s,dat%npix,1, header, nlheader, trim(title))
 
+           else if (size(poltype) == 2) then
+              do j = 1, x
+                 unc_a_s(j-1,1) = sqrt(A(j,j))
+              end do
+              do j = 1, nfit1
+                 unc_a_d(j) = sqrt(A(2*x+j,2*x+j))
+              end do
+              
+              inquire(file=trim(para%outdir) // 'dust_QU_uncertainties.dat',exist=exist)
+              if (exist) then
+                 open(40,file = trim(para%outdir) // 'dust_QU_uncertainties.dat', status="old", &
+                      position="append", action="write")
+              else
+                 open(40,file = trim(para%outdir) // 'dust_QU_uncertainties.dat', status="new", action="write")
+              endif
+              write(40,'(6(E17.8))') unc_a_d
+              close(40)
+
+           end if
+                  
         end if
 
         write(*,*) 'Exit joint_sampler'
