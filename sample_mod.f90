@@ -324,7 +324,8 @@ contains
         else if (trim(method) == 'cg') then
            if (rank == master) write(*,*) 'Joint sampling using CG.'
            !call compute_cg(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
-           call compute_cg_precond(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
+           !call compute_cg_precond(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
+           call compute_cg_precond(b,c,y,para,dat,compo)
         else if (trim(method) == 'lu') then
            write(*,*) 'Currently deprecated -- replace with LAPACK'
            stop
@@ -813,87 +814,5 @@ contains
         deallocate(indx_sample_low)
 
     end subroutine sample_index
-
-
-    subroutine multiply_with_A(para, dat, compo, vec, nbands, map_n)
-      implicit none
-      type(params)                           :: para
-      type(data)                             :: dat
-      type(component)                        :: compo
-
-      real(dp), dimension(:), intent(inout)  :: vec
-      real(dp), allocatable, dimension(:)    :: v_temp, v_temp2, v_temp3
-      real(dp), allocatable, dimension(:)    :: vech
-      real(dp)                               :: x
-      integer(i4b), intent(in)               :: nbands, map_n
-      integer(i4b)                           :: n, i, j, k, len
-
-      x = dat%npix
-      n = size(vec)
-      len = 2*x
-
-      allocate(vech(n))
-      allocate(v_temp(n))
-      allocate(v_temp2(len))
-      allocate(v_temp3(n))
-
-      vech = vec
-
-      v_temp3 = 0.d0
-
-      l = 1
-      do j = 1, nbands
-         v_temp  = 0.d0
-         v_temp2 = 0.d0
-         ! A is composed of sum_nu(T_nu^T N_nu^-1 T_nu)
-         
-         ! first multiply by T_nu
-         !$OMP PARALLEL PRIVATE(i,k)
-         !$OMP DO SCHEDULE(static)
-         do i = 1, x
-            v_temp2(i)   = vech(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
-            v_temp2(x+i) = vech(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
-            if (para%temp_corr(1,j)) then
-               v_temp2(i)   = v_temp2(i)   + vech(len+l)*dat%temps(i-1,map_n,1)
-               v_temp2(x+i) = v_temp2(x+i) + vech(len+l)*dat%temps(i-1,map_n+1,1)
-            end if
-         end do
-         !$OMP END DO
-
-         ! Then multiply by N_nu^-1
-         !$OMP DO SCHEDULE(static)
-         do i = 1, x
-            v_temp2(i)   = v_temp2(i)/(dat%rms_map(i-1,map_n,j))**2.d0
-            v_temp2(x+i) = v_temp2(x+i)/(dat%rms_map(i-1,map_n+1,j))**2.d0
-         end do
-         !$OMP END DO
-
-         ! Then multiply by T_nu^T
-         !$OMP DO SCHEDULE(static)
-         do i = 1, x
-            v_temp(i)   = v_temp(i)   + v_temp2(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
-            v_temp(x+i) = v_temp(x+i) + v_temp2(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
-         end do
-         !$OMP END DO
-
-         !do i = len+1, n
-         if (para%temp_corr(1,j)) then
-            !$OMP DO SCHEDULE(static)
-            do k = 1, x
-               v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n,1)*v_temp2(k)
-               v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n+1,1)*v_temp2(k+x)
-            end do
-            !$OMP END DO
-            l = l+1
-         end if
-         !end do
-         !$OMP END PARALLEL
-         v_temp3 = v_temp3 + v_temp
-      end do
-      
-      vec = v_temp3
-
-    end subroutine multiply_with_A
- 
 
 end module sample_mod

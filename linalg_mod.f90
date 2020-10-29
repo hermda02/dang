@@ -4,6 +4,9 @@ module linalg_mod
     use fitstools
     use udgrade_nr
     use utility_mod
+    use dang_param_mod
+    use dang_component_mod
+    use dang_data_mod
     implicit none
 
 contains
@@ -292,7 +295,7 @@ contains
 
     end subroutine compute_cg
 
-    subroutine compute_cg_precond(A,x,b,n,nnz_a,iters,converge)
+    subroutine compute_cg_precond(x,b,n,param,datas,compos)
         
       ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
       ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
@@ -304,47 +307,40 @@ contains
       ! inverse of the preconditioner we want (inverse of the diagonal version of A).
 
       implicit none
-
-      real(dp), dimension(:,:), intent(in)  :: A
+      type(params)                          :: param
+      type(data)                            :: datas
+      type(component)                       :: compos
       real(dp), dimension(:), intent(in)    :: b
       real(dp), dimension(:), intent(out)   :: x
-      integer(i4b), intent(in)              :: n,iters
-      real(dp), intent(in)                  :: converge
-      integer(i4b), optional, intent(in)    :: nnz_a
+      integer(i4b), intent(in)              :: n
       real(dp), allocatable, dimension(:)   :: r, q, d, s
-      real(dp), allocatable, dimension(:)   :: M
+      real(dp), allocatable, dimension(:)   :: M, c
+      real(dp)                              :: converge
       real(dp)                              :: epsil, alpha, beta, delta_0
       real(dp)                              :: delta_old, delta_new, t3, t4, t5, t6
       integer(i4b)                          :: i_max, i, j
 
-      real(dp),allocatable,dimension(:)     :: v
-      integer(i4b),allocatable,dimension(:) :: rp, ci
-
       t5 = mpi_wtime()
       allocate(r(n),q(n),d(n),M(n),s(n))
 
-      if(present(nnz_a)) then
-         allocate(v(nnz_a),rp(n+1),ci(nnz_a))
-         call A_to_CSR(A,rp,ci,v)
-      end if
+      x(:)     = 0.0d0
+      M(:)     = 0.d0
+      c(:)     = 0.d0
+      i_max    = param%cg_iter
+      converge = param%cg_converge
 
-      x(:) = 0.0d0
-      M(:) = 0.d0
-      i_max = iters
+      call multiply_with_A(param, datas, compos, M, 5, 2)
 
       write(*,*) 'Define preconditioner'
       do i = 1, n
-         M(i) = 1.d0/(A(i,i))
+         M(i) = 1.d0/M(i)
       end do
 
       i = 0
       epsil = 1.0d-16
 
-      if (present(nnz_a)) then
-         r = b - Ax_CSR(rp,ci,v,x)
-      else
-         r = b - matmul(A,x)
-      end if
+      r = b
+
       !$OMP PARALLEL PRIVATE(i)
       !$OMP DO SCHEDULE(static)
       do i = 1, n
@@ -357,49 +353,40 @@ contains
       t3 = mpi_wtime()
       do while( (i .lt. i_max) .and. (delta_new .gt. converge))!(epsil**2)*delta_0))
          t3 = mpi_wtime()
-         if (present(nnz_a)) then
-             q = Ax_CSR(rp,ci,v,d)
-          else
-             q = matmul(A,d)
-          end if
-          alpha = delta_new/(sum(d*q))
-          x = x + alpha*d
-          if (mod(i,50) == 0) then
-             if (present(nnz_a)) then
-                r = b - Ax_CSR(rp,ci,v,x)
-             else
-                r = b - matmul(A,x)
-             end if
-          else
-              r = r - alpha*q
-          end if
-          !$OMP PARALLEL PRIVATE(i)
-          !$OMP DO SCHEDULE(static)
-          do j = 1, n
-             s(j) = M(j)*r(j)
-          end do
-          !$OMP END DO
-          !$OMP END PARALLEL
-          delta_old = delta_new
-          delta_new = sum(r*s)
-          beta = delta_new/delta_old
-          d = s + beta*d
-          t4 = mpi_wtime()
-          i = i + 1
-          if (delta_new .gt. converge) then
-             write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-          else
-             write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-          end if
+         q = d
+         call multiply_with_A(param, datas, compos, q, 5, 2)
+         
+         alpha = delta_new/(sum(d*q))
+         x = x + alpha*d
+         if (mod(i,50) == 0) then
+            c = x
+            call multiply_with_A(param, datas, compos, c, 5, 2)
+            r = b - c
+         else
+            r = r - alpha*q
+         end if
+         !$OMP PARALLEL PRIVATE(i)
+         !$OMP DO SCHEDULE(static)
+         do j = 1, n
+            s(j) = M(j)*r(j)
+         end do
+         !$OMP END DO
+         !$OMP END PARALLEL
+         delta_old = delta_new
+         delta_new = sum(r*s)
+         beta = delta_new/delta_old
+         d = s + beta*d
+         t4 = mpi_wtime()
+         i = i + 1
+         if (delta_new .gt. converge) then
+            write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+         else
+            write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+         end if
       end do
       t6 = mpi_wtime()
 
       write(*,fmt='(a,e12.5,a)') 'CG Total time: ', t6-t5, 's.'
-      if(present(nnz_a)) then
-         deallocate(v)
-         deallocate(rp)
-         deallocate(ci)
-      end if
 
       deallocate(r)
       deallocate(q)
@@ -669,5 +656,86 @@ contains
          end do
       end do
     end function Ax_csc
+
+    subroutine multiply_with_A(para, dat, compo, vec, nbands, map_n)
+      implicit none
+      type(params)                           :: para
+      type(data)                             :: dat
+      type(component)                        :: compo
+
+      real(dp), dimension(:), intent(inout)  :: vec
+      real(dp), allocatable, dimension(:)    :: v_temp, v_temp2, v_temp3
+      real(dp), allocatable, dimension(:)    :: vech
+      real(dp)                               :: x
+      integer(i4b), intent(in)               :: nbands, map_n
+      integer(i4b)                           :: n, i, j, k, len, l
+
+      x = dat%npix
+      n = size(vec)
+      len = 2*x
+
+      allocate(vech(n))
+      allocate(v_temp(n))
+      allocate(v_temp2(len))
+      allocate(v_temp3(n))
+
+      vech = vec
+
+      v_temp3 = 0.d0
+
+      l = 1
+      do j = 1, nbands
+         v_temp  = 0.d0
+         v_temp2 = 0.d0
+         ! A is composed of sum_nu(T_nu^T N_nu^-1 T_nu)
+         
+         ! first multiply by T_nu
+         !$OMP PARALLEL PRIVATE(i,k)
+         !$OMP DO SCHEDULE(static)
+         do i = 1, x
+            v_temp2(i)   = vech(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+            v_temp2(x+i) = vech(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
+            if (para%temp_corr(1,j)) then
+               v_temp2(i)   = v_temp2(i)   + vech(len+l)*dat%temps(i-1,map_n,1)
+               v_temp2(x+i) = v_temp2(x+i) + vech(len+l)*dat%temps(i-1,map_n+1,1)
+            end if
+         end do
+         !$OMP END DO
+
+         ! Then multiply by N_nu^-1
+         !$OMP DO SCHEDULE(static)
+         do i = 1, x
+            v_temp2(i)   = v_temp2(i)/(dat%rms_map(i-1,map_n,j))**2.d0
+            v_temp2(x+i) = v_temp2(x+i)/(dat%rms_map(i-1,map_n+1,j))**2.d0
+         end do
+         !$OMP END DO
+
+         ! Then multiply by T_nu^T
+         !$OMP DO SCHEDULE(static)
+         do i = 1, x
+            v_temp(i)   = v_temp(i)   + v_temp2(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+            v_temp(x+i) = v_temp(x+i) + v_temp2(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
+         end do
+         !$OMP END DO
+
+         !do i = len+1, n
+         if (para%temp_corr(1,j)) then
+            !$OMP DO SCHEDULE(static)
+            do k = 1, x
+               v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n,1)*v_temp2(k)
+               v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n+1,1)*v_temp2(k+x)
+            end do
+            !$OMP END DO
+            l = l+1
+         end if
+         !end do
+         !$OMP END PARALLEL
+         v_temp3 = v_temp3 + v_temp
+      end do
+      
+      vec = v_temp3
+
+    end subroutine multiply_with_A
+
 
 end module linalg_mod
