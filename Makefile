@@ -31,11 +31,11 @@ dang: $(OBJS)
 	$(MPF90) $(OBJS) -qopenmp -parallel -o $(OUTPUT) $(LINK)
 
 # Dependencies
-linalg_mod.o           : utility_mod.o
 dang_data_mod.o        : utility_mod.o
 dang_param_mod.o       : utility_mod.o hashtbl.o
 dang_component_mod.o   : utility_mod.o dang_param_mod.o
-sample_mod.o           : utility_mod.o dang_param_mod.o linalg_mod.o dang_data_mod.o dang_component_mod.o 
+linalg_mod.o           : utility_mod.o dang_param_mod.o dang_data_mod.o dang_component_mod.o
+sample_mod.o           : utility_mod.o dang_param_mod.o dang_data_mod.o dang_component_mod.o linalg_mod.o  
 dang.o : utility_mod.o dang_param_mod.o linalg_mod.o sample_mod.o dang_data_mod.o
 
 # Compilation stage

@@ -285,15 +285,16 @@ contains
 
         t2 = mpi_wtime()
 
-        do j = 1, 5
-           write(*,*) j
+        do j = 1, 2
+           !write(*,*) j
            A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
-           write(*,*) "finished band ", j
+           !write(*,*) "finished band ", j
         end do
-       
+        stop
+    
         d(:)    = 1.d0
         rand(:) = 1.d0
-        call multiply_with_A(para, dat, compo, d, 5, map_n)
+        call multiply_with_A(para, dat, compo, d, 2, map_n)
 
         rand = matmul(A,rand)
 
@@ -323,9 +324,9 @@ contains
            call backward_sub(mat_u,b,d)
         else if (trim(method) == 'cg') then
            if (rank == master) write(*,*) 'Joint sampling using CG.'
-           !call compute_cg(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
+           call compute_cg(A,d,c,y,nnz_a,para%cg_iter,para%cg_converge)
            !call compute_cg_precond(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
-           call compute_cg_precond(b,c,y,para,dat,compo)
+           !call compute_cg_vec(b,c,y,para,dat,compo)
         else if (trim(method) == 'lu') then
            write(*,*) 'Currently deprecated -- replace with LAPACK'
            stop
@@ -337,6 +338,13 @@ contains
         end if
         ! Draw a sample by cholesky decompsing A^-1, and multiplying 
         ! the subsequent lower triangular by a vector of random numbers
+
+        stop
+        do i = 1, y
+           write(*,*) b(i), d(i)
+        end do
+        stop
+
 
         if (rank == master) write(*,fmt='(a,i6)') 'Draw a sample for iteration ', iter
         do i = 1, y
