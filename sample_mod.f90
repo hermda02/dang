@@ -52,6 +52,9 @@ contains
 
         real(dp)                                   :: q, t6, t7
 
+        real(dp), allocatable, dimension(:,:,:)    :: covar, T_nu, T_nu_T
+        real(dp), allocatable, dimension(:,:)      :: A_1,A_2,A_3
+
         if (rank == master) then
            write(*,fmt='(a)') 'Starting joint sampling for synch and dust_template.'
            !write(*,fmt='(a)') 'Pol_type = ', trim(poltype(:))
@@ -126,6 +129,55 @@ contains
         rand(:)           = 0.d0
         samp(:)           = 0.d0
         mat_l(:,:)        = 0.d0
+
+
+
+        ! Old direct matrix block
+        allocate(A_3(y,y),A_1(y,),A_2(y,y))
+        allocate(T_nu(2*x,y,z),T_nu_T(y,2*x,z))
+        allocate(covar(2*x,2*x,z))
+
+        ! Fill data and covariance arrays
+        do i=1, x
+            do j=1,z
+                covar(i,i,j)     = dat%rms_map(i-1,map_n,j)**2
+                covar(x+i,x+i,j) = dat%rms_map(i-1,map_n+1,j)**2
+            end do
+        end do
+
+        ! Fill template matrix
+        w = 0 
+        if (compo%joint(1) == 'synch') then
+           do i = 1, x
+              do j = 1, z
+                 T_nu(i,i,j) = compute_spectrum(para,compo,1,para%dat_nu(j),m-1,map_n)
+                 T_nu(x+i,x+i,j) = compute_spectrum(para,compo,1,para%dat_nu(j),m-1,map_n+1)
+              end do
+           end do
+        end if
+
+        if (joint_comps(m) == 'template01') then
+           do i = 1, x
+              l = 1
+              do j = 1, z
+                 if (j_corr01(j) .eqv. .true.) then
+                    T_nu(2*x+i,w+l,j) = template_01(i-1,map_n)
+                    l = l + 1
+                 end if
+              end do
+           end do
+           w = w + l
+        end if
+
+        ! Computing the LHS and RHS of the linear equation
+        do j=1, nbands
+            T_nu_T(:,:,j) = transpose(T_nu(:,:,j))
+            A_1(:,:,j)    = matmul(T_nu_T(:,:,j),inv(covar(:,:,j)))
+            A_2(:,:,j)    = matmul(A_1(:,:,j),T_nu(:,:,j)) 
+            A_3(:,:)      = A_3(:,:) + A_2(:,:,j)
+            c(:)          = c(:) + c_2(:,j)
+        end do
+
 
         write(*,*) 'Fill Template Matrix'
         ! Fill template matrix
