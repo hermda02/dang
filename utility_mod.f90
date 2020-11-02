@@ -11,13 +11,18 @@ module utility_mod
     real(dp)           :: T_CMB   = 2.7255d0
     real(dp)           :: t1, t2, t3
     integer(i4b)       :: ierr, rank, numprocs
-    integer(i4b)       :: nbands
+    integer(i4b)       :: nbands, npix, nmaps, nside, nfgs
+    integer(i4b)       :: iter, niter, ordering, nlheader
     integer(i4b)       :: proc_per_band
     integer(i4b)       :: master      = 0 
     integer(i4b)       :: from_master = 1
     integer(i4b)       :: from_worker = 2
     integer(i4b) status(mpi_status_size)
-    character(len=80), dimension(3) :: tqu
+    character(len=80), dimension(180) :: header
+    character(len=80), dimension(3)   :: tqu
+    
+    public    :: npix, nbands, nmaps, ordering, header
+
 
 contains 
 
@@ -71,6 +76,19 @@ contains
      strIn = strOut
      
    end subroutine tolower
+
+    function rand_normal(mean,stdev) result(c)
+         double precision :: mean,stdev,c,temp(2),theta,r
+         if (stdev <= 0.0d0) then
+            write(*,*) "Standard Deviation must be positive."
+         else
+            call RANDOM_NUMBER(temp)
+            r=(-2.0d0*log(temp(1)))**0.5
+            theta = 2.0d0*PI*temp(2)
+            c= mean+stdev*r*sin(theta)
+      end if
+    end function
+
 
    function getlun()
      implicit none
