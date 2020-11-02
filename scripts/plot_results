@@ -1,0 +1,53 @@
+#!/bin/bash
+
+c3pp=/home/daniel/.local/bin/c3pp
+me=/home/daniel/danieltools/map_editor/map_editor
+
+
+bands=("bp_030" "bp_044" "bp_070" "wmap_Ka" "wmap_Q")
+
+for ((i=0; i<${#bands[@]}; i++)); do
+    band=${bands[$i]}
+
+    name_Q=${band}_residual_Q_mean.fits
+    name_U=${band}_residual_U_mean.fits
+
+    $me smooth g2g $name_Q 0 200 64 60.0 180.0 ${name_Q/.fits/_3deg.fits}
+
+    $me smooth g2g $name_U 0 200 64 60.0 180.0 ${name_U/.fits/_3deg.fits}
+    
+done
+
+$c3pp plot bp_030_residual_Q_mean.fits -bar -range 3 -title '${\rm BP\, 30GHz\, Residual}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot bp_030_residual_Q_mean_3deg.fits -bar -range 3 -title '${\rm BP\, 30GHz\, Residual}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot bp_030_residual_U_mean.fits -bar -range 3 -title '${\rm BP\, 30GHz\, Residual}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot bp_030_residual_U_mean_3deg.fits -bar -range 3 -title '${\rm BP\, 30GHz\, Residual}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+
+$c3pp plot bp_044_residual_Q_mean.fits -bar -range 3 -title '${\rm BP\, 44GHz\, Residual}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot bp_044_residual_Q_mean_3deg.fits -bar -range 3 -title '${\rm BP\, 44GHz\, Residual}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot bp_044_residual_U_mean.fits -bar -range 3 -title '${\rm BP\, 44GHz\, Residual}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot bp_044_residual_U_mean_3deg.fits -bar -range 3 -title '${\rm BP\, 44GHz\, Residual}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+
+$c3pp plot bp_070_residual_Q_mean.fits -bar -range 3 -title '${\rm BP\, 70GHz\, Residual}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot bp_070_residual_Q_mean_3deg.fits -bar -range 3 -title '${\rm BP\, 70GHz\, Residual}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot bp_070_residual_U_mean.fits -bar -range 3 -title '${\rm BP\, 70GHz\, Residual}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot bp_070_residual_U_mean_3deg.fits -bar -range 3 -title '${\rm BP\, 70GHz\, Residual}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+
+$c3pp plot wmap_Ka_residual_Q_mean.fits -bar -range 3 -title '${\rm WMAP\, Ka\, Residual}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot wmap_Ka_residual_Q_mean_3deg.fits -bar -range 3 -title '${\rm WMAP\, Ka\, Residual}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot wmap_Ka_residual_U_mean.fits -bar -range 3 -title '${\rm WMAP\, Ka\, Residual}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot wmap_Ka_residual_U_mean_3deg.fits -bar -range 3 -title '${\rm WMAP\, Ka\, Residual}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+
+$c3pp plot wmap_Q_residual_Q_mean.fits -bar -range 3 -title '${\rm WMAP\, Q\, Residual}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot wmap_Q_residual_Q_mean_3deg.fits -bar -range 3 -title '${\rm WMAP\, Q\, Residual}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot wmap_Q_residual_U_mean.fits -bar -range 3 -title '${\rm WMAP\, Q\, Residual}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot wmap_Q_residual_U_mean_3deg.fits -bar -range 3 -title '${\rm WMAP\, Q\, Residual}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+
+$c3pp plot synch_Q_mean.fits -bar -range 5 -title '$<A_s> @ 44 {\rm GHz}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot synch_U_mean.fits -bar -range 5 -title '$<A_s> @ 44 {\rm GHz}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+
+$c3pp plot synch_Q_std.fits - bar -min 0.75 -max 1.25 -title '$\sigma_{A_s} @ 44 {\rm GHz}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' -pdf
+$c3pp plot synch_U_std.fits - bar -min 0.75 -max 1.25 -title '$\sigma_{A_s} @ 44 {\rm GHz}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' -pdf
+
+$c3pp plot chisq_Q_mean.fits -bar -min 0 -max 1 -title '${\rm Reduced\, \chi^2}$' -ltitle '$Q$' -unit '$chi^2$' -pdf
+$c3pp plot chisq_U_mean.fits -bar -min 0 -max 1 -title '${\rm Reduced\, \chi^2}$' -ltitle '$U$' -unit '$chi^2$' -pdf
