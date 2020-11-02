@@ -52,8 +52,8 @@ contains
 
         real(dp)                                   :: q, t6, t7
 
-        real(dp), allocatable, dimension(:,:,:)    :: covar, T_nu, T_nu_T
-        real(dp), allocatable, dimension(:,:)      :: A_1,A_2,A_3
+        real(dp), allocatable, dimension(:,:,:)    :: covar, T_nu, T_nu_T, A_2, A_1
+        real(dp), allocatable, dimension(:,:)      :: A_3
 
         if (rank == master) then
            write(*,fmt='(a)') 'Starting joint sampling for synch and dust_template.'
@@ -120,7 +120,6 @@ contains
         allocate(rand(y),samp(y))
         allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
 
-        write(*,*) 'Initialize'
         ! Initialize arrays
         A(:,:)            = 0.d0
         b(:)              = 0.d0
@@ -130,52 +129,51 @@ contains
         samp(:)           = 0.d0
         mat_l(:,:)        = 0.d0
 
-
-
         ! Old direct matrix block
-        allocate(A_3(y,y),A_1(y,),A_2(y,y))
+        allocate(A_3(y,y),A_1(y,2*x,z),A_2(y,y,z))
         allocate(T_nu(2*x,y,z),T_nu_T(y,2*x,z))
         allocate(covar(2*x,2*x,z))
+
+        A_1(:,:,:) = 0.d0
+        A_2(:,:,:) = 0.d0
+        A_3(:,:) = 0.d0
+        T_nu(:,:,:) = 0.d0
+        T_nu_T(:,:,:) = 0.d0
+        covar(:,:,:) = 0.d0
 
         ! Fill data and covariance arrays
         do i=1, x
             do j=1,z
-                covar(i,i,j)     = dat%rms_map(i-1,map_n,j)**2
-                covar(x+i,x+i,j) = dat%rms_map(i-1,map_n+1,j)**2
+                covar(i,i,j)     = 1.d0/dat%rms_map(i-1,map_n,j)**2
+                covar(x+i,x+i,j) = 1.d0/dat%rms_map(i-1,map_n+1,j)**2
             end do
         end do
 
         ! Fill template matrix
-        w = 0 
-        if (compo%joint(1) == 'synch') then
-           do i = 1, x
-              do j = 1, z
-                 T_nu(i,i,j) = compute_spectrum(para,compo,1,para%dat_nu(j),m-1,map_n)
-                 T_nu(x+i,x+i,j) = compute_spectrum(para,compo,1,para%dat_nu(j),m-1,map_n+1)
-              end do
+        do i = 1, x
+           do j = 1, z
+              T_nu(i,i,j) = compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+              T_nu(x+i,x+i,j) = compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
            end do
-        end if
+        end do
 
-        if (joint_comps(m) == 'template01') then
-           do i = 1, x
-              l = 1
-              do j = 1, z
-                 if (j_corr01(j) .eqv. .true.) then
-                    T_nu(2*x+i,w+l,j) = template_01(i-1,map_n)
-                    l = l + 1
-                 end if
-              end do
+        do i = 1, x
+           l = 1
+           do j = 1, z
+              if (para%temp_corr(1,j)) then
+                 T_nu(i,2*x+l,j) = dat%temps(i-1,map_n,1)
+                 T_nu(x+i,2*x+l,j) = dat%temps(i-1,map_n+1,1)
+                 l = l + 1
+              end if
            end do
-           w = w + l
-        end if
+        end do
 
         ! Computing the LHS and RHS of the linear equation
-        do j=1, nbands
+        do j=1,z
             T_nu_T(:,:,j) = transpose(T_nu(:,:,j))
-            A_1(:,:,j)    = matmul(T_nu_T(:,:,j),inv(covar(:,:,j)))
+            A_1(:,:,j)    = matmul(T_nu_T(:,:,j),covar(:,:,j))
             A_2(:,:,j)    = matmul(A_1(:,:,j),T_nu(:,:,j)) 
             A_3(:,:)      = A_3(:,:) + A_2(:,:,j)
-            c(:)          = c(:) + c_2(:,j)
         end do
 
 
@@ -337,25 +335,28 @@ contains
 
         t2 = mpi_wtime()
 
-        do j = 1, 2
-           !write(*,*) j
+        do j = 1,z
+           write(*,*) j
            A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
-           !write(*,*) "finished band ", j
+           write(*,*) "finished band ", j
         end do
-        stop
     
         d(:)    = 1.d0
         rand(:) = 1.d0
-        call multiply_with_A(para, dat, compo, d, 2, map_n)
+        call multiply_with_A(para, dat, compo, d, 5, map_n)
 
-        rand = matmul(A,rand)
+        rand = matmul(A_3,rand)
 
-        write(*,*) 'y = ', y
-        write(*,*) 'npix = ', npix
+        !write(*,*) 'y = ', y
+        !write(*,*) 'npix = ', npix
+
+        !write(*,fmt='(3(E12.5),i6)') d(x), rand(x), (d(x)-rand(x))/rand(x), i
+        !write(*,fmt='(2(E12.5))') compute_spectrum(para,compo,1,para%dat_nu(2),x-1,map_n), dat%temps(x-1,map_n,1)
+        !stop
 
         do i = 1, y
            if (d(i) - rand(i) > 1.d-6) then
-              write(*,*) d(i), rand(i), i
+              write(*,fmt='(3(E12.5),i6)') d(i), rand(i), (d(i)-rand(i))/rand(i), i
            end if
         end do
         stop
@@ -376,9 +377,12 @@ contains
            call backward_sub(mat_u,b,d)
         else if (trim(method) == 'cg') then
            if (rank == master) write(*,*) 'Joint sampling using CG.'
-           call compute_cg(A,d,c,y,nnz_a,para%cg_iter,para%cg_converge)
-           !call compute_cg_precond(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
+           ! Optimize
+           !call compute_cg(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
+           call compute_cg_precond(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
            !call compute_cg_vec(b,c,y,para,dat,compo)
+           ! Sample
+           !call sample_cg(A,b,c,2*npix,nnz_a,para%cg_iter,para%cg_converge,para,dat,compo)
         else if (trim(method) == 'lu') then
            write(*,*) 'Currently deprecated -- replace with LAPACK'
            stop
@@ -391,25 +395,6 @@ contains
         ! Draw a sample by cholesky decompsing A^-1, and multiplying 
         ! the subsequent lower triangular by a vector of random numbers
 
-        stop
-        do i = 1, y
-           write(*,*) b(i), d(i)
-        end do
-        stop
-
-
-        if (rank == master) write(*,fmt='(a,i6)') 'Draw a sample for iteration ', iter
-        do i = 1, y
-           rand(i) = rand_normal(0.d0,1.d0)
-        end do
-
-        t2 = mpi_wtime()
-        call cholesky_decomp(A,mat_l)
-        t3 = mpi_wtime()
-        write(*,fmt='(a,E12.4,a)') 'Cholesky completed in ', t3-t2, 's.'
-        call forward_sub(mat_l,d,rand)
-       
-        b = b + d
 
         ! Output amplitudes to the appropriate variables
         if (size(poltype) == 1) then
