@@ -114,141 +114,141 @@ contains
 
         nnz = 4*x
 
-        allocate(A(y,y))
+        !allocate(A(y,y))
         allocate(b(y),c(y),d(y))
-        allocate(mat_l(y,y),mat_u(y,y))
-        allocate(rand(y),samp(y))
-        allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
+        !allocate(mat_l(y,y),mat_u(y,y))
+        !allocate(rand(y),samp(y))
+        !allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
 
         ! Initialize arrays
-        A(:,:)            = 0.d0
+        !A(:,:)            = 0.d0
         b(:)              = 0.d0
         c(:)              = 0.d0
-        d(:)              = 0.d0
-        rand(:)           = 0.d0
-        samp(:)           = 0.d0
-        mat_l(:,:)        = 0.d0
+        !d(:)              = 0.d0
+        !rand(:)           = 0.d0
+        !samp(:)           = 0.d0
+        !mat_l(:,:)        = 0.d0
 
         ! Old direct matrix block
-        allocate(A_3(y,y),A_1(y,2*x,z),A_2(y,y,z))
-        allocate(T_nu(2*x,y,z),T_nu_T(y,2*x,z))
-        allocate(covar(2*x,2*x,z))
+        !allocate(A_3(y,y),A_1(y,2*x,z),A_2(y,y,z))
+        !allocate(T_nu(2*x,y,z),T_nu_T(y,2*x,z))
+        !allocate(covar(2*x,2*x,z))
 
-        A_1(:,:,:) = 0.d0
-        A_2(:,:,:) = 0.d0
-        A_3(:,:) = 0.d0
-        T_nu(:,:,:) = 0.d0
-        T_nu_T(:,:,:) = 0.d0
-        covar(:,:,:) = 0.d0
+        !A_1(:,:,:) = 0.d0
+        !A_2(:,:,:) = 0.d0
+        !A_3(:,:) = 0.d0
+        !T_nu(:,:,:) = 0.d0
+        !T_nu_T(:,:,:) = 0.d0
+        !covar(:,:,:) = 0.d0
 
         ! Fill data and covariance arrays
-        do i=1, x
-            do j=1,z
-                covar(i,i,j)     = 1.d0/dat%rms_map(i-1,map_n,j)**2
-                covar(x+i,x+i,j) = 1.d0/dat%rms_map(i-1,map_n+1,j)**2
-            end do
-        end do
+        !do i=1, x
+            !do j=1,z
+                !covar(i,i,j)     = 1.d0/dat%rms_map(i-1,map_n,j)**2
+                !covar(x+i,x+i,j) = 1.d0/dat%rms_map(i-1,map_n+1,j)**2
+            !end do
+        !end do
 
         ! Fill template matrix
-        do i = 1, x
-           do j = 1, z
-              T_nu(i,i,j) = compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
-              T_nu(x+i,x+i,j) = compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
-           end do
-        end do
+        !do i = 1, x
+           !do j = 1, z
+              !T_nu(i,i,j) = compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+              !T_nu(x+i,x+i,j) = compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
+           !end do
+        !end do
 
-        do i = 1, x
-           l = 1
-           do j = 1, z
-              if (para%temp_corr(1,j)) then
-                 T_nu(i,2*x+l,j) = dat%temps(i-1,map_n,1)
-                 T_nu(x+i,2*x+l,j) = dat%temps(i-1,map_n+1,1)
-                 l = l + 1
-              end if
-           end do
-        end do
+        !do i = 1, x
+           !l = 1
+           !do j = 1, z
+              !if (para%temp_corr(1,j)) then
+                 !T_nu(i,2*x+l,j) = dat%temps(i-1,map_n,1)
+                 !T_nu(x+i,2*x+l,j) = dat%temps(i-1,map_n+1,1)
+                 !l = l + 1
+              !end if
+           !end do
+        !end do
 
         ! Computing the LHS and RHS of the linear equation
-        do j=1,z
-            T_nu_T(:,:,j) = transpose(T_nu(:,:,j))
-            A_1(:,:,j)    = matmul(T_nu_T(:,:,j),covar(:,:,j))
-            A_2(:,:,j)    = matmul(A_1(:,:,j),T_nu(:,:,j)) 
-            A_3(:,:)      = A_3(:,:) + A_2(:,:,j)
-        end do
+        !do j=1,z
+        !    T_nu_T(:,:,j) = transpose(T_nu(:,:,j))
+        !    A_1(:,:,j)    = matmul(T_nu_T(:,:,j),covar(:,:,j))
+        !    A_2(:,:,j)    = matmul(A_1(:,:,j),T_nu(:,:,j)) 
+        !    A_3(:,:)      = A_3(:,:) + A_2(:,:,j)
+        !end do
 
 
-        write(*,*) 'Fill Template Matrix'
+        !write(*,*) 'Fill Template Matrix'
         ! Fill template matrix
  
-        l  = 1
-        do j = 1, z
-           vi = 1
-           ci = 1
-           ri = 1
-           co = 1
-           col_ptr(ci,j) = 1
-           ci = ci + 1
-           do m = 1,x 
-              val(vi,j)     = compute_spectrum(para,compo,1,para%dat_nu(j),m-1,map_n)/dat%rms_map(m-1,map_n,j)
-              row_ind(ri,j) = m
-              co            = co + 1
-              vi            = vi + 1
-              ri            = ri + 1
-              col_ptr(ci,j) = co
-              ci            = ci + 1
-           end do
-           if (size(poltype) == 2) then
-              do m = x+1,2*x 
-                 val(vi,j)     = compute_spectrum(para,compo,1,para%dat_nu(j),m-x-1,map_n+1)/dat%rms_map(m-x-1,map_n+1,j)
-                 row_ind(ri,j) = m
-!                 write(*,*) vi, ri, co, val(vi,j)
-                 co            = co + 1
-                 vi            = vi + 1
-                 ri            = ri + 1
-                 col_ptr(ci,j) = co
-                 ci            = ci + 1
-              end do
-           end if
-           if (para%temp_corr(1,j)) then
-              do i = 1, x
-                 val(vi,j)     = dat%temps(i-1,map_n,1)/dat%rms_map(i-1,map_n,j)
- !                if (i < 6) then
- !                   write(*,*) i, vi, ri
- !                   write(*,*) val(vi,j),dat%temps(i-1,map_n,1), dat%rms_map(i-1,map_n,j)
- !                end if
-                 co            = co + 1
-                 row_ind(ri,j) = i
-                 vi            = vi + 1
-                 ri            = ri + 1
-              end do
-              if (size(poltype) == 2) then
-                 do i = 1, x
-                    val(vi,j)     = dat%temps(i-1,map_n+1,1)/dat%rms_map(i-1,map_n+1,j)
-                    co            = co + 1
-                    row_ind(ri,j) = i+x
-                    vi            = vi + 1
-                    ri            = ri + 1
-                 end do
-              end if              
-              col_ptr(2*x:ci+l-1,j)  = col_ptr(2*x,j)
-              col_ptr(ci+l-1,j)      = co
-              col_ptr(ci+l-1:,j)     = col_ptr(ci+l-1,j)
-              l = l + 1
-           else
-              if (ci+l-1 > y+1) then
-                 ! write(*,*) 'out of bounds'
-                 cycle
-              else
-                 col_ptr(m:ci+l-1,j)  = col_ptr(m,j)
-                 col_ptr(ci+l-1,j)    = co
-                 col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
-                 ! write(*,*) ci+l-1,co
-                 ! write(*,*) 'its fine, false', j, l, ci+l-1
-              end if
-           end if
-        end do
+        !l  = 1
+        !do j = 1, z
+        !   vi = 1
+        !   ci = 1
+        !   ri = 1
+        !   co = 1
+        !   col_ptr(ci,j) = 1
+        !   ci = ci + 1
+        !   do m = 1,x 
+        !      val(vi,j)     = compute_spectrum(para,compo,1,para%dat_nu(j),m-1,map_n)/dat%rms_map(m-1,map_n,j)
+        !      row_ind(ri,j) = m
+        !      co            = co + 1
+        !      vi            = vi + 1
+        !      ri            = ri + 1
+        !      col_ptr(ci,j) = co
+        !      ci            = ci + 1
+        !   end do
+        !   if (size(poltype) == 2) then
+        !      do m = x+1,2*x 
+        !         val(vi,j)     = compute_spectrum(para,compo,1,para%dat_nu(j),m-x-1,map_n+1)/dat%rms_map(m-x-1,map_n+1,j)
+        !         row_ind(ri,j) = m
+        !         write(*,*) vi, ri, co, val(vi,j)
+        !         co            = co + 1
+        !         vi            = vi + 1
+        !         ri            = ri + 1
+        !         col_ptr(ci,j) = co
+        !         ci            = ci + 1
+        !      end do
+        !   end if
+        !   if (para%temp_corr(1,j)) then
+        !      do i = 1, x
+        !         val(vi,j)     = dat%temps(i-1,map_n,1)/dat%rms_map(i-1,map_n,j)
+        !         if (i < 6) then
+        !            write(*,*) i, vi, ri
+        !            write(*,*) val(vi,j),dat%temps(i-1,map_n,1), dat%rms_map(i-1,map_n,j)
+        !         end if
+        !         co            = co + 1
+        !         row_ind(ri,j) = i
+        !         vi            = vi + 1
+        !         ri            = ri + 1
+        !      end do
+        !      if (size(poltype) == 2) then
+        !         do i = 1, x
+        !            val(vi,j)     = dat%temps(i-1,map_n+1,1)/dat%rms_map(i-1,map_n+1,j)
+        !            co            = co + 1
+        !            row_ind(ri,j) = i+x
+        !            vi            = vi + 1
+        !            ri            = ri + 1
+        !         end do
+        !      end if              
+        !      col_ptr(2*x:ci+l-1,j)  = col_ptr(2*x,j)
+        !      col_ptr(ci+l-1,j)      = co
+        !      col_ptr(ci+l-1:,j)     = col_ptr(ci+l-1,j)
+        !      l = l + 1
+        !   else
+        !      if (ci+l-1 > y+1) then
+        !         ! write(*,*) 'out of bounds'
+        !         cycle
+        !      else
+        !         col_ptr(m:ci+l-1,j)  = col_ptr(m,j)
+        !         col_ptr(ci+l-1,j)    = co
+        !         col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
+        !         ! write(*,*) ci+l-1,co
+        !         ! write(*,*) 'its fine, false', j, l, ci+l-1
+        !      end if
+        !   end if
+        !end do
 
-        ! write(*,*) 'Compute RHS of matrix eqn.'
+        write(*,*) 'Compute RHS of matrix eqn.'
         ! Computing the LHS and RHS of the linear equation
         ! RHS
         w = 0 
@@ -330,22 +330,24 @@ contains
             end if
         end do
 
-        if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
+        !if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
         !LHS
 
-        t2 = mpi_wtime()
+        !t2 = mpi_wtime()
 
-        do j = 1,z
-           write(*,*) j
-           A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
-           write(*,*) "finished band ", j
-        end do
+        !do j = 1,z
+        !   write(*,*) j
+        !   A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
+        !   write(*,*) "finished band ", j
+        !end do
     
-        d(:)    = 1.d0
-        rand(:) = 1.d0
-        call multiply_with_A(para, dat, compo, d, 5, map_n)
+        !d(:)    = 1.d0
+        !rand(:) = 0.d0
+        !rand = return_Ax(para, dat, compo, d, 5, map_n)
+        !rand(:) = 1.d0
+        !call multiply_with_A(para, dat, compo, d, 5, map_n)
 
-        rand = matmul(A_3,rand)
+        !rand = matmul(A_3,rand)
 
         !write(*,*) 'y = ', y
         !write(*,*) 'npix = ', npix
@@ -354,14 +356,15 @@ contains
         !write(*,fmt='(2(E12.5))') compute_spectrum(para,compo,1,para%dat_nu(2),x-1,map_n), dat%temps(x-1,map_n,1)
         !stop
 
-        do i = 1, y
-           if (d(i) - rand(i) > 1.d-6) then
-              write(*,fmt='(3(E12.5),i6)') d(i), rand(i), (d(i)-rand(i))/rand(i), i
-           end if
-        end do
-        stop
+
+        !do i = 2*x, y
+        !   if (d(i) - rand(i) > 1.d-6) then
+        !      write(*,fmt='(3(E12.5),i6)') d(i), rand(i), (d(i)-rand(i))/rand(i), i
+        !   end if
+        !end do
+        !stop
         
-        nnz_a = count(A/=0)
+        !nnz_a = count(A/=0)
 
         t3 = mpi_wtime()
 
@@ -369,32 +372,33 @@ contains
 
         ! Computation
         if (trim(method) == 'cholesky') then
-           mat_u(:,:)        = 0.d0
-           if (rank == master) write(*,fmt='(a)') 'Joint sampling using Cholesky Decomposition.'
-           call cholesky_decomp(A,mat_l)
-           mat_u  = transpose(mat_l)
-           call forward_sub(mat_l,d,c)
-           call backward_sub(mat_u,b,d)
+           !mat_u(:,:)        = 0.d0
+           !if (rank == master) write(*,fmt='(a)') 'Joint sampling using Cholesky Decomposition.'
+           !call cholesky_decomp(A,mat_l)
+           !mat_u  = transpose(mat_l)
+           !call forward_sub(mat_l,d,c)
+           !call backward_sub(mat_u,b,d)
         else if (trim(method) == 'cg') then
            if (rank == master) write(*,*) 'Joint sampling using CG.'
            ! Optimize
            !call compute_cg(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
-           call compute_cg_precond(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
+           !call compute_cg_precond(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
            !call compute_cg_vec(b,c,y,para,dat,compo)
            ! Sample
            !call sample_cg(A,b,c,2*npix,nnz_a,para%cg_iter,para%cg_converge,para,dat,compo)
+           call sample_cg_vec(b,c,y,para,dat,compo)
         else if (trim(method) == 'lu') then
-           write(*,*) 'Currently deprecated -- replace with LAPACK'
-           stop
-           mat_u(:,:)        = 0.d0
+           !write(*,*) 'Currently deprecated -- replace with LAPACK'
+           !stop
+           !mat_u(:,:)        = 0.d0
            if (rank == master) write(*,*) 'Joint sampling using LU Decomp'
-           call LUDecomp(A,mat_l,mat_u,y)
-           call forward_sub(mat_l,d,c)
-           call backward_sub(mat_u,b,d)
+           !call LUDecomp(A,mat_l,mat_u,y)
+           !call forward_sub(mat_l,d,c)
+           !call backward_sub(mat_u,b,d)
         end if
         ! Draw a sample by cholesky decompsing A^-1, and multiplying 
         ! the subsequent lower triangular by a vector of random numbers
-
+        !stop
 
         ! Output amplitudes to the appropriate variables
         if (size(poltype) == 1) then
@@ -490,69 +494,69 @@ contains
            write(*,fmt='(a,f10.3,a)') 'Joint Sampler completed in ', t3-t1, 's.'
         end if
 
-        if (para%output_unc .and. iter == niter) then
-           allocate(unc_a_d(nfit1))
-           allocate(unc_a_s(0:dat%npix-1,1))
+        !if (para%output_unc .and. iter == niter) then
+        !   allocate(unc_a_d(nfit1))
+        !   allocate(unc_a_s(0:dat%npix-1,1))!
 
-           write(*,*) 'Dust amplitude uncertainties: '
+        !   write(*,*) 'Dust amplitude uncertainties: '
         
-           call invert_matrix_dp(A,.true.)
+        !   call invert_matrix_dp(A,.true.)
 
-           write(*,*) 'Done inverting.'
+        !   write(*,*) 'Done inverting.'
 
            
-           if (size(poltype) == 1) then
-              do j = 1, x
-                 unc_a_s(j-1,1) = sqrt(A(j,j))
-              end do
-              do j = 1, nfit1
-                 unc_a_d(j) = sqrt(A(x+j,x+j))
-              end do
-              inquire(file=trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat',exist=exist)
-              if (exist) then
-                 open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="old", &
-                      position="append", action="write")
-              else
-                 open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="new", action="write")
-              endif
-              write(40,'(6(E17.8))') unc_a_d
-              close(40)
+        !   if (size(poltype) == 1) then
+        !      do j = 1, x
+        !         unc_a_s(j-1,1) = sqrt(A(j,j))
+        !      end do
+        !      do j = 1, nfit1
+        !         unc_a_d(j) = sqrt(A(x+j,x+j))
+        !      end do
+        !      inquire(file=trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat',exist=exist)
+        !      if (exist) then
+        !         open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="old", &
+        !              position="append", action="write")
+        !      else
+        !         open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="new", action="write")
+        !      endif
+        !      write(40,'(6(E17.8))') unc_a_d
+        !      close(40)
 
-              title = trim(para%outdir) // 'a_synch_uncertainty_'// trim(tqu(k)) // '.fits'
-              call write_bintab(unc_a_s,dat%npix,1, header, nlheader, trim(title))
+        !      title = trim(para%outdir) // 'a_synch_uncertainty_'// trim(tqu(k)) // '.fits'
+        !      call write_bintab(unc_a_s,dat%npix,1, header, nlheader, trim(title))
 
-           else if (size(poltype) == 2) then
-              do j = 1, x
-                 unc_a_s(j-1,1) = sqrt(A(j,j))
-              end do
-              do j = 1, nfit1
-                 unc_a_d(j) = sqrt(A(2*x+j,2*x+j))
-              end do
+        !   else if (size(poltype) == 2) then
+        !      do j = 1, x
+        !         unc_a_s(j-1,1) = sqrt(A(j,j))
+        !      end do
+        !      do j = 1, nfit1
+        !         unc_a_d(j) = sqrt(A(2*x+j,2*x+j))
+        !      end do
               
-              inquire(file=trim(para%outdir) // 'dust_QU_uncertainties.dat',exist=exist)
-              if (exist) then
-                 open(40,file = trim(para%outdir) // 'dust_QU_uncertainties.dat', status="old", &
-                      position="append", action="write")
-              else
-                 open(40,file = trim(para%outdir) // 'dust_QU_uncertainties.dat', status="new", action="write")
-              endif
-              write(40,'(6(E17.8))') unc_a_d
-              close(40)
+        !      inquire(file=trim(para%outdir) // 'dust_QU_uncertainties.dat',exist=exist)
+        !      if (exist) then
+        !         open(40,file = trim(para%outdir) // 'dust_QU_uncertainties.dat', status="old", &
+        !              position="append", action="write")
+        !      else
+        !         open(40,file = trim(para%outdir) // 'dust_QU_uncertainties.dat', status="new", action="write")
+        !      endif
+        !      write(40,'(6(E17.8))') unc_a_d
+        !      close(40)
 
-           end if
+        !   end if
                   
-        end if
+        !end if
 
         write(*,*) 'Exit joint_sampler'
 
         ! Sure to deallocate all arrays here to free up memory
-        deallocate(A)
+        !deallocate(A)
         deallocate(b)
         deallocate(c)
         deallocate(d)
-        deallocate(mat_l)
-        deallocate(mat_u)
-        deallocate(rand)
+        !deallocate(mat_l)
+        !deallocate(mat_u)
+        !deallocate(rand)
 
     end subroutine sample_joint_amp
 

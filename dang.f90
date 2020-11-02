@@ -172,7 +172,7 @@ program dang
                 
              ! Extrapolating A_dust to bands
              if (ANY(comp%joint=='dust')) then
-                !write(*,*) 'Extrapolating A_dust to bands'
+                write(*,*) 'Extrapolating A_dust to bands'
                 do i = 0, npix-1
                    do j = 1, nbands
                       dang_data%fg_map(i,k,j,3) = dang_data%fg_map(i,k,par%fg_ref_loc(2),3)*compute_spectrum(par,comp,2,par%dat_nu(j),i,k)

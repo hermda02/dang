@@ -250,6 +250,7 @@ contains
         d = r
         delta_new = sum(r*r)
         delta_0   = delta_new
+        write(*,*) delta_0
         do while( (i .lt. i_max) .and. (delta_new .gt. converge))!(epsil**2)*delta_0))
            t3 = mpi_wtime()
            if (present(nnz_a)) then
@@ -324,10 +325,11 @@ contains
       i = 0
       call multiply_with_A(param, datas, compos, w, 5, 2)
 
-      r = b - return_Ax(param, datas, compos, x, 5, 2)
+      r = b! - return_Ax(param, datas, compos, x, 5, 2)
       d = r
       delta_new = sum(r*r)
       delta_0   = delta_new
+      write(*,*) delta_0
       do while( (i .lt. i_max) .and. (delta_new .gt. converge))!(epsil**2)*delta_0))
          t3 = mpi_wtime()
          q = return_Ax(param, datas, compos, d, 5, 2)
@@ -487,24 +489,25 @@ contains
       i_max    = param%cg_iter
       converge = param%cg_converge
 
-      i = 0
       call multiply_with_A(param, datas, compos, w, 5, 2)
       do i = 1, n
          eta(i) = rand_normal(0.d0,1.d0)
       end do
       b2 = b + compute_sample_vec(param, datas, compos, n2, n, eta, 5, 2)
+
+      i = 0
      
-      r = b - return_Ax(param, datas, compos, x, 5, 2)
+      r = b2 - return_Ax(param, datas, compos, x, 5, 2)
       d = r
       delta_new = sum(r*r)
       delta_0   = delta_new
-      do while( (i .lt. i_max) .and. (delta_new .gt. converge))!(epsil**2)*delta_0))
+      do while( (i .lt. i_max) .and. (delta_new .gt. converge))
          t3 = mpi_wtime()
          q = return_Ax(param, datas, compos, d, 5, 2)
          alpha = delta_new/(sum(d*q))
          x = x + alpha*d
          if (mod(i,50) == 0) then
-            r = b - return_Ax(param, datas, compos, x, 5, 2)
+            r = b2 - return_Ax(param, datas, compos, x, 5, 2)
          else
             r = r - alpha*q
          end if
@@ -582,6 +585,7 @@ contains
       !$OMP END PARALLEL
       delta_new = sum(r*d)
       delta_0   = delta_new
+      write(*,*) delta_0
       t3 = mpi_wtime()
       do while( (i .lt. i_max) .and. (delta_new .gt. converge))!(epsil**2)*delta_0))
          t3 = mpi_wtime()
@@ -678,19 +682,17 @@ contains
             v_temp(x+i) = v_temp(x+i) + v_temp2(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
          end do
          !$OMP END DO
+         !$OMP END PARALLEL
 
-         !do i = len+1, n
          if (para%temp_corr(1,j)) then
-            !$OMP DO SCHEDULE(static)
+            !!$OMP DO SCHEDULE(static)
             do k = 1, x
                v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n,1)*v_temp2(k)
                v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n+1,1)*v_temp2(k+x)
             end do
-            !$OMP END DO
+            !!$OMP END DO
             l = l+1
          end if
-         !end do
-         !$OMP END PARALLEL
          v_temp3 = v_temp3 + v_temp
       end do
       
@@ -737,7 +739,7 @@ contains
             v_temp2(i)   = vech(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
             v_temp2(x+i) = vech(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
             if (para%temp_corr(1,j)) then
-               if (i == 1) write(*,*) 'truuu', j, l
+               !if (i == 1) write(*,*) 'truuu', j, l
                v_temp2(i)   = v_temp2(i)   + vech(len+l)*dat%temps(i-1,map_n,1)
                v_temp2(x+i) = v_temp2(x+i) + vech(len+l)*dat%temps(i-1,map_n+1,1)
             end if
@@ -748,24 +750,18 @@ contains
          end do
          !$OMP END DO
          !$OMP END PARALLEL
-         !do i = len+1, n
          if (para%temp_corr(1,j)) then
-            !$OMP PARALLEL PRIVATE(i)
-            !$OMP DO SCHEDULE(static)
+            !!$OMP PARALLEL PRIVATE(i)
+            !!$OMP DO SCHEDULE(static)
             do i = 1, x
                v_temp(len+l) = v_temp(len+l) + dat%temps(i-1,map_n,1)*v_temp2(i)
                v_temp(len+l) = v_temp(len+l) + dat%temps(i-1,map_n+1,1)*v_temp2(i+x)
             end do
-            !$OMP END DO
-            !$OMP END PARALLEL
+            !!$OMP END DO
+            !!$OMP END PARALLEL
             l = l+1
          end if
-         !end do
-         !write(*,*) v_temp(len-1:)
-         !write(*,*) ''
-         !write(*,*) v_temp2(len-1:)
-         !write(*,*) ''
-         write(*,*) l
+         !write(*,*) l
          v_temp3 = v_temp3 + v_temp
       end do
 
@@ -798,6 +794,7 @@ contains
 
       vech = vec
 
+      res     = 0.d0
       v_temp3 = 0.d0
 
       l = 1
@@ -807,46 +804,41 @@ contains
          ! A is composed of sum_nu(T_nu^T N_nu^-1 T_nu)
          
          ! first multiply by T_nu
-         !$OMP PARALLEL PRIVATE(i,k)
+         !$OMP PARALLEL PRIVATE(i)
          !$OMP DO SCHEDULE(static)
          do i = 1, x
             v_temp2(i)   = vech(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
             v_temp2(x+i) = vech(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
             if (para%temp_corr(1,j)) then
+               !if (i == 1) write(*,*) 'truuu', j, l
                v_temp2(i)   = v_temp2(i)   + vech(len+l)*dat%temps(i-1,map_n,1)
                v_temp2(x+i) = v_temp2(x+i) + vech(len+l)*dat%temps(i-1,map_n+1,1)
             end if
-         end do
-         !$OMP END DO
-
-         ! Then multiply by N_nu^-1
-         !$OMP DO SCHEDULE(static)
-         do i = 1, x
             v_temp2(i)   = v_temp2(i)/(dat%rms_map(i-1,map_n,j))**2.d0
             v_temp2(x+i) = v_temp2(x+i)/(dat%rms_map(i-1,map_n+1,j))**2.d0
+            v_temp(i)    = v_temp(i)   + v_temp2(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+            v_temp(x+i)  = v_temp(x+i) + v_temp2(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
          end do
          !$OMP END DO
-
-         ! Then multiply by T_nu^T
-         !$OMP DO SCHEDULE(static)
-         do i = 1, x
-            v_temp(i)   = v_temp(i)   + v_temp2(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
-            v_temp(x+i) = v_temp(x+i) + v_temp2(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
-         end do
-         !$OMP END DO
-
+         !$OMP END PARALLEL
          !do i = len+1, n
          if (para%temp_corr(1,j)) then
-            !$OMP DO SCHEDULE(static)
-            do k = 1, x
-               v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n,1)*v_temp2(k)
-               v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n+1,1)*v_temp2(k+x)
+            !!$OMP PARALLEL PRIVATE(i)
+            !!$OMP DO SCHEDULE(static)
+            do i = 1, x
+               v_temp(len+l) = v_temp(len+l) + dat%temps(i-1,map_n,1)*v_temp2(i)
+               v_temp(len+l) = v_temp(len+l) + dat%temps(i-1,map_n+1,1)*v_temp2(i+x)
             end do
-            !$OMP END DO
+            !!$OMP END DO
+            !!$OMP END PARALLEL
             l = l+1
          end if
          !end do
-         !$OMP END PARALLEL
+         !write(*,*) v_temp(len-1:)
+         !write(*,*) ''
+         !write(*,*) v_temp2(len-1:)
+         !write(*,*) ''
+         !write(*,*) l
          v_temp3 = v_temp3 + v_temp
       end do
       
