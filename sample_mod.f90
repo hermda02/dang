@@ -18,6 +18,481 @@ module sample_mod
 
 contains
 
+    subroutine sample_joint_amp(para, dat, compo, map_n, method, poltype)
+        !------------------------------------------------------------------------
+        ! Solving the matrix equation Ab = c                                    |
+        !                                                                       |
+        ! For this purpose, we solve the equation:                              |
+        !         sum_nu ((T_nu)^T N^-1 T_nu)amp = sum_nu ((T_nu)^T N^-1 d_nu)  |
+        !                                                                       |
+        ! where T_nu and a are defined below, and d_nu is the data at band nu.  |
+        !                                                                       |
+        ! For the matrix equation, A = sum_nu ((T_nu)^T N_nu^-1 T_nu), b = amp, |
+        !                      and c =  sum_nu ((T_nu)^T d_nu).                 !                
+        ! If I have this correct, A should be n x n where n=npix+nband-1, which |
+        ! checks out since a is npix+nband-1.                                   |
+        !------------------------------------------------------------------------
+
+        implicit none
+        type(params)                               :: para
+        type(data),                intent(inout)   :: dat
+        type(component)                            :: compo
+        integer(i4b),              intent(in)      :: map_n
+        character(len=*),          intent(in)      :: method
+        character(len=*), dimension(:), intent(in) :: poltype
+        real(dp), allocatable, dimension(:,:)      :: A, val
+        integer(i4b), allocatable, dimension(:,:)  :: col_ptr, row_ind
+        real(dp), allocatable, dimension(:,:)      :: mat_l, mat_u, unc_a_s
+        real(dp), allocatable, dimension(:)        :: b, c, d, rand, samp, unc_a_d
+        character(len=256)                         :: title
+        integer(i4b)                               :: x, y, z, nfit1, nfit2, w, l, m, n
+        integer(i4b)                               :: vi, ci, ri, co, nnz, nnz_a
+        integer(i4b)                               :: info
+
+        real(dp)                                   :: q, t6, t7
+
+        if (rank == master) then
+           write(*,fmt='(a)') 'Starting joint sampling for synch and dust_template.'
+           !write(*,fmt='(a)') 'Pol_type = ', trim(poltype(:))
+           t1 = mpi_wtime()
+        end if
+
+        ! Load which components to jointly fit for arary allocation
+        ! vv These will not change based off of components
+        x = dat%npix
+        y = 0
+        z = nbands
+
+        do i = 1, size(compo%joint)
+           if (compo%joint(i) == 'synch') then
+              do l = 1, size(poltype)
+                 ! write(*,*) trim(poltype(l))
+                 y = y + dat%npix
+              end do
+           else if (compo%joint(i) == 'dust') then
+              y = y + dat%npix
+           else if (compo%joint(i) == 'template01') then
+              ! Must have at most nbands -1 templates to avoid degeneracy
+              ! Count how many bands are not being fit
+              nfit1 = 0
+              do j = 1, nbands
+                 if (para%temp_corr(1,j)) then
+                    nfit1 = nfit1 + 1
+                 end if
+              end do
+              y = y + nfit1
+           else if (compo%joint(i) == 'template02') then
+              ! Must have at most nbands -1 templates to avoid degeneracy
+              ! Count how many bands are not being fit
+              nfit2 = 0
+              do j = 1, nbands
+                 if (para%temp_corr(2,j)) then
+                    nfit2 = nfit2 + 1
+                 end if
+              end do
+              y = y + nfit2
+           end if
+        end do
+        
+        !------------------------------------------------------------------------------|
+        ! Since A is sparse (mostly 0s), we'll try to save time and memory by          |
+        ! putting all of the values, with 'pointers' into a smaller array              |
+        !                                                                              |
+        ! We will use the CSC (Compressed Sparse Column) scheme to save time here.     |
+        ! CSC is used instead of CSR due to the nature of the sparse matrix calc.      |
+        !                                                                              |
+        ! There are three arrays that will be used here, namely col_ptr, row_ind, and  |
+        ! val. col_ptr is size y+1 (int), row_ind is nnz (num non-zero entries) (int), |
+        ! and val is also size nnz (dp).                                               |
+        !                                                                              |
+        ! so for each band, we have nnz = 2*npix                                       |
+        !------------------------------------------------------------------------------|
+
+        nnz = 4*x
+
+        allocate(A(y,y))
+        allocate(b(y),c(y),d(y))
+        allocate(mat_l(y,y),mat_u(y,y))
+        allocate(rand(y),samp(y))
+        allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
+
+        write(*,*) 'Initialize'
+        ! Initialize arrays
+        A(:,:)            = 0.d0
+        b(:)              = 0.d0
+        c(:)              = 0.d0
+        d(:)              = 0.d0
+        rand(:)           = 0.d0
+        samp(:)           = 0.d0
+        mat_l(:,:)        = 0.d0
+
+        write(*,*) 'Fill Template Matrix'
+        ! Fill template matrix
+ 
+        l  = 1
+        do j = 1, z
+           vi = 1
+           ci = 1
+           ri = 1
+           co = 1
+           col_ptr(ci,j) = 1
+           ci = ci + 1
+           do m = 1,x 
+              val(vi,j)     = compute_spectrum(para,compo,1,para%dat_nu(j),m-1,map_n)/dat%rms_map(m-1,map_n,j)
+              row_ind(ri,j) = m
+              co            = co + 1
+              vi            = vi + 1
+              ri            = ri + 1
+              col_ptr(ci,j) = co
+              ci            = ci + 1
+           end do
+           if (size(poltype) == 2) then
+              do m = x+1,2*x 
+                 val(vi,j)     = compute_spectrum(para,compo,1,para%dat_nu(j),m-x-1,map_n+1)/dat%rms_map(m-x-1,map_n+1,j)
+                 row_ind(ri,j) = m
+!                 write(*,*) vi, ri, co, val(vi,j)
+                 co            = co + 1
+                 vi            = vi + 1
+                 ri            = ri + 1
+                 col_ptr(ci,j) = co
+                 ci            = ci + 1
+              end do
+           end if
+           if (para%temp_corr(1,j)) then
+              do i = 1, x
+                 val(vi,j)     = dat%temps(i-1,map_n,1)/dat%rms_map(i-1,map_n,j)
+ !                if (i < 6) then
+ !                   write(*,*) i, vi, ri
+ !                   write(*,*) val(vi,j),dat%temps(i-1,map_n,1), dat%rms_map(i-1,map_n,j)
+ !                end if
+                 co            = co + 1
+                 row_ind(ri,j) = i
+                 vi            = vi + 1
+                 ri            = ri + 1
+              end do
+              if (size(poltype) == 2) then
+                 do i = 1, x
+                    val(vi,j)     = dat%temps(i-1,map_n+1,1)/dat%rms_map(i-1,map_n+1,j)
+                    co            = co + 1
+                    row_ind(ri,j) = i+x
+                    vi            = vi + 1
+                    ri            = ri + 1
+                 end do
+              end if              
+              col_ptr(2*x:ci+l-1,j)  = col_ptr(2*x,j)
+              col_ptr(ci+l-1,j)      = co
+              col_ptr(ci+l-1:,j)     = col_ptr(ci+l-1,j)
+              l = l + 1
+           else
+              if (ci+l-1 > y+1) then
+                 ! write(*,*) 'out of bounds'
+                 cycle
+              else
+                 col_ptr(m:ci+l-1,j)  = col_ptr(m,j)
+                 col_ptr(ci+l-1,j)    = co
+                 col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
+                 ! write(*,*) ci+l-1,co
+                 ! write(*,*) 'its fine, false', j, l, ci+l-1
+              end if
+           end if
+        end do
+
+        ! write(*,*) 'Compute RHS of matrix eqn.'
+        ! Computing the LHS and RHS of the linear equation
+        ! RHS
+        w = 0 
+        do m = 1, size(compo%joint)
+            if (compo%joint(m) == 'synch') then
+               if (size(poltype) == 1) then
+                  do j=1, z
+                     do i=1, x
+                        ! if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                        c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+                     end do
+                  end do
+                  w = w + x
+               else if (size(poltype) == 2) then
+                  do j=1, z
+                     do i=1, x
+                        c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+                     end do
+                     do i=1, x
+                        c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
+                     end do
+                  end do
+                  w = w + 2*x
+               end if
+            else if (compo%joint(m) == 'dust') then
+               do j=1, z
+                  do i=1, x
+!                     if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                     c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,2,para%dat_nu(j),i-1,map_n)
+                  end do
+               end do
+               w = w + x
+            end if
+        end do
+        do m = 1, size(compo%joint)
+            if (compo%joint(m) == 'template01') then
+               if (size(poltype) == 1) then
+                  l = 1
+                  do j = 1, z
+                     if (para%temp_corr(1,j)) then
+                        do i = 1, x
+                           ! if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
+                                    dat%temps(i-1,map_n,1)
+                        end do
+                        l = l + 1
+                     end if
+                  end do
+                  w = w + l
+               else if (size(poltype) == 2) then
+                  l = 1
+                  do j = 1, z
+                     if (para%temp_corr(1,j)) then
+                        do i = 1, x
+                            c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
+                                    dat%temps(i-1,map_n,1)
+                            c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
+                                    dat%temps(i-1,map_n+1,1)
+
+                        end do
+                        l = l + 1
+                     end if
+                  end do
+                  w = w + l
+               end if
+            else if (compo%joint(m) == 'template02') then
+                l = 1
+                do j = 1, z
+                    if (para%temp_corr(2,j)) then
+                        do i = 1, x
+                           ! if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
+                                    dat%temps(i-1,map_n,2)
+                        end do
+                        l = l + 1
+                    end if
+                end do
+                w = w + l
+            end if
+        end do
+
+        if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
+        !LHS
+
+        t2 = mpi_wtime()
+
+        do j = 1, z
+           write(*,*) j
+           A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
+           ! write(*,*) "finished band ", j
+        end do
+        nnz_a = count(A/=0)
+
+        t3 = mpi_wtime()
+
+        write(*,fmt='(a,E12.4,a)') 'Sparse matrix multiply: ', t3-t2, 's.'
+
+        ! Computation
+        if (trim(method) == 'cholesky') then
+           mat_u(:,:)        = 0.d0
+           if (rank == master) write(*,fmt='(a)') 'Joint sampling using Cholesky Decomposition.'
+           call cholesky_decomp(A,mat_l)
+           mat_u  = transpose(mat_l)
+           call forward_sub(mat_l,d,c)
+           call backward_sub(mat_u,b,d)
+        else if (trim(method) == 'cg') then
+           if (rank == master) write(*,*) 'Joint sampling using CG.'
+           !call compute_cg(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
+           call compute_cg_precond(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
+        else if (trim(method) == 'lu') then
+           write(*,*) 'Currently deprecated -- replace with LAPACK'
+           stop
+           mat_u(:,:)        = 0.d0
+           if (rank == master) write(*,*) 'Joint sampling using LU Decomp'
+           call LUDecomp(A,mat_l,mat_u,y)
+           call forward_sub(mat_l,d,c)
+           call backward_sub(mat_u,b,d)
+        end if
+        ! Draw a sample by cholesky decompsing A^-1, and multiplying 
+        ! the subsequent lower triangular by a vector of random numbers
+
+        if (rank == master) write(*,fmt='(a,i6)') 'Draw a sample for iteration ', iter
+        do i = 1, y
+           rand(i) = rand_normal(0.d0,1.d0)
+        end do
+
+        t2 = mpi_wtime()
+        call cholesky_decomp(A,mat_l)
+        t3 = mpi_wtime()
+        write(*,fmt='(a,E12.4,a)') 'Cholesky completed in ', t3-t2, 's.'
+        call forward_sub(mat_l,d,rand)
+       
+        b = b + d
+
+        ! Output amplitudes to the appropriate variables
+        if (size(poltype) == 1) then
+           w = 0
+           do m = 1, size(compo%joint)
+              if (compo%joint(m) == 'synch') then
+                 do i = 1, x
+                    dat%fg_map(i-1,map_n,para%fg_ref_loc(1),1) = b(w+i)
+                 end do
+                 w = w + x
+              else if (compo%joint(m) == 'dust') then
+                 do i = 1, x
+                    dat%fg_map(i-1,map_n,para%fg_ref_loc(2),3) = b(w+i)
+                 end do
+                 w = w + x
+              end if
+           end do
+           do m = 1, size(compo%joint)
+              if (compo%joint(m) == 'template01') then
+                 l = 1
+                 do while (l .lt. (nfit1))
+                    do j= 1, z
+                       if (para%temp_corr(1,j)) then
+                          dat%temp_amps(j,map_n,1) = b(w+l)
+                          l = l + 1
+                       else
+                          dat%temp_amps(j,map_n,1) = 0.d0
+                       end if
+                    end do
+                 end do
+              else if (compo%joint(m) == 'template02') then
+                 l = 1
+                 do while (l .lt. (nfit2))
+                    do j= 1, z
+                       if (para%temp_corr(2,j)) then
+                          dat%temp_amps(j,map_n,2) = b(w+l)
+                          l = l + 1
+                       end if
+                    end do
+                 end do
+              end if
+           end do
+        else if (size(poltype) == 2) then
+           w = 0
+           do m = 1, size(compo%joint)
+              if (compo%joint(m) == 'synch') then
+                 do i = 1, x
+                    dat%fg_map(i-1,map_n,para%fg_ref_loc(1),1) = b(w+i)
+                 end do
+                 w = w + x
+                 do i = 1, x
+                    dat%fg_map(i-1,map_n+1,para%fg_ref_loc(1),1) = b(w+i)
+                 end do
+                 w = w + x
+              else if (compo%joint(m) == 'dust') then
+                 do i = 1, x
+                    dat%fg_map(i-1,map_n,para%fg_ref_loc(2),3) = b(w+i)
+                 end do
+                 w = w + x
+              end if
+           end do
+           do m = 1, size(compo%joint)
+              if (compo%joint(m) == 'template01') then
+                 l = 1
+                 do while (l .lt. (nfit1))
+                    do j= 1, z
+                       if (para%temp_corr(1,j)) then
+                          dat%temp_amps(j,map_n,1) = b(w+l)
+                          dat%temp_amps(j,map_n+1,1) = b(w+l)
+                          l = l + 1
+                       else
+                          dat%temp_amps(j,map_n,1) = 0.d0
+                          dat%temp_amps(j,map_n+1,1) = 0.d0
+                       end if
+                    end do
+                 end do
+              else if (compo%joint(m) == 'template02') then
+                 l = 1
+                 do while (l .lt. (nfit2))
+                    do j= 1, z
+                       if (para%temp_corr(2,j)) then
+                          dat%temp_amps(j,map_n,2) = b(w+l)
+                          l = l + 1
+                       end if
+                    end do
+                 end do
+              end if
+           end do
+        end if
+
+        if (rank == master) then
+           t3 = mpi_wtime()
+           write(*,fmt='(a,f10.3,a)') 'Joint Sampler completed in ', t3-t1, 's.'
+        end if
+
+        if (para%output_unc .and. iter == niter) then
+           allocate(unc_a_d(nfit1))
+           allocate(unc_a_s(0:dat%npix-1,1))
+
+           write(*,*) 'Dust amplitude uncertainties: '
+        
+           call invert_matrix_dp(A,.true.)
+
+           write(*,*) 'Done inverting.'
+
+           
+           if (size(poltype) == 1) then
+              do j = 1, x
+                 unc_a_s(j-1,1) = sqrt(A(j,j))
+              end do
+              do j = 1, nfit1
+                 unc_a_d(j) = sqrt(A(x+j,x+j))
+              end do
+              inquire(file=trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat',exist=exist)
+              if (exist) then
+                 open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="old", &
+                      position="append", action="write")
+              else
+                 open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="new", action="write")
+              endif
+              write(40,'(6(E17.8))') unc_a_d
+              close(40)
+
+              title = trim(para%outdir) // 'a_synch_uncertainty_'// trim(tqu(k)) // '.fits'
+              call write_bintab(unc_a_s,dat%npix,1, header, nlheader, trim(title))
+
+           else if (size(poltype) == 2) then
+              do j = 1, x
+                 unc_a_s(j-1,1) = sqrt(A(j,j))
+              end do
+              do j = 1, nfit1
+                 unc_a_d(j) = sqrt(A(2*x+j,2*x+j))
+              end do
+              
+              inquire(file=trim(para%outdir) // 'dust_QU_uncertainties.dat',exist=exist)
+              if (exist) then
+                 open(40,file = trim(para%outdir) // 'dust_QU_uncertainties.dat', status="old", &
+                      position="append", action="write")
+              else
+                 open(40,file = trim(para%outdir) // 'dust_QU_uncertainties.dat', status="new", action="write")
+              endif
+              write(40,'(6(E17.8))') unc_a_d
+              close(40)
+
+           end if
+                  
+        end if
+
+        write(*,*) 'Exit joint_sampler'
+
+        ! Sure to deallocate all arrays here to free up memory
+        deallocate(A)
+        deallocate(b)
+        deallocate(c)
+        deallocate(d)
+        deallocate(mat_l)
+        deallocate(mat_u)
+        deallocate(rand)
+
+    end subroutine sample_joint_amp
+
+
     !function temp_fit(data,template,noise,t_mask,freq)
     !    implicit none
     
@@ -320,348 +795,6 @@ contains
         deallocate(indx_sample_low)
 
     end subroutine sample_index
-
-
-    subroutine sample_joint_amp(para, dat, compo, map_n, method)
-        !------------------------------------------------------------------------
-        ! Solving the matrix equation Ab = c                                    |
-        !                                                                       |
-        ! For this purpose, we solve the equation:                              |
-        !         sum_nu ((T_nu)^T N^-1 T_nu)amp = sum_nu ((T_nu)^T N^-1 d_nu)  |
-        !                                                                       |
-        ! where T_nu and a are defined below, and d_nu is the data at band nu.  |
-        !                                                                       |
-        ! For the matrix equation, A = sum_nu ((T_nu)^T N_nu^-1 T_nu), b = amp, |
-        !                      and c =  sum_nu ((T_nu)^T d_nu).                 !                
-        ! If I have this correct, A should be n x n where n=npix+nband-1, which |
-        ! checks out since a is npix+nband-1.                                   |
-        !------------------------------------------------------------------------
-
-        implicit none
-        type(params)                              :: para
-        type(data),                intent(inout)  :: dat
-        type(component)                           :: compo
-        integer(i4b),              intent(in)     :: map_n
-        character(len=*),          intent(in)     :: method
-        real(dp), allocatable, dimension(:,:)     :: A, val
-        integer(i4b), allocatable, dimension(:,:) :: col_ptr, row_ind
-        real(dp), allocatable, dimension(:,:)     :: mat_l, mat_u, unc_a_s
-        real(dp), allocatable, dimension(:)       :: b, c, d, rand, samp, unc_a_d
-        character(len=256)                        :: title
-        integer(i4b)                              :: x, y, z, nfit1, nfit2, w, l, m, n
-        integer(i4b)                              :: vi, ci, ri, co, nnz, nnz_a
-        integer(i4b)                              :: info
-
-        real(dp)                                  :: q, t6, t7
-
-        if (rank == master) then
-           write(*,fmt='(a)') 'Starting joint sampling for synch and dust_template.'
-           t1 = mpi_wtime()
-        end if
-
-        ! Load which components to jointly fit for arary allocation
-        ! vv These will not change based off of components
-        x = dat%npix
-        y = 0
-        z = nbands
-
-        do i = 1, size(compo%joint)
-            if (compo%joint(i) == 'synch') then
-                y = y + dat%npix
-            else if (compo%joint(i) == 'dust') then
-                y = y + dat%npix
-            else if (compo%joint(i) == 'template01') then
-                ! Must have at most nbands -1 templates to avoid degeneracy
-                ! Count how many bands are not being fit
-                nfit1 = 0
-                do j = 1, nbands
-                     if (para%temp_corr(1,j)) then
-                        nfit1 = nfit1 + 1
-                    end if
-                end do
-                y = y + nfit1
-            else if (compo%joint(i) == 'template02') then
-                ! Must have at most nbands -1 templates to avoid degeneracy
-                ! Count how many bands are not being fit
-                nfit2 = 0
-                do j = 1, nbands
-                    if (para%temp_corr(2,j)) then
-                        nfit2 = nfit2 + 1
-                    end if
-                end do
-                y = y + nfit2
-            end if
-        end do
-
-        !------------------------------------------------------------------------------|
-        ! Since A is sparse (mostly 0s), we'll try to save time and memory by          |
-        ! putting all of the values, with 'pointers' into a smaller array              |
-        !                                                                              |
-        ! We will use the CSC (Compressed Sparse Column) scheme to save time here.     |
-        ! CSC is used instead of CSR due to the nature of the sparse matrix calc.      |
-        !                                                                              |
-        ! There are three arrays that will be used here, namely col_ptr, row_ind, and  |
-        ! val. col_ptr is size y+1 (int), row_ind is nnz (num non-zero entries) (int), |
-        ! and val is also size nnz (dp).                                               |
-        !                                                                              |
-        ! so for each band, we have nnz = 2*npix                                       |
-        !------------------------------------------------------------------------------|
-
-        nnz = x + x 
-
-        allocate(A(y,y))
-        allocate(b(y),c(y),d(y))
-        allocate(mat_l(y,y),mat_u(y,y))
-        allocate(rand(y),samp(y))
-        allocate(col_ptr(y+1,z),row_ind(nnz,z),val(nnz,z))
-
-        ! write(*,*) 'Initialize'
-        ! Initialize arrays
-        A(:,:)            = 0.d0
-        b(:)              = 0.d0
-        c(:)              = 0.d0
-        d(:)              = 0.d0
-        rand(:)           = 0.d0
-        samp(:)           = 0.d0
-        mat_l(:,:)        = 0.d0
-
-        ! write(*,*) 'Fill Template Matrix'
-        ! Fill template matrix
- 
-        l  = 1
-        do j = 1, z
-           vi = 1
-           ci = 1
-           ri = 1
-           co = 1
-           col_ptr(ci,j) = 1
-           ci = ci + 1
-           do m = 1,x 
-              val(vi,j)     = compute_spectrum(para,compo,1,para%dat_nu(j),m-1,map_n)/dat%rms_map(m-1,map_n,j)
-              row_ind(ri,j) = m
-              co            = co + 1
-              vi            = vi + 1
-              ri            = ri + 1
-              col_ptr(ci,j) = co
-              ci            = ci + 1
-           end do
-           if (para%temp_corr(1,j)) then
-              do i = 1, x
-                 val(vi,j)     = dat%temps(i-1,map_n,1)/dat%rms_map(i-1,map_n,j)
-                 co            = co + 1
-                 row_ind(ri,j) = i
-                 vi            = vi + 1
-                 ri            = ri + 1
-              end do
-              col_ptr(x:ci+l-1,j)  = col_ptr(x,j)
-              col_ptr(ci+l-1,j)    = co
-              col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
-              l = l + 1
-           else
-              if (ci+l-1 > y+1) then
-                 ! write(*,*) 'out of bounds'
-                 cycle
-              else
-                 col_ptr(m:ci+l-1,j)  = col_ptr(m,j)
-                 col_ptr(ci+l-1,j)    = co
-                 col_ptr(ci+l-1:,j)   = col_ptr(ci+l-1,j)
-                 ! write(*,*) 'its fine, false', j, l, ci+l-1
-              end if
-           end if
-        end do
-
-        ! write(*,*) 'Compute RHS of matrix eqn.'
-        ! Computing the LHS and RHS of the linear equation
-        ! RHS
-        w = 0 
-        do m = 1, size(compo%joint)
-            if (compo%joint(m) == 'synch') then
-               do j=1, z
-                  do i=1, x
-!                     if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-                     c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
-                  end do
-               end do
-               w = w + x
-            else if (compo%joint(m) == 'dust') then
-               do j=1, z
-                  do i=1, x
-!                     if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-                     c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,2,para%dat_nu(j),i-1,map_n)
-                  end do
-               end do
-               w = w + x
-            end if
-        end do
-        do m = 1, size(compo%joint)
-            if (compo%joint(m) == 'template01') then
-                l = 1
-                do j = 1, z
-                    if (para%temp_corr(1,j)) then
-                        do i = 1, x
-                           ! if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
-                                    dat%temps(i-1,map_n,1)
-                        end do
-                        l = l + 1
-                    end if
-                end do
-                w = w + l  
-            else if (compo%joint(m) == 'template02') then
-                l = 1
-                do j = 1, z
-                    if (para%temp_corr(2,j)) then
-                        do i = 1, x
-                           ! if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
-                                    dat%temps(i-1,map_n,2)
-                        end do
-                        l = l + 1
-                    end if
-                end do
-                w = w + l
-            end if
-        end do
-
-        ! if (rank == master) write(*,*) 'Compute LHS of matrix eqn.'
-        !LHS
-
-        t2 = mpi_wtime()
-
-        do j = 1, z
-           ! write(*,*) j
-           A(:,:) = A(:,:) + compute_ATA_CSC(val(:,j),row_ind(:,j),col_ptr(:,j))
-           ! write(*,*) "finished band ", j
-        end do
-        nnz_a = count(A/=0)
-
-        t3 = mpi_wtime()
-
-        write(*,fmt='(a,E12.4,a)') 'Sparse matrix multiply: ', t3-t2, 's.'
-
-        ! Computation
-        if (trim(method) == 'cholesky') then
-           mat_u(:,:)        = 0.d0
-           if (rank == master) write(*,fmt='(a)') 'Joint sampling using Cholesky Decomposition.'
-           call cholesky_decomp(A,mat_l)
-           mat_u  = transpose(mat_l)
-           call forward_sub(mat_l,d,c)
-           call backward_sub(mat_u,b,d)
-        else if (trim(method) == 'cg') then
-           if (rank == master) write(*,*) 'Joint sampling using CG.'
-           call compute_cg(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
-        else if (trim(method) == 'lu') then
-           write(*,*) 'Currently deprecated -- replace with LAPACK'
-           stop
-           mat_u(:,:)        = 0.d0
-           if (rank == master) write(*,*) 'Joint sampling using LU Decomp'
-           call LUDecomp(A,mat_l,mat_u,y)
-           call forward_sub(mat_l,d,c)
-           call backward_sub(mat_u,b,d)
-        end if
-        ! Draw a sample by cholesky decompsing A^-1, and multiplying 
-        ! the subsequent lower triangular by a vector of random numbers
-
-        if (rank == master) write(*,fmt='(a,i6)') 'Draw a sample for iteration ', iter
-        do i = 1, y
-           rand(i) = rand_normal(0.d0,1.d0)
-        end do
-
-        t2 = mpi_wtime()
-        call cholesky_decomp(A,mat_l)
-        t3 = mpi_wtime()
-        write(*,fmt='(a,E12.4,a)') 'Cholesky completed in ', t3-t2, 's.'
-        call forward_sub(mat_l,d,rand)
-       
-        b = b + d
-
-        ! Output amplitudes to the appropriate variables
-        w = 0
-        do m = 1, size(compo%joint)
-           if (compo%joint(m) == 'synch') then
-              do i = 1, x
-                 dat%fg_map(i-1,map_n,para%fg_ref_loc(1),1) = b(w+i)
-              end do
-              w = w + x
-           else if (compo%joint(m) == 'dust') then
-              do i = 1, x
-                 dat%fg_map(i-1,map_n,para%fg_ref_loc(2),3) = b(w+i)
-              end do
-              w = w + x
-           end if
-        end do
-        do m = 1, size(compo%joint)
-           if (compo%joint(m) == 'template01') then
-              l = 1
-              do while (l .lt. (nfit1))
-                 do j= 1, z
-                    if (para%temp_corr(1,j)) then
-                       dat%temp_amps(j,map_n,1) = b(w+l)
-                       l = l + 1
-                    else
-                       dat%temp_amps(j,map_n,1) = 0.d0
-                    end if
-                 end do
-              end do
-           else if (compo%joint(m) == 'template02') then
-              l = 1
-              do while (l .lt. (nfit2))
-                 do j= 1, z
-                    if (para%temp_corr(2,j)) then
-                       dat%temp_amps(j,map_n,2) = b(w+l)
-                       l = l + 1
-                    end if
-                 end do
-              end do
-           end if
-        end do
-
-        if (rank == master) then
-           t3 = mpi_wtime()
-           write(*,fmt='(a,f10.3,a)') 'Joint Sampler completed in ', t3-t1, 's.'
-        end if
-
-        if (para%output_unc .and. iter == niter) then
-           allocate(unc_a_d(nfit1))
-           allocate(unc_a_s(0:dat%npix-1,1))
-
-           write(*,*) 'Dust amplitude uncertainties: '
-        
-           call invert_matrix_dp(A,.true.)
-
-           write(*,*) 'Done inverting.'
-           do j = 1, x
-              unc_a_s(j-1,1) = sqrt(A(j,j))
-           end do
-           do j = 1, nfit1
-              unc_a_d(j) = sqrt(A(x+j,x+j))
-           end do
-
-           inquire(file=trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat',exist=exist)
-           if (exist) then
-              open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="old", &
-                   position="append", action="write")
-           else
-              open(40,file = trim(para%outdir) // 'dust_' // trim(tqu(k)) // '_uncertainties.dat', status="new", action="write")
-           endif
-           write(40,'(6(E17.8))') unc_a_d
-           close(40)
-
-           title = trim(para%outdir) // 'a_synch_uncertainty_'// trim(tqu(k)) // '.fits'
-           call write_bintab(unc_a_s,dat%npix,1, header, nlheader, trim(title))
-
-        end if
-
-        ! Sure to deallocate all arrays here to free up memory
-        deallocate(A)
-        deallocate(b)
-        deallocate(c)
-        deallocate(d)
-        deallocate(mat_l)
-        deallocate(mat_u)
-        deallocate(rand)
-
-    end subroutine sample_joint_amp
  
 
 end module sample_mod

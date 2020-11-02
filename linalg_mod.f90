@@ -225,7 +225,6 @@ contains
         real(dp),allocatable,dimension(:)     :: v
         integer(i4b),allocatable,dimension(:) :: rp, ci
 
-
         t5 = mpi_wtime()
         allocate(r(n),q(n),d(n))
 
@@ -293,30 +292,36 @@ contains
 
     end subroutine compute_cg
 
-    subroutine compute_cg_precond(A,x,b,n,nnz_a)
+    subroutine compute_cg_precond(A,x,b,n,nnz_a,iters,converge)
         
       ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
       ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
-
+      
       ! HAS NOT BEEN COMPLETED YET
+      
+      ! Note - the preconditioner form here is different that is normally seen
+      ! Normally a preconditioner matrix M is inverted and applied. M here is the 
+      ! inverse of the preconditioner we want (inverse of the diagonal version of A).
 
       implicit none
 
       real(dp), dimension(:,:), intent(in)  :: A
       real(dp), dimension(:), intent(in)    :: b
       real(dp), dimension(:), intent(out)   :: x
-      integer(i4b), intent(in)              :: n
+      integer(i4b), intent(in)              :: n,iters
+      real(dp), intent(in)                  :: converge
       integer(i4b), optional, intent(in)    :: nnz_a
-      real(dp), allocatable, dimension(:)   :: r, q, d
+      real(dp), allocatable, dimension(:)   :: r, q, d, s
+      real(dp), allocatable, dimension(:)   :: M
       real(dp)                              :: epsil, alpha, beta, delta_0
-      real(dp)                              :: delta_old, delta_new, t3, t4
+      real(dp)                              :: delta_old, delta_new, t3, t4, t5, t6
       integer(i4b)                          :: i_max, i, j
 
       real(dp),allocatable,dimension(:)     :: v
       integer(i4b),allocatable,dimension(:) :: rp, ci
 
-
-      allocate(r(n),q(n),d(n))
+      t5 = mpi_wtime()
+      allocate(r(n),q(n),d(n),M(n),s(n))
 
       if(present(nnz_a)) then
          allocate(v(nnz_a),rp(n+1),ci(nnz_a))
@@ -324,7 +329,13 @@ contains
       end if
 
       x(:) = 0.0d0
-      i_max = 1000
+      M(:) = 0.d0
+      i_max = iters
+
+      write(*,*) 'Define preconditioner'
+      do i = 1, n
+         M(i) = 1.d0/(A(i,i))
+      end do
 
       i = 0
       epsil = 1.0d-16
@@ -334,12 +345,19 @@ contains
       else
          r = b - matmul(A,x)
       end if
-      d = r
-      delta_new = sum(r*r)
+      !$OMP PARALLEL PRIVATE(i)
+      !$OMP DO SCHEDULE(static)
+      do i = 1, n
+         d(i) = M(i)*r(i)
+      end do
+      !$OMP END DO
+      !$OMP END PARALLEL
+      delta_new = sum(r*d)
       delta_0   = delta_new
       t3 = mpi_wtime()
-      do while( (i .lt. i_max) .and. (delta_new .gt. (epsil**2)*delta_0))
-          if (present(nnz_a)) then
+      do while( (i .lt. i_max) .and. (delta_new .gt. converge))!(epsil**2)*delta_0))
+         t3 = mpi_wtime()
+         if (present(nnz_a)) then
              q = Ax_CSR(rp,ci,v,d)
           else
              q = matmul(A,d)
@@ -355,12 +373,33 @@ contains
           else
               r = r - alpha*q
           end if
+          !$OMP PARALLEL PRIVATE(i)
+          !$OMP DO SCHEDULE(static)
+          do j = 1, n
+             s(j) = M(j)*r(j)
+          end do
+          !$OMP END DO
+          !$OMP END PARALLEL
           delta_old = delta_new
-          delta_new = sum(r*r)
+          delta_new = sum(r*s)
           beta = delta_new/delta_old
-          d = r + beta*d
+          d = s + beta*d
+          t4 = mpi_wtime()
           i = i + 1
+          if (delta_new .gt. converge) then
+             write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+          else
+             write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+          end if
       end do
+      t6 = mpi_wtime()
+
+      write(*,fmt='(a,e12.5,a)') 'CG Total time: ', t6-t5, 's.'
+      if(present(nnz_a)) then
+         deallocate(v)
+         deallocate(rp)
+         deallocate(ci)
+      end if
 
       deallocate(r)
       deallocate(q)
@@ -439,7 +478,6 @@ contains
     !$OMP PARALLEL PRIVATE(i,k,ii,ik,row,col)
     !$OMP DO SCHEDULE(DYNAMIC)
     do i = 1, n
-       !!$OMP DO SCHEDULE(DYNAMIC)
        do k = col_p(i), col_p(i+1)-1
           if (k > nnz) then
              write(*,*) 'k too big'
@@ -452,9 +490,8 @@ contains
              do ik = col_p(ii), col_p(ii+1)-1
                 if (ik > nnz) then
                    !write(*,*) ik
-                   write(*,*) 'ik too big'
+                   !write(*,*) 'ik too big'
                    !stop
-                   exit
                 end if
                 if (row_i(k) == row_i(ik)) then
                    b(row,col) = b(row,col) + v(k)*v(ik)
@@ -462,8 +499,7 @@ contains
              end do
           end do
        end do
-       !!$OMP END DO
-    end do
+    end do 
     !$OMP END DO
     !$OMP DO SCHEDULE(DYNAMIC)
     do i = 1, n
