@@ -39,6 +39,7 @@ module dang_param_mod
         logical(lgt),       allocatable, dimension(:,:)   :: fg_sample_spec ! Logical - sample spec params
         logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_inc    ! Logical - sample fg parameter?
         logical(lgt),       allocatable, dimension(:)     :: fg_samp_amp    ! Logical - sample fg amplitude
+        logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_like   ! Logical - sample fg spec param from likelihood?
         logical(lgt)                                      :: joint_sample   ! Logical - jointly sample fg amplitudes
         character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
@@ -47,6 +48,7 @@ module dang_param_mod
         integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
+        
 
         real(dp)                                          :: thresh         ! Threshold for the HI fitting (sample pixels under thresh)
         character(len=512)                                :: HI_file        ! HI map filename
@@ -425,6 +427,7 @@ contains
 
         allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
         allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_samp_amp(n))
+        allocate(par%fg_spec_like(n,2))
         allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
         allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
 
@@ -463,6 +466,8 @@ contains
                     par_int=par%fg_samp_nside(i,1))
                 call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
                     par_lgt=par%fg_samp_inc(i,1))
+                call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
+                    par_lgt=par%fg_spec_like(i,1))
             else if (trim(par%fg_type(i)) == 'mbb') then
                call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                     par_dp=par%fg_gauss(i,1,1))
