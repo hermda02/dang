@@ -84,7 +84,6 @@ contains
            end if
         end do
 
-
         allocate(b(y),c(y),d(y))
 
         ! Initialize arrays
@@ -363,6 +362,7 @@ contains
                        if (para%temp_corr(1,j)) then
                           dat%temp_amps(j,map_n,1)   = b(w+l)
                           dat%temp_amps(j,map_n+1,1) = b(w+l)
+                          l = l + 1
                        end if
                     end do
                  end if
@@ -383,6 +383,7 @@ contains
                        if (para%temp_corr(2,j)) then
                           dat%temp_amps(j,map_n,2)   = b(w+l)
                           dat%temp_amps(j,map_n+1,2) = b(w+l)
+                          l = l + 1
                        end if
                     end do
                  end if
@@ -403,6 +404,7 @@ contains
                        if (para%temp_corr(3,j)) then
                           dat%temp_amps(j,map_n,3)   = b(w+l)
                           dat%temp_amps(j,map_n+1,3) = b(w+l)
+                          l = l + 1
                        end if
                     end do
                  end if
@@ -423,6 +425,7 @@ contains
                        if (para%temp_corr(4,j)) then
                           dat%temp_amps(j,map_n,4)   = b(w+l)
                           dat%temp_amps(j,map_n+1,4) = b(w+l)
+                          l = l + 1
                        end if
                     end do
                  end if
@@ -435,7 +438,6 @@ contains
            t3 = mpi_wtime()
            write(*,fmt='(a,f10.3,a)') 'Joint Sampler completed in ', t3-t1, 's.'
         end if
-
 
         write(*,*) 'Exit joint_sampler'
 
