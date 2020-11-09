@@ -10,6 +10,8 @@ module utility_mod
     real(dp)           :: c       = 2.99792458d8
     real(dp)           :: T_CMB   = 2.7255d0
     real(dp)           :: t1, t2, t3
+    real(dp)           :: nullval
+    real(dp)           :: missval = -1.6375d30
     integer(i4b)       :: ierr, rank, numprocs
     integer(i4b)       :: nbands, npix, nmaps, nside, nfgs
     integer(i4b)       :: iter, niter, ordering, nlheader
@@ -17,6 +19,7 @@ module utility_mod
     integer(i4b)       :: master      = 0 
     integer(i4b)       :: from_master = 1
     integer(i4b)       :: from_worker = 2
+    logical(lgt)       :: anynull
     integer(i4b) status(mpi_status_size)
     character(len=80), dimension(180) :: header
     character(len=80), dimension(3)   :: tqu

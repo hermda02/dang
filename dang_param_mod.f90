@@ -10,7 +10,9 @@ module dang_param_mod
         integer(i4b)       :: nsample     ! For things like the metrop-hast alg
         integer(i4b)       :: iter_out    !  Out put maps every <- iterations
         integer(i4b)       :: cg_iter     ! Maximum cg iterations
-        real(dp)           :: cg_converge ! CG convergence criterion 
+        integer(i4b)       :: bp_burnin   ! Number of burn in samples for BP chains
+        integer(i4b)       :: bp_max      ! Maximum number of maps from BP chains
+        logical(lgt)       :: bp_swap     ! Do the BP map swapping?
         logical(lgt)       :: output_fg   ! Do we output the foregrounds at each frequency?
         logical(lgt)       :: output_unc  ! Do we output uncertainty of template fit?
         character(len=512) :: outdir      ! Output directory
@@ -18,16 +20,19 @@ module dang_param_mod
         character(len=16)  :: mode        ! 'dang' mode ('comp_sep', 'HI_fit')
         character(len=5)   :: tqu         ! Which pol_type to sample
         integer(i4b), allocatable, dimension(:) :: pol_type ! Points above to map number
+        real(dp)           :: cg_converge ! CG convergence criterion 
 
         ! Data parameters
         integer(i4b)                                    :: numband       ! Number of bands
         character(len=512)                              :: datadir       ! Directory to look for bandfiles in
+        character(len=512)                              :: bp_dir        ! Directory for BP swap maps
         character(len=512)                              :: mask_file     ! Mask filename
         character(len=512), allocatable, dimension(:)   :: dat_label     ! Band label
         character(len=512), allocatable, dimension(:)   :: dat_mapfile   ! Band filename
         character(len=512), allocatable, dimension(:)   :: dat_noisefile ! Band rms filename
         real(dp),           allocatable, dimension(:)   :: dat_nu        ! Band frequency (in GHz)
         character(len=512), allocatable, dimension(:)   :: dat_unit      ! Band units (uK_CMB, uK_RJ, MJy/sr)
+        logical(lgt),       allocatable, dimension(:)   :: bp_map        ! True false (know when to swap)
         
         ! Component parameters
         integer(i4b)   :: ncomp                                             ! # of foregrounds
@@ -345,6 +350,10 @@ contains
         call get_parameter_hashtable(htbl, 'CG_ITER_MAX', par_int=par%cg_iter)
         call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH', par_dp=par%cg_converge)
         call get_parameter_hashtable(htbl, 'OUTPUT_TEMP_UNCERTAINTY', par_lgt=par%output_unc)
+        call get_parameter_hashtable(htbl, 'BP_SWAP',par_lgt=par%bp_swap)
+        call get_parameter_hashtable(htbl, 'BP_BURN_IN',par_int=par%bp_burnin)
+        call get_parameter_hashtable(htbl, 'BP_MAX_ITER',par_int=par%bp_max)
+        call get_parameter_hashtable(htbl, 'BP_DIRECTORY',par_string=par%bp_dir)
         
         ! Surely an inefficient way to decide which maps to use (T -> 1, Q -> 2, U -> 3), but it works
         pol_count = 0
@@ -400,6 +409,7 @@ contains
         allocate(par%dat_mapfile(n),par%dat_label(n))
         allocate(par%dat_noisefile(n),par%dat_nu(n))
         allocate(par%dat_unit(n))
+        allocate(par%bp_map(n))
 
         do i = 1, n
             call int2string(i, itext)
@@ -408,6 +418,7 @@ contains
             call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%dat_noisefile(i))
             call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%dat_nu(i))
             call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%dat_unit(i))
+            call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(i))
          end do
 
     end subroutine read_data_params

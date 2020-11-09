@@ -9,6 +9,7 @@ program dang
     use dang_data_mod
     use dang_component_mod
     use sample_mod
+    use dang_swap_mod
     implicit none
   
     !------------------------------------------------------------------------------------------------------
@@ -32,10 +33,8 @@ program dang
       
     integer(i4b)       :: i, j, k, l, m
     integer(i4b)       :: iterations, n2fit
-    integer(i4b)       :: output_iter
-    real(dp)           :: nullval
-    real(dp)           :: missval = -1.6375d30
-    logical(lgt)       :: anynull, test, output_fg
+    integer(i4b)       :: output_iter, bp_iter
+    logical(lgt)       :: test, output_fg
   
     character(len=128) :: template_file_01, template_file_02, mask_file, arg1
     character(len=128) :: template_file_03, template_file_04
@@ -77,8 +76,13 @@ program dang
     nfgs              = par%ncomp+par%ntemp
     nlheader          = size(header)
     nmaps             = nmaps
-    niter             = par%ngibbs               ! # of MC-MC iterations
     iterations        = par%nsample              ! # of iterations in the samplers
+    if (par%bp_swap) then
+       niter          = par%bp_max - par%bp_burnin
+       bp_iter        = par%bp_burnin
+    else
+       niter          = par%ngibbs               ! # of MC-MC iterations
+    end if
     output_iter       = par%iter_out             ! Output maps every <- # of iterations
     output_fg         = par%output_fg            ! Option for outputting foregrounds for all bands
     direct            = par%outdir               ! Output directory name
@@ -101,12 +105,14 @@ program dang
     call init_synch(comp,npix,nmaps)
 
     do j = 1, nbands
-        call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
-        rms,npix,nmaps,nullval,anynull,header=header)
-        dang_data%rms_map(:,:,j) = rms
-        call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
-        map,npix,nmaps,nullval,anynull,header=header)
-        dang_data%sig_map(:,:,j) = map
+       if (.not. par%bp_map(j)) then
+          call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
+               rms,npix,nmaps,nullval,anynull,header=header)
+          dang_data%rms_map(:,:,j) = rms
+          call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
+               map,npix,nmaps,nullval,anynull,header=header)
+          dang_data%sig_map(:,:,j) = map
+       end if
     end do
 
     call convert_maps(par)
@@ -149,16 +155,21 @@ program dang
 
     dang_data%fg_map    = 0.0
     dang_data%temp_amps = 0.0
-
     do iter = 1, niter
        
+       ! ------------ BP SWAP CHUNK ------------------------------------------------------------------
+       if (par%bp_swap) then
+          call swap_bp_maps(dang_data,par,bp_iter)
+          bp_iter = bp_iter + 1
+          call convert_maps_bp(par)
+          stop
+       end if
+!    end do
+!    stop
+!    do iter = 1, niter
        ! -------------------------------------------------------------------------------------------------------------------
        if (par%joint_sample) then
           call sample_joint_amp(par,dang_data,comp,2,trim(solver),joint_poltype)
-          !do i = 1, par%ntemp
-          !   write(*,fmt='(i6,5(E12.5))') i, dang_data%temp_amps(:,2,i)
-          !end do
-          !stop
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
              ! Extrapolating A_synch to bands
              if (ANY(par%joint_comp=='synch')) then
@@ -523,23 +534,50 @@ contains
       real(dp)                    :: cmb_to_rj, y
       
       do j = 1, nbands
-         if (trim(self%dat_unit(j)) == 'uK_RJ') then
-            cycle
-         else if (trim(self%dat_unit(j)) == 'uK_cmb') then
-            write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from uK_cmb to uK_RJ.'
-            y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
-            cmb_to_rj   = (y**2.d0*exp(y))/(exp(y)-1)**2.d0
-            dang_data%sig_map(:,:,j) = cmb_to_rj*dang_data%sig_map(:,:,j)
-         else if (trim(self%dat_unit(j)) == 'MJy/sr') then
-            write(*,*) 'Unit conversion not for MJy/sr not added!'
-            stop
-         else
-            write(*,*) 'Not a unit, dumbass!'
-            stop
+         if (.not. par%bp_map(j)) then
+            if (trim(self%dat_unit(j)) == 'uK_RJ') then
+               cycle
+            else if (trim(self%dat_unit(j)) == 'uK_cmb') then
+               write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from uK_cmb to uK_RJ.'
+               y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
+               cmb_to_rj   = (y**2.d0*exp(y))/(exp(y)-1)**2.d0
+               dang_data%sig_map(:,:,j) = cmb_to_rj*dang_data%sig_map(:,:,j)
+            else if (trim(self%dat_unit(j)) == 'MJy/sr') then
+               write(*,*) 'Unit conversion not for MJy/sr not added!'
+               stop
+            else
+               write(*,*) 'Not a unit, dumbass!'
+               stop
+            end if
          end if
       end do
       
-    end subroutine
+    end subroutine convert_maps
 
+    subroutine convert_maps_bp(self)
+      implicit none
+      type(params), intent(inout) :: self
+      real(dp)                    :: cmb_to_rj, y
+      
+      do j = 1, nbands
+         if (par%bp_map(j)) then
+            if (trim(self%dat_unit(j)) == 'uK_RJ') then
+               cycle
+            else if (trim(self%dat_unit(j)) == 'uK_cmb') then
+               write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from uK_cmb to uK_RJ.'
+               y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
+               cmb_to_rj   = (y**2.d0*exp(y))/(exp(y)-1)**2.d0
+               dang_data%sig_map(:,:,j) = cmb_to_rj*dang_data%sig_map(:,:,j)
+            else if (trim(self%dat_unit(j)) == 'MJy/sr') then
+               write(*,*) 'Unit conversion not for MJy/sr not added!'
+               stop
+            else
+               write(*,*) 'Not a unit, dumbass!'
+               stop
+            end if
+         end if
+      end do
+      
+    end subroutine convert_maps_bp
 
   end program dang
