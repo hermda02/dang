@@ -3,7 +3,7 @@ module dang_data_mod
   use utility_mod
   implicit none
 
-  type, public                              :: data
+  type, public                                :: data
 
      ! Storage
     character(len=255)                        :: label
@@ -24,10 +24,6 @@ module dang_data_mod
   end type data
 
 contains
-
-  ! subroutine init_data_mod(self)
-
-  ! end subroutine
 
   subroutine init_fg_map(self,npix,nmaps,nbands,nfgs)
     implicit none

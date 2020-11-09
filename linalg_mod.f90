@@ -489,25 +489,25 @@ contains
       i_max    = param%cg_iter
       converge = param%cg_converge
 
-      call multiply_with_A(param, datas, compos, w, 5, 2)
+      call multiply_with_A(param, datas, compos, w, param%numband, 2)
       do i = 1, n
          eta(i) = rand_normal(0.d0,1.d0)
       end do
-      b2 = b + compute_sample_vec(param, datas, compos, n2, n, eta, 5, 2)
+      b2 = b + compute_sample_vec(param, datas, compos, n2, n, eta, param%numband, 2)
 
       i = 0
      
-      r = b2 - return_Ax(param, datas, compos, x, 5, 2)
+      r = b2 - return_Ax(param, datas, compos, x, param%numband, 2)
       d = r
       delta_new = sum(r*r)
       delta_0   = delta_new
       do while( (i .lt. i_max) .and. (delta_new .gt. converge))
          t3 = mpi_wtime()
-         q = return_Ax(param, datas, compos, d, 5, 2)
+         q = return_Ax(param, datas, compos, d, param%numband, 2)
          alpha = delta_new/(sum(d*q))
          x = x + alpha*d
          if (mod(i,50) == 0) then
-            r = b2 - return_Ax(param, datas, compos, x, 5, 2)
+            r = b2 - return_Ax(param, datas, compos, x, param%numband, 2)
          else
             r = r - alpha*q
          end if
@@ -634,6 +634,10 @@ contains
 
     end subroutine compute_cg_precond
 
+    !-------------------------------------------------------------------------------------
+    ! the following vectorized functions/subroutines are set up purely for joint sampling
+    ! in Q and U, and are not generalized to handle other scenarios yet!!
+
     function compute_sample_vec(para, dat, compo, n1, n2, vec, nbands, map_n) result(res)
       implicit none
       type(params)                           :: para
@@ -645,7 +649,7 @@ contains
       real(dp), allocatable, dimension(:)    :: vech, res
       real(dp)                               :: x
       integer(i4b), intent(in)               :: nbands, map_n, n1, n2
-      integer(i4b)                           :: n, i, j, k, len, l
+      integer(i4b)                           :: n, i, j, k, len, l, m, r, t, s
 
       x = dat%npix
       len = 2*x
@@ -661,6 +665,17 @@ contains
       v_temp3 = 0.d0
 
       l = 1
+      if (para%ntemp == 2) then 
+         r = 1+para%temp_nfit(1)
+      else if (para%ntemp == 3) then
+         r = 1+para%temp_nfit(1)
+         t = 1+para%temp_nfit(1)+para%temp_nfit(2)
+      else if (para%ntemp == 4) then 
+         r = 1+para%temp_nfit(1)
+         t = 1+para%temp_nfit(1)+para%temp_nfit(2)
+         s = 1+para%temp_nfit(1)+para%temp_nfit(2)+para%temp_nfit(3)
+      end if
+
       do j = 1, nbands
          v_temp  = 0.d0
          v_temp2 = 0.d0
@@ -683,16 +698,42 @@ contains
          end do
          !$OMP END DO
          !$OMP END PARALLEL
-
-         if (para%temp_corr(1,j)) then
-            !!$OMP DO SCHEDULE(static)
-            do k = 1, x
-               v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n,1)*v_temp2(k)
-               v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n+1,1)*v_temp2(k+x)
-            end do
-            !!$OMP END DO
-            l = l+1
-         end if
+         
+         do m = 1, size(para%joint_comp)
+            if (para%joint_comp(m) == 'template01') then
+               if (para%temp_corr(1,j)) then
+                  do k = 1, x
+                     v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n,1)*v_temp2(k)
+                     v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n+1,1)*v_temp2(k+x)
+                  end do
+                  l = l+1
+               end if
+            else if (para%joint_comp(m) == 'template02') then
+               if (para%temp_corr(2,j)) then
+                  do k = 1, x
+                     v_temp(len+r) = v_temp(len+r) + dat%temps(k-1,map_n,2)*v_temp2(k)
+                     v_temp(len+r) = v_temp(len+r) + dat%temps(k-1,map_n+1,2)*v_temp2(k+x)
+                  end do
+                  r = r+1
+               end if
+            else if (para%joint_comp(m) == 'template03') then
+               if (para%temp_corr(3,j)) then
+                  do k = 1, x
+                     v_temp(len+t) = v_temp(len+t) + dat%temps(k-1,map_n,3)*v_temp2(k)
+                     v_temp(len+t) = v_temp(len+t) + dat%temps(k-1,map_n+1,3)*v_temp2(k+x)
+                  end do
+                  t = t+1
+               end if
+            else if (para%joint_comp(m) == 'template04') then
+               if (para%temp_corr(4,j)) then
+                  do k = 1, x
+                     v_temp(len+s) = v_temp(len+s) + dat%temps(k-1,map_n,4)*v_temp2(k)
+                     v_temp(len+s) = v_temp(len+s) + dat%temps(k-1,map_n+1,4)*v_temp2(k+x)
+                  end do
+                  s = s+1
+               end if
+            end if
+         end do
          v_temp3 = v_temp3 + v_temp
       end do
       
@@ -711,7 +752,7 @@ contains
       real(dp), allocatable, dimension(:)    :: vech
       real(dp)                               :: x
       integer(i4b), intent(in)               :: nbands, map_n
-      integer(i4b)                           :: n, i, j, k, len, l
+      integer(i4b)                           :: n, i, j, k, len, l, m, r, t, s
 
       x = dat%npix
       n = size(vec)
@@ -727,6 +768,17 @@ contains
       v_temp3 = 0.d0
 
       l = 1
+      if (para%ntemp == 2) then 
+         r = 1+para%temp_nfit(1)
+      else if (para%ntemp == 3) then
+         r = 1+para%temp_nfit(1)
+         t = 1+para%temp_nfit(1)+para%temp_nfit(2)
+      else if (para%ntemp == 4) then 
+         r = 1+para%temp_nfit(1)
+         t = 1+para%temp_nfit(1)+para%temp_nfit(2)
+         s = 1+para%temp_nfit(1)+para%temp_nfit(2)+para%temp_nfit(3)
+      end if
+
       do j = 1, nbands
          v_temp  = 0.d0
          v_temp2 = 0.d0
@@ -738,11 +790,29 @@ contains
          do i = 1, x
             v_temp2(i)   = vech(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
             v_temp2(x+i) = vech(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
-            if (para%temp_corr(1,j)) then
-               !if (i == 1) write(*,*) 'truuu', j, l
-               v_temp2(i)   = v_temp2(i)   + vech(len+l)*dat%temps(i-1,map_n,1)
-               v_temp2(x+i) = v_temp2(x+i) + vech(len+l)*dat%temps(i-1,map_n+1,1)
-            end if
+            do m = 1, size(para%joint_comp)
+               if (para%joint_comp(m) == 'template01') then
+                  if (para%temp_corr(1,j)) then
+                     v_temp2(i)   = v_temp2(i)   + vech(len+l)*dat%temps(i-1,map_n,1)
+                     v_temp2(x+i) = v_temp2(x+i) + vech(len+l)*dat%temps(i-1,map_n+1,1)
+                  end if
+               else if (para%joint_comp(m) == 'template02') then
+                  if (para%temp_corr(2,j)) then
+                     v_temp2(i)   = v_temp2(i)   + vech(len+r)*dat%temps(i-1,map_n,2)
+                     v_temp2(x+i) = v_temp2(x+i) + vech(len+r)*dat%temps(i-1,map_n+1,2)
+                  end if
+               else if (para%joint_comp(m) == 'template03') then
+                  if (para%temp_corr(3,j)) then
+                     v_temp2(i)   = v_temp2(i)   + vech(len+t)*dat%temps(i-1,map_n,3)
+                     v_temp2(x+i) = v_temp2(x+i) + vech(len+t)*dat%temps(i-1,map_n+1,3)
+                  end if
+               else if (para%joint_comp(m) == 'template04') then
+                  if (para%temp_corr(4,j)) then
+                     v_temp2(i)   = v_temp2(i)   + vech(len+s)*dat%temps(i-1,map_n,4)
+                     v_temp2(x+i) = v_temp2(x+i) + vech(len+s)*dat%temps(i-1,map_n+1,4)
+                  end if
+               end if
+            end do
             v_temp2(i)   = v_temp2(i)/(dat%rms_map(i-1,map_n,j))**2.d0
             v_temp2(x+i) = v_temp2(x+i)/(dat%rms_map(i-1,map_n+1,j))**2.d0
             v_temp(i)    = v_temp(i)   + v_temp2(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
@@ -750,18 +820,41 @@ contains
          end do
          !$OMP END DO
          !$OMP END PARALLEL
-         if (para%temp_corr(1,j)) then
-            !!$OMP PARALLEL PRIVATE(i)
-            !!$OMP DO SCHEDULE(static)
-            do i = 1, x
-               v_temp(len+l) = v_temp(len+l) + dat%temps(i-1,map_n,1)*v_temp2(i)
-               v_temp(len+l) = v_temp(len+l) + dat%temps(i-1,map_n+1,1)*v_temp2(i+x)
-            end do
-            !!$OMP END DO
-            !!$OMP END PARALLEL
-            l = l+1
-         end if
-         !write(*,*) l
+         do m = 1, size(para%joint_comp)
+            if (para%joint_comp(m) == 'template01') then
+               if (para%temp_corr(1,j)) then
+                  do k = 1, x
+                     v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n,1)*v_temp2(k)
+                     v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n+1,1)*v_temp2(k+x)
+                  end do
+                  l = l+1
+               end if
+            else if (para%joint_comp(m) == 'template02') then
+               if (para%temp_corr(2,j)) then
+                  do k = 1, x
+                     v_temp(len+r) = v_temp(len+r) + dat%temps(k-1,map_n,2)*v_temp2(k)
+                     v_temp(len+r) = v_temp(len+r) + dat%temps(k-1,map_n+1,2)*v_temp2(k+x)
+                  end do
+                  r = r+1
+               end if
+            else if (para%joint_comp(m) == 'template03') then
+               if (para%temp_corr(3,j)) then
+                  do k = 1, x
+                     v_temp(len+t) = v_temp(len+t) + dat%temps(k-1,map_n,3)*v_temp2(k)
+                     v_temp(len+t) = v_temp(len+t) + dat%temps(k-1,map_n+1,3)*v_temp2(k+x)
+                  end do
+                  t = t+1
+               end if
+            else if (para%joint_comp(m) == 'template04') then
+               if (para%temp_corr(4,j)) then
+                  do k = 1, x
+                     v_temp(len+s) = v_temp(len+s) + dat%temps(k-1,map_n,4)*v_temp2(k)
+                     v_temp(len+s) = v_temp(len+s) + dat%temps(k-1,map_n+1,4)*v_temp2(k+x)
+                  end do
+                  s = s+1
+               end if
+            end if
+         end do
          v_temp3 = v_temp3 + v_temp
       end do
 
@@ -780,7 +873,7 @@ contains
       real(dp), allocatable, dimension(:)    :: vech, res
       real(dp)                               :: x
       integer(i4b), intent(in)               :: nbands, map_n
-      integer(i4b)                           :: n, i, j, k, len, l
+      integer(i4b)                           :: n, i, j, k, len, l, m, r, t, s
 
       x = dat%npix
       n = size(vec)
@@ -798,6 +891,17 @@ contains
       v_temp3 = 0.d0
 
       l = 1
+      if (para%ntemp == 2) then 
+         r = 1+para%temp_nfit(1)
+      else if (para%ntemp == 3) then
+         r = 1+para%temp_nfit(1)
+         t = 1+para%temp_nfit(1)+para%temp_nfit(2)
+      else if (para%ntemp == 4) then 
+         r = 1+para%temp_nfit(1)
+         t = 1+para%temp_nfit(1)+para%temp_nfit(2)
+         s = 1+para%temp_nfit(1)+para%temp_nfit(2)+para%temp_nfit(3)
+      end if
+
       do j = 1, nbands
          v_temp  = 0.d0
          v_temp2 = 0.d0
@@ -809,11 +913,29 @@ contains
          do i = 1, x
             v_temp2(i)   = vech(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
             v_temp2(x+i) = vech(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
-            if (para%temp_corr(1,j)) then
-               !if (i == 1) write(*,*) 'truuu', j, l
-               v_temp2(i)   = v_temp2(i)   + vech(len+l)*dat%temps(i-1,map_n,1)
-               v_temp2(x+i) = v_temp2(x+i) + vech(len+l)*dat%temps(i-1,map_n+1,1)
-            end if
+            do m = 1, size(para%joint_comp)
+               if (para%joint_comp(m) == 'template01') then
+                  if (para%temp_corr(1,j)) then
+                     v_temp2(i)   = v_temp2(i)   + vech(len+l)*dat%temps(i-1,map_n,1)
+                     v_temp2(x+i) = v_temp2(x+i) + vech(len+l)*dat%temps(i-1,map_n+1,1)
+                  end if
+               else if (para%joint_comp(m) == 'template02') then
+                  if (para%temp_corr(2,j)) then
+                     v_temp2(i)   = v_temp2(i)   + vech(len+r)*dat%temps(i-1,map_n,2)
+                     v_temp2(x+i) = v_temp2(x+i) + vech(len+r)*dat%temps(i-1,map_n+1,2)
+                  end if
+               else if (para%joint_comp(m) == 'template03') then
+                  if (para%temp_corr(3,j)) then
+                     v_temp2(i)   = v_temp2(i)   + vech(len+t)*dat%temps(i-1,map_n,3)
+                     v_temp2(x+i) = v_temp2(x+i) + vech(len+t)*dat%temps(i-1,map_n+1,3)
+                  end if
+               else if (para%joint_comp(m) == 'template04') then
+                  if (para%temp_corr(4,j)) then
+                     v_temp2(i)   = v_temp2(i)   + vech(len+s)*dat%temps(i-1,map_n,4)
+                     v_temp2(x+i) = v_temp2(x+i) + vech(len+s)*dat%temps(i-1,map_n+1,4)
+                  end if
+               end if
+            end do
             v_temp2(i)   = v_temp2(i)/(dat%rms_map(i-1,map_n,j))**2.d0
             v_temp2(x+i) = v_temp2(x+i)/(dat%rms_map(i-1,map_n+1,j))**2.d0
             v_temp(i)    = v_temp(i)   + v_temp2(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
@@ -821,30 +943,49 @@ contains
          end do
          !$OMP END DO
          !$OMP END PARALLEL
-         !do i = len+1, n
-         if (para%temp_corr(1,j)) then
-            !!$OMP PARALLEL PRIVATE(i)
-            !!$OMP DO SCHEDULE(static)
-            do i = 1, x
-               v_temp(len+l) = v_temp(len+l) + dat%temps(i-1,map_n,1)*v_temp2(i)
-               v_temp(len+l) = v_temp(len+l) + dat%temps(i-1,map_n+1,1)*v_temp2(i+x)
-            end do
-            !!$OMP END DO
-            !!$OMP END PARALLEL
-            l = l+1
-         end if
-         !end do
-         !write(*,*) v_temp(len-1:)
-         !write(*,*) ''
-         !write(*,*) v_temp2(len-1:)
-         !write(*,*) ''
-         !write(*,*) l
+         do m = 1, size(para%joint_comp)
+            if (para%joint_comp(m) == 'template01') then
+               if (para%temp_corr(1,j)) then
+                  do k = 1, x
+                     v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n,1)*v_temp2(k)
+                     v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n+1,1)*v_temp2(k+x)
+                  end do
+                  l = l+1
+               end if
+            else if (para%joint_comp(m) == 'template02') then
+               if (para%temp_corr(2,j)) then
+                  do k = 1, x
+                     v_temp(len+r) = v_temp(len+r) + dat%temps(k-1,map_n,2)*v_temp2(k)
+                     v_temp(len+r) = v_temp(len+r) + dat%temps(k-1,map_n+1,2)*v_temp2(k+x)
+                  end do
+                  r = r+1
+               end if
+            else if (para%joint_comp(m) == 'template03') then
+               if (para%temp_corr(3,j)) then
+                  do k = 1, x
+                     v_temp(len+t) = v_temp(len+t) + dat%temps(k-1,map_n,3)*v_temp2(k)
+                     v_temp(len+t) = v_temp(len+t) + dat%temps(k-1,map_n+1,3)*v_temp2(k+x)
+                  end do
+                  t = t+1
+               end if
+            else if (para%joint_comp(m) == 'template04') then
+               if (para%temp_corr(4,j)) then
+                  do k = 1, x
+                     v_temp(len+s) = v_temp(len+s) + dat%temps(k-1,map_n,4)*v_temp2(k)
+                     v_temp(len+s) = v_temp(len+s) + dat%temps(k-1,map_n+1,4)*v_temp2(k+x)
+                  end do
+                  s = s+1
+               end if
+            end if
+         end do
          v_temp3 = v_temp3 + v_temp
       end do
       
       res = v_temp3
 
     end function return_Ax
+
+    !-------------------------------------------------------------------------------------
 
     subroutine lower_tri_Ax(A,x,n)
       implicit none

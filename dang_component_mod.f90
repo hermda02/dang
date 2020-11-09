@@ -6,8 +6,8 @@ module dang_component_mod
 
   type, public                              :: component
 
-     character(len=64), allocatable, dimension(:) :: joint
-
+     character(len=32), allocatable, dimension(:) :: joint
+     
      real(dp), allocatable, dimension(:,:)  :: beta_s, beta_d, T_d
 
   end type component
@@ -70,7 +70,5 @@ contains
         end if
 
     end function compute_spectrum
-
-
 
 end module dang_component_mod

@@ -6,41 +6,46 @@ module dang_param_mod
 
     type, public :: params
         ! Global parameters
-        integer(i4b)       :: ngibbs     ! Number of Gibbs iterations
-        integer(i4b)       :: nsample    ! For things like the metrop-hast alg
-        integer(i4b)       :: iter_out   ! Out put maps every <- iterations
-        integer(i4b)       :: cg_iter    ! Maximum cg iterations
-        real(dp)           :: cg_converge! CG convergence criterion 
-        logical(lgt)       :: output_fg  ! Do we output the foregrounds at each frequency?
-        logical(lgt)       :: output_unc ! Do we output uncertainty of template fit?
-        character(len=512) :: outdir     ! Output directory
-        character(len=16)  :: solver     ! Linear system solver type
-        character(len=16)  :: mode       ! 'dang' mode ('comp_sep', 'HI_fit')
-        character(len=5)   :: tqu        ! Which pol_type to sample
+        integer(i4b)       :: ngibbs      !  Number of Gibbs iterations
+        integer(i4b)       :: nsample     ! For things like the metrop-hast alg
+        integer(i4b)       :: iter_out    !  Out put maps every <- iterations
+        integer(i4b)       :: cg_iter     ! Maximum cg iterations
+        real(dp)           :: cg_converge ! CG convergence criterion 
+        logical(lgt)       :: output_fg   ! Do we output the foregrounds at each frequency?
+        logical(lgt)       :: output_unc  ! Do we output uncertainty of template fit?
+        character(len=512) :: outdir      ! Output directory
+        character(len=16)  :: solver      ! Linear system solver type
+        character(len=16)  :: mode        ! 'dang' mode ('comp_sep', 'HI_fit')
+        character(len=5)   :: tqu         ! Which pol_type to sample
         integer(i4b), allocatable, dimension(:) :: pol_type ! Points above to map number
 
         ! Data parameters
         integer(i4b)                                    :: numband       ! Number of bands
         character(len=512)                              :: datadir       ! Directory to look for bandfiles in
-        character(len=512)                              :: mask_file      ! Mask filename
+        character(len=512)                              :: mask_file     ! Mask filename
         character(len=512), allocatable, dimension(:)   :: dat_label     ! Band label
         character(len=512), allocatable, dimension(:)   :: dat_mapfile   ! Band filename
         character(len=512), allocatable, dimension(:)   :: dat_noisefile ! Band rms filename
         real(dp),           allocatable, dimension(:)   :: dat_nu        ! Band frequency (in GHz)
         character(len=512), allocatable, dimension(:)   :: dat_unit      ! Band units (uK_CMB, uK_RJ, MJy/sr)
         
-
         ! Component parameters
         integer(i4b)   :: ncomp                                             ! # of foregrounds
-        integer(i4b)   :: ntemp                                             ! # of templates
+        integer(i4b)   :: ntemp                                             ! # of templates 
+        integer(i4b)   :: njoint                                            ! # of templates 
+        character(len=64),  allocatable, dimension(:)     :: joint_comps    ! List of components in joint sampling group
         character(len=512), allocatable, dimension(:)     :: temp_file      ! Template Filename
+        character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
         logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates ift
+        integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
         logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
         logical(lgt),       allocatable, dimension(:,:)   :: fg_sample_spec ! Logical - sample spec params
         logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_inc    ! Logical - sample fg parameter?
         logical(lgt),       allocatable, dimension(:)     :: fg_samp_amp    ! Logical - sample fg amplitude
         logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_like   ! Logical - sample fg spec param from likelihood?
         logical(lgt)                                      :: joint_sample   ! Logical - jointly sample fg amplitudes
+        integer(i4b),       allocatable, dimension(:)     :: joint_poltype  ! Points to which Stokes are jointly sampled
+        character(len=512), allocatable, dimension(:)     :: joint_comp     ! Fg label (for outputs)
         character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
@@ -49,7 +54,6 @@ module dang_param_mod
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
         
-
         real(dp)                                          :: thresh         ! Threshold for the HI fitting (sample pixels under thresh)
         character(len=512)                                :: HI_file        ! HI map filename
         real(dp)                                          :: HI_Td_init     ! HI fitting dust temp estimate
@@ -295,6 +299,7 @@ contains
         else
             write(*,*) "get_parameter: Reached unreachable point!"
         end if
+
         
         deallocate(val)
         return
@@ -326,6 +331,8 @@ contains
         integer(i4b)     :: i, j, n, len_itext
         character(len=2) :: itext
         character(len=2) :: jtext
+
+        write(*,*) "Read global parameters."
 
         call get_parameter_hashtable(htbl, 'OUTPUT_DIRECTORY', par_string=par%outdir)
         call get_parameter_hashtable(htbl, 'NUMGIBBS', par_int=par%ngibbs)
@@ -380,6 +387,8 @@ contains
         character(len=2) :: itext
         character(len=2) :: jtext
 
+        write(*,*) "Read data parameters."
+
         len_itext = len(trim(itext))
 
         call get_parameter_hashtable(htbl, 'NUMBAND',    par_int=par%numband)
@@ -409,7 +418,8 @@ contains
         type(hash_tbl_sll), intent(in)    :: htbl
         type(params),       intent(inout) :: par
 
-        integer(i4b)     :: i, j, n, n2, len_itext, len_jtext
+        integer(i4b)     :: i, j, n, n2, n3
+        integer(i4b)     :: len_itext, len_jtext
         character(len=2) :: itext
         character(len=2) :: jtext
 
@@ -420,10 +430,12 @@ contains
 
         call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
         call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
+        call get_parameter_hashtable(htbl, 'NUMJOINT', par_int=par%njoint)
         call get_parameter_hashtable(htbl, 'JOINT_SAMPLE', par_lgt=par%joint_sample)
+
         n  = par%ncomp
         n2 = par%ntemp
-
+        n3 = par%njoint
 
         allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
         allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_samp_amp(n))
@@ -432,17 +444,31 @@ contains
         allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
 
         allocate(par%temp_file(n2))
-
+        allocate(par%temp_label(n2))
+        allocate(par%temp_nfit(n2))
         allocate(par%temp_corr(n2,par%numband))
         
+        par%temp_nfit = 0
+
+        allocate(par%joint_comp(n3))
+
         do i = 1, n2
-            call int2string(i, itext)
-            call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext, len_itext=len_itext, par_string=par%temp_file(i))
-            do j = 1, par%numband
-                call int2string(j,jtext)
-                call get_parameter_hashtable(htbl, 'TEMPLATE'//trim(itext)//'_FIT'//jtext,&
-                                             len_itext=len_jtext,par_lgt=par%temp_corr(i,j))
-            end do
+           call int2string(i, itext)
+           call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext, len_itext=len_itext, par_string=par%temp_file(i))
+           call get_parameter_hashtable(htbl, 'TEMPLATE_LABEL'//itext, len_itext=len_itext, par_string=par%temp_label(i))
+           do j = 1, par%numband
+              call int2string(j,jtext)
+              call get_parameter_hashtable(htbl, 'TEMPLATE'//trim(itext)//'_FIT'//jtext,&
+                   len_itext=len_jtext,par_lgt=par%temp_corr(i,j))
+              if (par%temp_corr(i,j)) then
+                 par%temp_nfit(i) = par%temp_nfit(i) + 1
+              end if
+           end do
+        end do
+
+        do i = 1, n3
+           call int2string(i, itext)
+           call get_parameter_hashtable(htbl, 'JOINT_SAMPLE_COMP'//itext, len_itext=len_itext, par_string=par%joint_comp(i))
         end do
 
         do i = 1, n
