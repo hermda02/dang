@@ -35,13 +35,15 @@ module dang_param_mod
         logical(lgt),       allocatable, dimension(:)   :: bp_map        ! True false (know when to swap)
         
         ! Component parameters
-        integer(i4b)   :: ncomp                                             ! # of foregrounds
-        integer(i4b)   :: ntemp                                             ! # of templates 
-        integer(i4b)   :: njoint                                            ! # of templates 
+        integer(i4b)      :: ncomp                                          ! # of foregrounds
+        integer(i4b)      :: ntemp                                          ! # of templates 
+        integer(i4b)      :: njoint                                         ! # of components to jointly sample 
+        character(len=64) :: dust_corr_type                                 ! Dust correction type (uniform/planck)
         character(len=64),  allocatable, dimension(:)     :: joint_comps    ! List of components in joint sampling group
         character(len=512), allocatable, dimension(:)     :: temp_file      ! Template Filename
         character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
-        logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates ift
+        logical(lgt),       allocatable, dimension(:)     :: dust_corr      ! Storing which bands should be dust corrected
+        logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates fit
         integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
         logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
         logical(lgt),       allocatable, dimension(:,:)   :: fg_sample_spec ! Logical - sample spec params
@@ -410,6 +412,7 @@ contains
         allocate(par%dat_noisefile(n),par%dat_nu(n))
         allocate(par%dat_unit(n))
         allocate(par%bp_map(n))
+        allocate(par%dust_corr(n))
 
         do i = 1, n
             call int2string(i, itext)
@@ -419,6 +422,7 @@ contains
             call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%dat_nu(i))
             call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%dat_unit(i))
             call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(i))
+            call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(i))
          end do
 
     end subroutine read_data_params
@@ -443,6 +447,7 @@ contains
         call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
         call get_parameter_hashtable(htbl, 'NUMJOINT', par_int=par%njoint)
         call get_parameter_hashtable(htbl, 'JOINT_SAMPLE', par_lgt=par%joint_sample)
+        call get_parameter_hashtable(htbl, 'DUST_CORR_TYPE', par_string=par%dust_corr_type)
 
         n  = par%ncomp
         n2 = par%ntemp
@@ -458,7 +463,7 @@ contains
         allocate(par%temp_label(n2))
         allocate(par%temp_nfit(n2))
         allocate(par%temp_corr(n2,par%numband))
-        
+
         par%temp_nfit = 0
 
         allocate(par%joint_comp(n3))

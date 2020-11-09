@@ -103,8 +103,11 @@ program dang
     call init_template(dang_data,npix,nmaps,par%ntemp)
     call init_temp_amps(dang_data,nbands,nmaps,par%ntemp)
     call init_synch(comp,npix,nmaps)
+    call init_dust(comp,npix,nmaps)
 
+    ! Read maps in
     do j = 1, nbands
+       ! If not supposed to be swapped BP maps, load that map
        if (.not. par%bp_map(j)) then
           call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
                rms,npix,nmaps,nullval,anynull,header=header)
@@ -112,9 +115,12 @@ program dang
           call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
                map,npix,nmaps,nullval,anynull,header=header)
           dang_data%sig_map(:,:,j) = map
+          ! Check to see if any maps need to be dust corrected
+          if (par%dust_corr(j)) then
+             call dust_correct_band(dang_data,par,comp,j)
+          end if
        end if
     end do
-
     call convert_maps(par)
     
     deallocate(map,rms)
@@ -129,17 +135,7 @@ program dang
 
     comp%beta_s     = -3.10d0    ! Synchrotron beta initial guess
     comp%beta_d     =  1.60d0    ! Dust beta initial guess
-
-    !----------------------------------------------------------------------------------------------------------
-    ! Normalize template to avoid large values in the matrix equation
-
-    do j = 1, nbands
-       do k = 1, nmaps
-          do i = 0, npix-1
-             if (dang_data%sig_map(i,k,j) == missval) dang_data%sig_map(i,k,j) = 0.d0
-          end do
-       end do
-    end do
+    comp%T_d        = 19.6d0
 
     !----------------------------------------------------------------------------------------------------------
     ! Joint Sampler Info
@@ -162,11 +158,15 @@ program dang
           call swap_bp_maps(dang_data,par,bp_iter)
           bp_iter = bp_iter + 1
           call convert_maps_bp(par)
-          stop
+          ! Check to see if any swapped maps need to be dust corrected
+          do j = 1, nbands
+             if ( par%bp_map(j)) then
+                if (par%dust_corr(j)) then
+                   call dust_correct_band(dang_data,par,comp,j)
+                end if
+             end if
+          end do
        end if
-!    end do
-!    stop
-!    do iter = 1, niter
        ! -------------------------------------------------------------------------------------------------------------------
        if (par%joint_sample) then
           call sample_joint_amp(par,dang_data,comp,2,trim(solver),joint_poltype)
@@ -290,6 +290,7 @@ program dang
              call write_data(par%mode)
           end if
        end do
+       write(*,*) ''
     end do
     call mpi_finalize(ierr)
        

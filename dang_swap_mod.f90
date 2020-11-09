@@ -33,8 +33,7 @@ contains
        if (param%bp_map(j)) then
           bp_maps(j,1) = trim(param%bp_dir) // trim(param%dat_label(j))//'_map_n0064_60arcmin_k'//trim(iter_str)  // '.fits'
           bp_maps(j,2) = trim(param%bp_dir) // trim(param%dat_label(j))//'_rms_n0064_60arcmin_k'//trim(iter_str) // '.fits'
-          write(*,*) trim(bp_maps(j,1))
-          write(*,*) trim(bp_maps(j,2))
+          write(*,'(a,a,a)') 'Swapping band ', trim(param%dat_label(j)), '.'
           call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header)
           dat%sig_map(:,:,j) = map
           call read_bintab(trim(bp_maps(j,2)),rms,dat%npix,3,nullval,anynull,header=header)
