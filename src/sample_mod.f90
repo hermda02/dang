@@ -630,6 +630,7 @@ contains
            do i = 0, npix2-1
               a         = 0.d0
               sol       = indx_low(i,self%pol_type(1))
+              sam       = sol
               
               ! Chi-square from the most recent Gibbs chain update
               do j = 1, nbands
