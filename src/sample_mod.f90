@@ -41,9 +41,7 @@ contains
         character(len=*),          intent(in)      :: method
         character(len=*), dimension(:), intent(in) :: poltype
         real(dp), allocatable, dimension(:,:)      :: A, val
-        real(dp), allocatable, dimension(:,:)      :: mat_l, mat_u, unc_a_s
-        integer(i4b), allocatable, dimension(:,:)  :: col_ptr, row_ind
-        real(dp), allocatable, dimension(:)        :: b, c, d, rand, samp, unc_a_d
+        real(dp), allocatable, dimension(:)        :: b, c
         character(len=256)                         :: title
         integer(i4b)                               :: x, y, z, w, l, m, n
         integer(i4b)                               :: nfit1, nfit2, nfit3, nfit4
@@ -88,7 +86,7 @@ contains
            end if
         end do
 
-        allocate(b(y),c(y),d(y))
+        allocate(b(y),c(y))
 
         ! Initialize arrays
         b(:)              = 0.d0
@@ -462,7 +460,6 @@ contains
         ! Sure to deallocate all arrays here to free up memory
         deallocate(b)
         deallocate(c)
-        deallocate(d)
     end subroutine sample_joint_amp
 
     !function temp_fit(data,template,noise,t_mask,freq)
