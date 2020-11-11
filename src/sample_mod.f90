@@ -103,7 +103,6 @@ contains
                if (size(poltype) == 1) then
                   do j=1, z
                      do i=1, x
-                        if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) c(i) = 0.d0
                         c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
                      end do
                   end do
@@ -111,11 +110,9 @@ contains
                else if (size(poltype) == 2) then
                   do j=1, z
                      do i=1, x
-                        if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) c(i) = 0.d0
                         c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
                      end do
                      do i=1, x
-                        if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) c(i) = 0.d0
                         c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
                      end do
                   end do
@@ -124,7 +121,6 @@ contains
             else if (para%joint_comp(m) == 'dust') then
                do j=1, z
                   do i=1, x
-                     if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) c(i) = 0.d0
                      c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,2,para%dat_nu(j),i-1,map_n)
                   end do
                end do
@@ -140,7 +136,6 @@ contains
                  do j = 1, z
                     if (para%temp_corr(1,j)) then
                        do i = 1, x
-                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,1)
                        end do
@@ -154,7 +149,6 @@ contains
                  do j = 1, z
                     if (para%temp_corr(1,j)) then
                        do i = 1, x
-                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,1)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -173,7 +167,6 @@ contains
                  do j = 1, z
                     if (para%temp_corr(2,j)) then
                        do i = 1, x
-                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,2)
                        end do
@@ -187,7 +180,6 @@ contains
                  do j = 1, z
                     if (para%temp_corr(2,j)) then
                        do i = 1, x
-                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,2)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -206,7 +198,6 @@ contains
                  do j = 1, z
                     if (para%temp_corr(3,j)) then
                        do i = 1, x
-                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,3)
                        end do
@@ -220,7 +211,6 @@ contains
                  do j = 1, z
                     if (para%temp_corr(3,j)) then
                        do i = 1, x
-                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,3)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -239,7 +229,6 @@ contains
                  do j = 1, z
                     if (para%temp_corr(4,j)) then
                        do i = 1, x
-                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,4)
                        end do
@@ -253,7 +242,6 @@ contains
                  do j = 1, z
                     if (para%temp_corr(4,j)) then
                        do i = 1, x
-                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,4)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
