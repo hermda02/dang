@@ -789,6 +789,7 @@ contains
          !$OMP PARALLEL PRIVATE(i)
          !$OMP DO SCHEDULE(static)
          do i = 1, x
+            !if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) v_temp2(i) = 0.d0
             v_temp2(i)   = vech(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
             v_temp2(x+i) = vech(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
             do m = 1, size(para%joint_comp)
