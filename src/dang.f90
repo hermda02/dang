@@ -105,6 +105,14 @@ program dang
     call init_synch(comp,npix,nmaps)
     call init_dust(comp,npix,nmaps)
 
+    do i = 1, par%ntemp
+       call read_bintab(par%temp_file(i), dang_data%temps(:,:,i), npix,nmaps,nullval,anynull,header=header)
+    end do
+
+    write(*,*) 'Reading MASKFILE'
+    call read_bintab(par%mask_file,mask,npix,1,nullval,anynull,header=header)
+    write(*,*) ''
+
     ! Read maps in
     do j = 1, nbands
        ! If not supposed to be swapped BP maps, load that map
@@ -115,32 +123,32 @@ program dang
           call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
                map,npix,nmaps,nullval,anynull,header=header)
           dang_data%sig_map(:,:,j) = map
-          ! Check to see if any maps need to be dust corrected
-          if (par%dust_corr(j)) then
-             call dust_correct_band(dang_data,par,comp,j)
-          end if
        end if
     end do
-    call convert_maps(par)
-    
+
     deallocate(map,rms)
 
-    do i = 1, par%ntemp
-       call read_bintab(par%temp_file(i), dang_data%temps(:,:,i), npix,nmaps,nullval,anynull,header=header)
-    end do
+    call convert_maps(par)
 
-    write(*,*) 'Reading MASKFILE'
-    call read_bintab(par%mask_file,mask,npix,1,nullval,anynull,header=header)
+    do j = 1, nbands
+       ! Check to see if any maps need to be dust corrected
+       !if (j == nbands) write(*,*) dang_data%sig_map(0,2,j)
+       if (par%dust_corr(j)) then
+          call dust_correct_band(dang_data,par,comp,j)
+       end if
+       !if (j == nbands) write(*,*) dang_data%sig_map(0,2,j)
+    end do
     write(*,*) ''
 
-    comp%beta_s     = -3.10d0    ! Synchrotron beta initial guess
-    comp%beta_d     =  1.60d0    ! Dust beta initial guess
+    comp%beta_s     = par%fg_gauss(1,1,1)!-3.10d0    ! Synchrotron beta initial guess
+    comp%beta_d     =  1.53d0    ! Dust beta initial guess
     comp%T_d        = 19.6d0
 
     !----------------------------------------------------------------------------------------------------------
     ! Joint Sampler Info
 
     solver = par%solver
+
 
     joint_poltype(1) = 'Q'
     joint_poltype(2) = 'U'
@@ -151,6 +159,12 @@ program dang
 
     dang_data%fg_map    = 0.0
     dang_data%temp_amps = 0.0
+    !dang_data%temp_amps(1,:,1) = 0.41957897
+    !dang_data%temp_amps(2,:,1) = 0.17704154
+    !dang_data%temp_amps(3,:,1) = 0.09161571
+    !dang_data%temp_amps(4,:,1) = 0.12402716
+    !dang_data%temp_amps(5,:,1) = 0.20367266
+
     do iter = 1, niter
        
        ! ------------ BP SWAP CHUNK ------------------------------------------------------------------
@@ -226,13 +240,23 @@ program dang
              end if
           end do
        end if
+
+       !do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+       !   do i = 0, npix-1
+       !      do j = 1, nbands
+       !         dang_data%sig_map(i,k,j) = dang_data%sig_map(i,k,j)-dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
+       !      end do
+       !   end do
+       !end do
        ! -------------------------------------------------------------------------------------------------------------------
        ! -------------------------------------------------------------------------------------------------------------------
        if (par%fg_samp_amp(1)) then
-          dang_data%fg_map(:,k,par%fg_ref_loc(1),1) =  sample_spec_amp(par,comp,dang_data%sig_map,dang_data%rms_map,1,k)
-          do i = 0, npix-1
-             do j = 1, nbands
-                dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
+          do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+             dang_data%fg_map(:,k,par%fg_ref_loc(1),1) =  sample_spec_amp(par,comp,dang_data%sig_map,dang_data%rms_map,1,k)
+             do i = 0, npix-1
+                do j = 1, nbands
+                   dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
+                end do
              end do
           end do
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
@@ -307,6 +331,9 @@ contains
       integer(i4b), intent(in)          :: nm
       character(len=16), intent(in)     :: mode
       real(dp), dimension(0:npix-1,1)   :: map
+      real(dp)                          :: s, signal
+
+      write(*,*) 'Output data maps'
 
       if (trim(mode) == 'comp_sep') then
          
@@ -342,59 +369,18 @@ contains
          dang_data%chi_map = 0.d0
          do i = 0, npix-1
             do j = 1, nbands
-               dang_data%chi_map(i,nm) = dang_data%chi_map(i,nm) + (dang_data%sig_map(i,nm,j) - dang_data%fg_map(i,nm,j,1) - dang_data%fg_map(i,nm,j,2))**2.d0/dang_data%rms_map(i,nm,j)**2.d0
+               s      = 0.d0
+               do l = 1, nfgs
+                  signal = dang_data%fg_map(i,nm,j,l)
+                  s      = s + signal
+               end do
+               dang_data%chi_map(i,nm) = dang_data%chi_map(i,nm) + (dang_data%sig_map(i,nm,j) - s)**2.d0/dang_data%rms_map(i,nm,j)**2.d0
             end do
          end do
          dang_data%chi_map(:,nm) = dang_data%chi_map(:,nm)/(nbands+nfgs)
          title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
          map(:,1)   = dang_data%chi_map(:,nm)
          call write_bintab(map,npix,1, header, nlheader, trim(title))
-         
-      else if (trim(mode) == 'HI_fit') then
-         write(iter_str, '(i0.5)') iter
-         do j = 1, nbands
-            title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(iter_str) // '.fits'
-            do i=0,npix-1
-               if (HI(i,1) > par%thresh) then
-                  map(i,1) = missval
-               else
-                  map(i,1) = res(i,nm,j)
-               end if
-            end do
-            
-            call write_bintab(map,npix,1,header,nlheader,trim(title))
-            
-            title = trim(direct) //  trim(par%dat_label(j)) // '_model_' // trim(iter_str) // '.fits'
-            do i = 0, npix-1
-               if (HI(i,1) > par%thresh) then
-                  map(i,1) = missval
-               else
-                  map(i,1) = dang_data%temp_amps(j,nm,1)*HI(i,1)*planck(par%dat_nu(j)*1.d9,comp%T_d(i,1))
-               end if
-            end do
-            call write_bintab(map,npix,1,header,nlheader,trim(title))
-         end do
-         title = trim(direct) // 'T_d_' // trim(iter_str) // '.fits'
-         call write_bintab(comp%T_d,npix,1,header,nlheader,trim(title))
-         dang_data%chi_map = 0.d0
-         do i = 0, npix-1
-            !if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
-            !   chi_map(i,nm) = missval
-            !   cycle
-            !else
-               do j = 1, nbands
-                  if (HI(i,1) > par%thresh) then
-                     dang_data%chi_map(i,nm) = missval
-                  else
-                     dang_data%chi_map(i,nm) = dang_data%chi_map(i,nm) + &
-                          (dang_data%sig_map(i,nm,j) - &
-                          dang_data%temp_amps(j,nm,1)*HI(i,1)*planck(par%dat_nu(j)*1.d9,comp%T_d(i,1)))**2.d0/dang_data%rms_map(i,nm,j)**2.d0
-                  end if
-               end do
-            !end if
-         end do
-         title = trim(direct) // 'chisq_' // trim(iter_str) // '.fits'
-         call write_bintab(map,npix,1,header,nlheader,trim(title))
       end if
 
     end subroutine write_maps
@@ -501,12 +487,12 @@ contains
         chisq = 0.d0
         do i = 0, npix-1
             do j = 1, nbands
+               s = 0.d0
                do w = 1, nfgs
-                  s = 0.d0
                   signal = dang_data%fg_map(i,map_n,j,w)
                   s = s + signal
                end do
-               chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)*mask(i,1)
+               chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)
             end do
         end do 
         chisq = chisq/(npix+nbands+nfgs)

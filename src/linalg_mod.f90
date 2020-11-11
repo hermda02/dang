@@ -693,6 +693,7 @@ contains
          ! Then multiply by T_nu^T
          !$OMP DO SCHEDULE(static)
          do i = 1, x
+            if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
             v_temp(i)   = v_temp(i)   + v_temp2(i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
             v_temp(x+i) = v_temp(x+i) + v_temp2(x+i)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
          end do

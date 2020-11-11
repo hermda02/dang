@@ -67,7 +67,7 @@ contains
 !       compute_spectrum = (exp(z*self%fg_nu_ref(ind)*1d9)-1.d0) / &
 !            (exp(z*freq*1d9)-1.d0) * (freq/self%fg_nu_ref(ind))**(comp%beta_d(pix,mapn)+1.d0)!*rj_cmb
        compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
-            (exp(z*freq*1d9)-1.d0) * (freq/353.d0)**(comp%beta_d(pix,mapn)+1.d0)!*rj_cmb
+            (exp(z*freq*1d9)-1.d0) * (freq/353.d0)**(comp%beta_d(pix,mapn)+1.d0)
     end if
   end function compute_spectrum
 
@@ -81,7 +81,10 @@ contains
     integer(i4b)                :: i, j, k
 
     if (trim(param%dust_corr_type) == 'uniform') then
-       comp%beta_d = 1.60d0
+       comp%beta_d = 1.53d0
+       comp%T_d    = 19.6d0
+    else if (trim(param%dust_corr_type) == 'sample') then
+       comp%beta_d = random_number(1.53d0,0.02d0)
        comp%T_d    = 19.6d0
     else if (trim(param%dust_corr_type) == 'planck') then
        stop
@@ -94,7 +97,6 @@ contains
           dat%sig_map(i,k,band) = dat%sig_map(i,k,band) - dat%temps(i,k,1)*compute_spectrum(param,comp,2,param%dat_nu(band),i,k)
        end do
     end do
-
   end subroutine dust_correct_band
   
 end module dang_component_mod

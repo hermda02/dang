@@ -41,18 +41,22 @@ contains
         character(len=*),          intent(in)      :: method
         character(len=*), dimension(:), intent(in) :: poltype
         real(dp), allocatable, dimension(:,:)      :: A, val
-        integer(i4b), allocatable, dimension(:,:)  :: col_ptr, row_ind
         real(dp), allocatable, dimension(:,:)      :: mat_l, mat_u, unc_a_s
+        integer(i4b), allocatable, dimension(:,:)  :: col_ptr, row_ind
         real(dp), allocatable, dimension(:)        :: b, c, d, rand, samp, unc_a_d
         character(len=256)                         :: title
         integer(i4b)                               :: x, y, z, w, l, m, n
         integer(i4b)                               :: nfit1, nfit2, nfit3, nfit4
         integer(i4b)                               :: info
 
+
+        real(dp), allocatable, dimension(:)        :: damps
+        real(dp), allocatable, dimension(:,:)      :: synch
         real(dp)                                   :: q, t6, t7
 
         real(dp), allocatable, dimension(:,:,:)    :: covar, T_nu, T_nu_T, A_2, A_1
         real(dp), allocatable, dimension(:,:)      :: A_3
+
 
         if (rank == master) then
            write(*,fmt='(a)') 'Starting joint sampling for synch and dust_template.'
@@ -99,7 +103,7 @@ contains
                if (size(poltype) == 1) then
                   do j=1, z
                      do i=1, x
-                        !if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) c(i) = 0.d0
+                        if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) c(i) = 0.d0
                         c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
                      end do
                   end do
@@ -107,9 +111,11 @@ contains
                else if (size(poltype) == 2) then
                   do j=1, z
                      do i=1, x
+                        if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) c(i) = 0.d0
                         c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
                      end do
                      do i=1, x
+                        if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) c(i) = 0.d0
                         c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
                      end do
                   end do
@@ -118,7 +124,7 @@ contains
             else if (para%joint_comp(m) == 'dust') then
                do j=1, z
                   do i=1, x
-                     !if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) c(i) = 0.d0
+                     if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) c(i) = 0.d0
                      c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,2,para%dat_nu(j),i-1,map_n)
                   end do
                end do
@@ -134,7 +140,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(1,j)) then
                        do i = 1, x
-                          ! if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,1)
                        end do
@@ -148,6 +154,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(1,j)) then
                        do i = 1, x
+                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,1)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -166,7 +173,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(2,j)) then
                        do i = 1, x
-                          ! if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,2)
                        end do
@@ -180,6 +187,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(2,j)) then
                        do i = 1, x
+                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,2)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -198,7 +206,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(3,j)) then
                        do i = 1, x
-                          ! if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,3)
                        end do
@@ -212,6 +220,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(3,j)) then
                        do i = 1, x
+                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,3)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -230,7 +239,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(4,j)) then
                        do i = 1, x
-                          ! if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,4)
                        end do
@@ -244,6 +253,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(4,j)) then
                        do i = 1, x
+                          if (mask(i-1,1) == 0.d0 .or. mask(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,4)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -283,6 +293,26 @@ contains
            !call forward_sub(mat_l,d,c)
            !call backward_sub(mat_u,b,d)
         end if
+
+        !allocate(damps(5))
+        !allocate(synch(0:dat%npix-1,3))
+
+        !call read_bintab(trim(para%datadir) //'synch/synch_030_n0064_rj.fits',synch,dat%npix,3,nullval,anynull,header=header)
+
+        !damps(1) = 0.41957897
+        !damps(2) = 0.17704154
+        !damps(3) = 0.09161571
+        !damps(4) = 0.12402716
+        !damps(5) = 0.20367266
+
+
+        !do i = 1, x
+        !   b(i)   = synch(i-1,2)
+        !   b(i+x) = synch(i-1,3)
+        !end do
+        !do i = 1, 4
+        !   b(x+x+i) = damps(i)
+        !end do
 
         ! Output amplitudes to the appropriate variables
         if (size(poltype) == 1) then
@@ -445,9 +475,7 @@ contains
         deallocate(b)
         deallocate(c)
         deallocate(d)
-
     end subroutine sample_joint_amp
-
 
     !function temp_fit(data,template,noise,t_mask,freq)
     !    implicit none
@@ -489,7 +517,6 @@ contains
     !        amp   = sum1/sum2! + rand_normal(0.d0,1.d0)/sqrt(norm)
     !    end if
     !    temp_fit  = amp
-  
     !end function temp_fit
 
    function sample_spec_amp(self, comp, data, noise, ind, mapn)
@@ -529,7 +556,6 @@ contains
             amp                = sum1/sum2
             sample_spec_amp(i) = amp + rand_normal(0.d0,1.d0)/sqrt(norm(i))
         end do
-
     end function sample_spec_amp
 
     subroutine sample_index(self, comp, dat, duta, nside2, ind, map_n)
@@ -756,7 +782,6 @@ contains
         deallocate(indx_low)
         deallocate(rms_low)
         deallocate(indx_sample_low)
-
     end subroutine sample_index
 
 end module sample_mod
