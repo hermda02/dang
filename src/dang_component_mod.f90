@@ -84,7 +84,7 @@ contains
        comp%beta_d = 1.53d0
        comp%T_d    = 19.6d0
     else if (trim(param%dust_corr_type) == 'sample') then
-       comp%beta_d = random_number(1.53d0,0.02d0)
+       comp%beta_d = rand_normal(1.53d0,0.02d0)
        comp%T_d    = 19.6d0
     else if (trim(param%dust_corr_type) == 'planck') then
        stop

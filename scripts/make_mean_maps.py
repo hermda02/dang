@@ -5,6 +5,7 @@ import os
 
 
 def return_mean_map(list,outfile):
+    print('Creating '+outfile)
     nside = 64
     npix  = nside*nside*12
     samples = len(list)
@@ -17,7 +18,7 @@ def return_mean_map(list,outfile):
     maps = maps.T
     
     for i in range(samples):
-        maps[i] = hp.read_map('../'+dir+'/'+list[i])
+        maps[i] = hp.read_map('../'+dir+'/'+list[i],verbose=False)
 
     maps = maps.T
 
@@ -27,6 +28,7 @@ def return_mean_map(list,outfile):
     hp.write_map('../'+dir+'/'+str(outfile),out_map)
 
 def return_std_map(list,outfile):
+    print('Creating '+outfile)
     nside = 64
     npix  = nside*nside*12
     samples = len(list)
@@ -39,7 +41,7 @@ def return_std_map(list,outfile):
     maps = maps.T
     
     for i in range(samples):
-        maps[i] = hp.read_map('../'+dir+'/'+list[i])
+        maps[i] = hp.read_map('../'+dir+'/'+list[i],verbose=False)
 
     maps = maps.T
 
@@ -90,12 +92,14 @@ res_2_Q = []
 res_3_Q = []
 res_4_Q = []
 res_5_Q = []
+res_6_Q = []
 
 res_1_U = []
 res_2_U = []
 res_3_U = []
 res_4_U = []
 res_5_U = []
+res_6_U = []
 
 synch_Qs = []
 synch_Us = []
@@ -128,6 +132,10 @@ for file in files:
         if file.endswith('.fits'):
             res_5_Q.append(file)
 
+    if file.startswith(labels[5]+'_residual_Q'):
+        if file.endswith('.fits'):
+            res_6_Q.append(file)
+
     # Residuals U
     
     if file.startswith(labels[0]+'_residual_U'):
@@ -149,6 +157,10 @@ for file in files:
     if file.startswith(labels[4]+'_residual_U'):
         if file.endswith('.fits'):
             res_5_U.append(file)
+            
+    if file.startswith(labels[5]+'_residual_U'):
+        if file.endswith('.fits'):
+            res_6_U.append(file)
             
     # Synch maps
             
@@ -191,9 +203,11 @@ return_mean_map(res_2_Q,labels[1]+'_residual_Q_mean.fits')
 return_mean_map(res_3_Q,labels[2]+'_residual_Q_mean.fits')
 return_mean_map(res_4_Q,labels[3]+'_residual_Q_mean.fits')
 return_mean_map(res_5_Q,labels[4]+'_residual_Q_mean.fits')
+return_mean_map(res_6_Q,labels[5]+'_residual_Q_mean.fits')
 
 return_mean_map(res_1_U,labels[0]+'_residual_U_mean.fits')
 return_mean_map(res_2_U,labels[1]+'_residual_U_mean.fits')
 return_mean_map(res_3_U,labels[2]+'_residual_U_mean.fits')
 return_mean_map(res_4_U,labels[3]+'_residual_U_mean.fits')
 return_mean_map(res_5_U,labels[4]+'_residual_U_mean.fits')
+return_mean_map(res_6_U,labels[5]+'_residual_U_mean.fits')

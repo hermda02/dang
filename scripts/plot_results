@@ -3,8 +3,13 @@
 c3pp=/mn/stornext/u3/daniher/.local/bin/c3pp
 me="/mn/stornext/u3/daniher/master/cmbcocopy/src/f90/map_editor/map_editor"
 
+maskfile=$(awk -F'[=[:blank:]#]+' '$1 == "MASKFILE" {print $2}' param_mask_bp8_v04.txt)
+maskfile="${maskfile%\'}"
+maskfile="${maskfile#\'}"
+maskfile=../$maskfile
 
-bands=("bp_030" "bp_044" "bp_070" "wmap_Ka" "wmap_Q")
+
+bands=("bp_030" "bp_044" "bp_070" "wmap_Ka" "wmap_Q" "wmap_V")
 
 for ((i=0; i<${#bands[@]}; i++)); do
     band=${bands[$i]}
@@ -13,8 +18,10 @@ for ((i=0; i<${#bands[@]}; i++)); do
     name_U=${band}_residual_U_mean.fits
 
     $me smooth g2g $name_Q 0 200 64 60.0 180.0 ${name_Q/.fits/_3deg.fits}
+    $me apply_mask ${name_Q/.fits/_3deg.fits} $maskfile ${name_Q/.fits/_3deg.fits}
 
     $me smooth g2g $name_U 0 200 64 60.0 180.0 ${name_U/.fits/_3deg.fits}
+    $me apply_mask ${name_U/.fits/_3deg.fits} $maskfile ${name_U/.fits/_3deg.fits}
     
 done
 
@@ -42,6 +49,11 @@ $c3pp plot wmap_Q_residual_Q_mean.fits -bar -range 3 -title '${\langle r_{\rm Q}
 $c3pp plot wmap_Q_residual_Q_mean_3deg.fits -bar -range 3 -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot wmap_Q_residual_U_mean.fits -bar -range 3 -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot wmap_Q_residual_U_mean_3deg.fits -bar -range 3 -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot wmap_V_residual_Q_mean.fits -bar -range 3 -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_V_residual_Q_mean_3deg.fits -bar -range 3 -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_V_residual_U_mean.fits -bar -range 3 -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_V_residual_U_mean_3deg.fits -bar -range 3 -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
 
 $c3pp plot synch_Q_mean.fits -bar -range 5 -title '$\langle A_s \rangle$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot synch_U_mean.fits -bar -range 5 -title '$\langle A_s \rangle$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 

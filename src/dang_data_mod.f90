@@ -17,6 +17,8 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:,:)   :: res_map
     real(dp), allocatable, dimension(:,:)     :: chi_map
     real(dp), allocatable, dimension(:,:,:,:) :: fg_map
+    
+    real(dp), allocatable, dimension(:,:)     :: masks
 
     real(dp), allocatable, dimension(:,:,:)   :: temps
 
@@ -33,6 +35,15 @@ contains
     allocate(self%fg_map(0:npix-1,nmaps,nbands,nfgs))
     
   end subroutine init_fg_map
+
+  subroutine init_mask_maps(self,npix,nmaps)
+    implicit none
+    type(data)               :: self
+    integer(i4b), intent(in) :: npix, nmaps
+    
+    allocate(self%masks(0:npix-1,nmaps))
+    
+  end subroutine init_mask_maps
 
   subroutine init_data_maps(self,npix,nmaps,nbands)
     implicit none
