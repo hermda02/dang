@@ -299,26 +299,6 @@ contains
            !call backward_sub(mat_u,b,d)
         end if
 
-        !allocate(damps(5))
-        !allocate(synch(0:dat%npix-1,3))
-
-        !call read_bintab(trim(para%datadir) //'synch/synch_030_n0064_rj.fits',synch,dat%npix,3,nullval,anynull,header=header)
-
-        !damps(1) = 0.41957897
-        !damps(2) = 0.17704154
-        !damps(3) = 0.09161571
-        !damps(4) = 0.12402716
-        !damps(5) = 0.20367266
-
-
-        !do i = 1, x
-        !   b(i)   = synch(i-1,2)
-        !   b(i+x) = synch(i-1,3)
-        !end do
-        !do i = 1, 4
-        !   b(x+x+i) = damps(i)
-        !end do
-
         ! Output amplitudes to the appropriate variables
         if (size(poltype) == 1) then
            w = 0

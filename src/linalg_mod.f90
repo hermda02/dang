@@ -796,8 +796,6 @@ contains
          s = 1+para%temp_nfit(1)+para%temp_nfit(2)+para%temp_nfit(3)
       end if
 
-      write(*,*) 'multiply with a'
-
       do j = 1, nbands
          v_temp  = 0.d0
          v_temp2 = 0.d0

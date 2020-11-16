@@ -259,7 +259,7 @@ program dang
              call compute_chisq(k,chisq,par%mode)
              if (rank == master) then
                 if (mod(iter, 1) == 0 .or. iter == 1) then
-                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, a, 6e10.3)')&
+                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, a, 7e10.3)')&
                         iter, " - chisq: " , chisq, " - A_s: ", dang_data%fg_map(100,k,par%fg_ref_loc(1),1),& 
                         " Pol_type = " // trim(tqu(k)), ' - A_d ', dang_data%temp_amps(:,k,1)
                    write(*,fmt='(a)') '---------------------------------------------'
@@ -298,7 +298,7 @@ program dang
           
           if (rank == master) then
              if (mod(iter, 1) == 0 .or. iter == 1) then
-                write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
+                write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 7e10.3)')&
                      iter, " - chisq: " , chisq, " - A_s: ",&
                      dang_data%fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
                      sum(comp%beta_s(:,k))/npix, ' - A_d: ', dang_data%temp_amps(:,k,1)
