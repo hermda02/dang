@@ -1,3 +1,4 @@
+
 program dang
     use healpix_types
     use pix_tools
@@ -100,6 +101,7 @@ program dang
 
     call init_fg_map(dang_data,npix,nmaps,nbands,nfgs)
     call init_data_maps(dang_data,npix,nmaps,nbands)
+    call init_mask_maps(dang_data,npix,nmaps)
     call init_template(dang_data,npix,nmaps,par%ntemp)
     call init_temp_amps(dang_data,nbands,nmaps,par%ntemp)
     call init_synch(comp,npix,nmaps)
@@ -110,7 +112,7 @@ program dang
     end do
 
     write(*,*) 'Reading MASKFILE'
-    call read_bintab(par%mask_file,mask,npix,1,nullval,anynull,header=header)
+    call read_bintab(par%mask_file,dang_data%masks,npix,1,nullval,anynull,header=header)
     write(*,*) ''
 
     ! Read maps in
@@ -149,7 +151,6 @@ program dang
 
     solver = par%solver
 
-
     joint_poltype(1) = 'Q'
     joint_poltype(2) = 'U'
     !----------------------------------------------------------------------------------------------------------
@@ -159,11 +160,6 @@ program dang
 
     dang_data%fg_map    = 0.0
     dang_data%temp_amps = 0.0
-    !dang_data%temp_amps(1,:,1) = 0.41957897
-    !dang_data%temp_amps(2,:,1) = 0.17704154
-    !dang_data%temp_amps(3,:,1) = 0.09161571
-    !dang_data%temp_amps(4,:,1) = 0.12402716
-    !dang_data%temp_amps(5,:,1) = 0.20367266
 
     do iter = 1, niter
        
@@ -263,7 +259,7 @@ program dang
              call compute_chisq(k,chisq,par%mode)
              if (rank == master) then
                 if (mod(iter, 1) == 0 .or. iter == 1) then
-                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, a, 6e10.3)')&
+                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, a, 7e10.3)')&
                         iter, " - chisq: " , chisq, " - A_s: ", dang_data%fg_map(100,k,par%fg_ref_loc(1),1),& 
                         " Pol_type = " // trim(tqu(k)), ' - A_d ', dang_data%temp_amps(:,k,1)
                    write(*,fmt='(a)') '---------------------------------------------'
@@ -302,7 +298,7 @@ program dang
           
           if (rank == master) then
              if (mod(iter, 1) == 0 .or. iter == 1) then
-                write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 6e10.3)')&
+                write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 7e10.3)')&
                      iter, " - chisq: " , chisq, " - A_s: ",&
                      dang_data%fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
                      sum(comp%beta_s(:,k))/npix, ' - A_d: ', dang_data%temp_amps(:,k,1)
@@ -332,6 +328,7 @@ contains
       character(len=16), intent(in)     :: mode
       real(dp), dimension(0:npix-1,1)   :: map
       real(dp)                          :: s, signal
+      integer(i4b)                      :: n
 
       write(*,*) 'Output data maps'
 
@@ -344,27 +341,52 @@ contains
                   title = trim(direct) // trim(par%dat_label(j)) //'_'// trim(par%temp_label(i)) //&
                        '_'// trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
                   map(:,1)   = dang_data%fg_map(:,nm,j,i+1)
+                  do n = 0, npix-1
+                     if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+                        map(n,1) = missval
+                     end if
+                  end do
                   call write_bintab(map,npix,1, header, nlheader, trim(title))
                end do
                title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
                     // '_' // trim(iter_str) // '.fits'
                map(:,1)   = dang_data%fg_map(:,nm,j,1)
+               do n = 0, npix-1
+                  if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+                     map(n,1) = missval
+                  end if
+               end do
                call write_bintab(map,npix,1, header, nlheader, trim(title))
             end do
          else 
             title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
                  // '_' // trim(iter_str) // '.fits'
             map(:,1)   = dang_data%fg_map(:,nm,par%fg_ref_loc(1),1)
+            do n = 0, npix-1
+               if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+                  map(n,1) = missval
+               end if
+            end do
             call write_bintab(map,npix,1, header, nlheader, trim(title))
          end if
          do j = 1, nbands
             title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
                  // '_' // trim(iter_str) // '.fits'
             map(:,1)   = dang_data%res_map(:,nm,j)
+            do n = 0, npix-1
+               if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+                  map(n,1) = missval
+               end if
+            end do
             call write_bintab(map,npix,1, header, nlheader, trim(title))
          end do
          title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
          map(:,1)   = comp%beta_s(:,nm)
+         do n = 0, npix-1
+            if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+               map(n,1) = missval
+            end if
+         end do
          call write_bintab(map,npix,1, header, nlheader, trim(title))
          dang_data%chi_map = 0.d0
          do i = 0, npix-1
@@ -374,12 +396,17 @@ contains
                   signal = dang_data%fg_map(i,nm,j,l)
                   s      = s + signal
                end do
-               dang_data%chi_map(i,nm) = dang_data%chi_map(i,nm) + (dang_data%sig_map(i,nm,j) - s)**2.d0/dang_data%rms_map(i,nm,j)**2.d0
+               dang_data%chi_map(i,nm) = dang_data%chi_map(i,nm) + dang_data%masks(i,1)*(dang_data%sig_map(i,nm,j) - s)**2.d0/dang_data%rms_map(i,nm,j)**2.d0
             end do
          end do
          dang_data%chi_map(:,nm) = dang_data%chi_map(:,nm)/(nbands+nfgs)
          title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
          map(:,1)   = dang_data%chi_map(:,nm)
+         do n = 0, npix-1
+            if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+               map(n,1) = missval
+            end if
+         end do
          call write_bintab(map,npix,1, header, nlheader, trim(title))
       end if
 
@@ -492,7 +519,7 @@ contains
                   signal = dang_data%fg_map(i,map_n,j,w)
                   s = s + signal
                end do
-               chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)
+               chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)*dang_data%masks(i,1)
             end do
         end do 
         chisq = chisq/(npix+nbands+nfgs)

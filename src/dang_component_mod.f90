@@ -84,8 +84,9 @@ contains
        comp%beta_d = 1.53d0
        comp%T_d    = 19.6d0
     else if (trim(param%dust_corr_type) == 'sample') then
-       comp%beta_d = random_number(1.53d0,0.02d0)
+       comp%beta_d = rand_normal(1.62d0,0.04d0)
        comp%T_d    = 19.6d0
+       ! comp%T_d    = rand_normal(19.6d0,0.10d0)
     else if (trim(param%dust_corr_type) == 'planck') then
        stop
        ! call read_bintab()

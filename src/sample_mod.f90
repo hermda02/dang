@@ -101,17 +101,26 @@ contains
                if (size(poltype) == 1) then
                   do j=1, z
                      do i=1, x
-                        c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+                        if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
+                           c(i) = 0.d0
+                           cycle
+                        else
+                           c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+                        end if
                      end do
                   end do
                   w = w + x
                else if (size(poltype) == 2) then
                   do j=1, z
                      do i=1, x
-                        c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
-                     end do
-                     do i=1, x
-                        c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
+                        if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
+                           c(i)   = 0.d0
+                           c(x+i) = 0.d0
+                           cycle
+                        else                           
+                           c(i)   = c(i)   + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+                           c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
+                        end if
                      end do
                   end do
                   w = w + 2*x
@@ -119,13 +128,13 @@ contains
             else if (para%joint_comp(m) == 'dust') then
                do j=1, z
                   do i=1, x
+                     if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) c(i) = 0.d0
                      c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,2,para%dat_nu(j),i-1,map_n)
                   end do
                end do
                w = w + x
             end if
         end do
-
         do m = 1, size(para%joint_comp)
            if (para%joint_comp(m) == 'template01') then
            ! Template 1
@@ -134,6 +143,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(1,j)) then
                        do i = 1, x
+                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,1)
                        end do
@@ -147,6 +157,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(1,j)) then
                        do i = 1, x
+                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,1)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -165,6 +176,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(2,j)) then
                        do i = 1, x
+                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,2)
                        end do
@@ -178,6 +190,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(2,j)) then
                        do i = 1, x
+                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,2)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -196,6 +209,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(3,j)) then
                        do i = 1, x
+                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,3)
                        end do
@@ -209,6 +223,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(3,j)) then
                        do i = 1, x
+                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,3)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -227,6 +242,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(4,j)) then
                        do i = 1, x
+                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,4)
                        end do
@@ -240,6 +256,7 @@ contains
                  do j = 1, z
                     if (para%temp_corr(4,j)) then
                        do i = 1, x
+                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
                                dat%temps(i-1,map_n,4)
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
@@ -279,26 +296,6 @@ contains
            !call forward_sub(mat_l,d,c)
            !call backward_sub(mat_u,b,d)
         end if
-
-        !allocate(damps(5))
-        !allocate(synch(0:dat%npix-1,3))
-
-        !call read_bintab(trim(para%datadir) //'synch/synch_030_n0064_rj.fits',synch,dat%npix,3,nullval,anynull,header=header)
-
-        !damps(1) = 0.41957897
-        !damps(2) = 0.17704154
-        !damps(3) = 0.09161571
-        !damps(4) = 0.12402716
-        !damps(5) = 0.20367266
-
-
-        !do i = 1, x
-        !   b(i)   = synch(i-1,2)
-        !   b(i+x) = synch(i-1,3)
-        !end do
-        !do i = 1, 4
-        !   b(x+x+i) = damps(i)
-        !end do
 
         ! Output amplitudes to the appropriate variables
         if (size(poltype) == 1) then
@@ -556,7 +553,7 @@ contains
         real(dp), dimension(0:npix-1,nmaps)                    :: indx
         real(dp), dimension(0:npix-1)                          :: indx_sample
         real(dp), allocatable, dimension(:,:,:)                :: data_low, fg_map_low, rms_low
-        real(dp), allocatable, dimension(:,:)                  :: indx_low
+        real(dp), allocatable, dimension(:,:)                  :: indx_low, mask_low
         real(dp), allocatable, dimension(:)                    :: indx_sample_low
         real(dp), dimension(nbands)                            :: signal, tmp
         real(dp), dimension(2)                                 :: x
@@ -600,6 +597,7 @@ contains
         allocate(data_low(0:npix2-1,nmaps,nbands),fg_map_low(0:npix2-1,nmaps,nbands))
         allocate(indx_low(0:npix2-1,nmaps),rms_low(0:npix2-1,nmaps,nbands))
         allocate(indx_sample_low(0:npix2-1))
+        allocate(mask_low(0:npix2-1,nmaps))
 
         if (nside1 /= nside2) then 
             if (ordering == 1) then
@@ -615,10 +613,13 @@ contains
                     call convert_nest2ring(nside1,dat%fg_map(:,:,j,1))
                     call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
                     call convert_nest2ring(nside2,rms_low(:,:,j))
+                    call udgrade_ring(dat%masks,nside1,mask_low,nside2)
+                    call convert_nest2ring(nside2,mask_low)
                 else
                     call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
                     call udgrade_nest(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
                     call udgrade_nest(dat%rms_map(:,:,j),nside1,rms_low(:,:,j),nside2)
+                    call udgrade_nest(dat%masks,nside1,mask_low,nside2)
                end if
             end do
             rms_low = sqrt(rms_low / (npix/npix2))
@@ -630,6 +631,14 @@ contains
             end do
             indx_low = indx
         end if
+
+        do i = 0, npix2-1
+           if (mask_low(i,1) .lt. 0.50) then
+              mask_low(i,:) = 0.d0
+           else
+              mask_low(i,:) = 1.d0
+           end if
+        end do
 
         x(1) = 1.d0           
         !------------------------------------------------------------------------
@@ -647,7 +656,7 @@ contains
               do j = 1, nbands
                  do k = self%pol_type(1), self%pol_type(size(self%pol_type))
                     a = a + (((fg_map_low(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-                         - data_low(i,k,j))**2.d0)/rms_low(i,k,j)**2.d0
+                         - data_low(i,k,j))**2.d0)/rms_low(i,k,j)**2.d0*mask_low(i,k)
                  end do
               end do
               c = a
@@ -665,7 +674,7 @@ contains
                  do j = 1, nbands
                     do k = self%pol_type(1), self%pol_type(size(self%pol_type))
                        tmp(j) = fg_map_low(i,k,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)
-                       b      = b + ((tmp(j)-data_low(i,k,j))**2.d0)/rms_low(i,k,j)**2.d0
+                       b      = b + ((tmp(j)-data_low(i,k,j))**2.d0)/rms_low(i,k,j)**2.d0*mask_low(i,k)
                     end do
                  end do
                  b = b
@@ -696,7 +705,7 @@ contains
               ! Chi-square from the most recent Gibbs chain update
               do j = 1, nbands
                  a = a + (((fg_map_low(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
-                      - data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
+                      - data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0*mask_low(i,map_n)
               end do
               c = a
               
@@ -712,7 +721,7 @@ contains
                  
                  do j = 1, nbands
                     tmp(j) = fg_map_low(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)
-                    b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
+                    b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0*mask_low(i,map_n)
                  end do
                  b = b
                  
