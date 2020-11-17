@@ -551,6 +551,7 @@ contains
         integer(i4b)                                           :: nside1, npix2
         real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov 
         real(dp), dimension(0:npix-1,nmaps)                    :: indx
+        real(dp), dimension(0:npix-1,nmaps)                    :: mask
         real(dp), dimension(0:npix-1)                          :: indx_sample
         real(dp), allocatable, dimension(:,:,:)                :: data_low, fg_map_low, rms_low
         real(dp), allocatable, dimension(:,:)                  :: indx_low, mask_low
@@ -568,6 +569,7 @@ contains
 
         map2fit = duta
         cov     = dat%rms_map*dat%rms_map
+        mask    = dat%masks
 
         !------------------------------------------------------------------------
         ! Load priors for the appropriate spectrum
@@ -613,13 +615,13 @@ contains
                     call convert_nest2ring(nside1,dat%fg_map(:,:,j,1))
                     call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
                     call convert_nest2ring(nside2,rms_low(:,:,j))
-                    call udgrade_ring(dat%masks,nside1,mask_low,nside2)
+                    call udgrade_ring(mask,nside1,mask_low,nside2)
                     call convert_nest2ring(nside2,mask_low)
                 else
                     call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
                     call udgrade_nest(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
                     call udgrade_nest(dat%rms_map(:,:,j),nside1,rms_low(:,:,j),nside2)
-                    call udgrade_nest(dat%masks,nside1,mask_low,nside2)
+                    call udgrade_nest(mask,nside1,mask_low,nside2)
                end if
             end do
             rms_low = sqrt(rms_low / (npix/npix2))
@@ -759,16 +761,16 @@ contains
         if (map_n == -1) then
            do k = self%pol_type(1), self%pol_type(size(self%pol_type))
               if (trim(self%fg_label(ind)) == 'synch') then 
-                 comp%beta_s(:,k) = indx_sample
+                 comp%beta_s(:,k) = indx_sample!*mask(:,1)
               else if (trim(self%fg_label(ind)) == 'dust') then 
-                 comp%beta_d(:,k) = indx_sample
+                 comp%beta_d(:,k) = indx_sample!*mask(:,1)
               end if
            end do
         else
            if (trim(self%fg_label(ind)) == 'synch') then 
-              comp%beta_s(:,k) = indx_sample
+              comp%beta_s(:,k) = indx_sample!*dat%masks(:,1)
            else if (trim(self%fg_label(ind)) == 'dust') then 
-              comp%beta_d(:,k) = indx_sample
+              comp%beta_d(:,k) = indx_sample!*dat%masks(:,1)
            end if
         end if
         deallocate(data_low)

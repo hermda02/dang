@@ -237,13 +237,6 @@ program dang
           end do
        end if
 
-       !do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-       !   do i = 0, npix-1
-       !      do j = 1, nbands
-       !         dang_data%sig_map(i,k,j) = dang_data%sig_map(i,k,j)-dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
-       !      end do
-       !   end do
-       !end do
        ! -------------------------------------------------------------------------------------------------------------------
        ! -------------------------------------------------------------------------------------------------------------------
        if (par%fg_samp_amp(1)) then
@@ -276,6 +269,13 @@ program dang
              synchonly(:,:,:) = dang_data%sig_map(:,:,:)-dang_data%fg_map(:,:,:,i+1)
           end do
           call sample_index(par,comp,dang_data,synchonly,par%fg_samp_nside(1,1),1,-1)
+          !call write_bintab(comp%beta_s,npix,3,header,nlheader,trim(direct)//'synch_beta.fits')
+          do i = 0, npix-1
+             comp%beta_s(i,:) = comp%beta_s(i,:)*dang_data%masks(i,1)
+          end do
+          !call write_bintab(comp%beta_s,npix,3,header,nlheader,trim(direct)//'synch_beta_mask.fits')
+          !call write_bintab(dang_data%masks,npix,1,header,nlheader,trim(direct)//'mask.fits')
+          !stop
           do i = 0, npix-1
              do j = 1, nbands
                 do k = par%pol_type(1), par%pol_type(size(par%pol_type))

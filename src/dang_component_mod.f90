@@ -81,16 +81,21 @@ contains
     integer(i4b)                :: i, j, k
 
     if (trim(param%dust_corr_type) == 'uniform') then
-       comp%beta_d = 1.53d0
-       comp%T_d    = 19.6d0
+       comp%T_d    = param%mbb_gauss(1,1)
+       comp%beta_d = param%mbb_gauss(2,1)
     else if (trim(param%dust_corr_type) == 'sample') then
-       comp%beta_d = rand_normal(1.62d0,0.04d0)
-       comp%T_d    = 19.6d0
-       ! comp%T_d    = rand_normal(19.6d0,0.10d0)
+       if (param%mbb_gauss(1,2) .gt. 0.d0) then
+          comp%T_d    = rand_normal(param%mbb_gauss(1,1),param%mbb_gauss(1,2))
+       else 
+          comp%T_d    = param%mbb_gauss(1,1)
+       end if
+       if (param%mbb_gauss(2,2) .gt. 0.d0) then
+          comp%beta_d = rand_normal(param%mbb_gauss(2,1),param%mbb_gauss(2,2))
+       else
+          comp%beta_d = param%mbb_gauss(2,1)
+       end if
     else if (trim(param%dust_corr_type) == 'planck') then
        stop
-       ! call read_bintab()
-       ! call read_bintab()
     end if
     write(*,'(a,a)') 'Dust correcting band ', trim(param%dat_label(band))
     do k = param%pol_type(1), param%pol_type(size(param%pol_type))

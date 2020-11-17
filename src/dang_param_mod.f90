@@ -6,22 +6,22 @@ module dang_param_mod
 
     type, public :: params
         ! Global parameters
-        integer(i4b)       :: ngibbs      !  Number of Gibbs iterations
-        integer(i4b)       :: nsample     ! For things like the metrop-hast alg
-        integer(i4b)       :: iter_out    !  Out put maps every <- iterations
-        integer(i4b)       :: cg_iter     ! Maximum cg iterations
-        integer(i4b)       :: bp_burnin   ! Number of burn in samples for BP chains
-        integer(i4b)       :: bp_max      ! Maximum number of maps from BP chains
-        logical(lgt)       :: bp_swap     ! Do the BP map swapping?
-        logical(lgt)       :: output_fg   ! Do we output the foregrounds at each frequency?
-        logical(lgt)       :: output_unc  ! Do we output uncertainty of template fit?
-        character(len=512) :: outdir      ! Output directory
-        character(len=16)  :: solver      ! Linear system solver type
-        character(len=16)  :: mode        ! 'dang' mode ('comp_sep', 'HI_fit')
-        character(len=5)   :: tqu         ! Which pol_type to sample
+        integer(i4b)                            :: ngibbs      !  Number of Gibbs iterations
+        integer(i4b)                            :: nsample     ! For things like the metrop-hast alg
+        integer(i4b)                            :: iter_out    !  Out put maps every <- iterations
+        integer(i4b)                            :: cg_iter     ! Maximum cg iterations
+        integer(i4b)                            :: bp_burnin   ! Number of burn in samples for BP chains
+        integer(i4b)                            :: bp_max      ! Maximum number of maps from BP chains
+        logical(lgt)                            :: bp_swap     ! Do the BP map swapping?
+        logical(lgt)                            :: output_fg   ! Do we output the foregrounds at each frequency?
+        logical(lgt)                            :: output_unc  ! Do we output uncertainty of template fit?
+        character(len=512)                      :: outdir      ! Output directory
+        character(len=16)                       :: solver      ! Linear system solver type
+        character(len=16)                       :: mode        ! 'dang' mode ('comp_sep', 'HI_fit')
+        character(len=5)                        :: tqu         ! Which pol_type to sample
+        real(dp)                                :: cg_converge ! CG convergence criterion 
         integer(i4b), allocatable, dimension(:) :: pol_type ! Points above to map number
-        real(dp)           :: cg_converge ! CG convergence criterion 
-
+                                                  
         ! Data parameters
         integer(i4b)                                    :: numband       ! Number of bands
         character(len=512)                              :: datadir       ! Directory to look for bandfiles in
@@ -61,6 +61,8 @@ module dang_param_mod
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
         
+        real(dp),           allocatable, dimension(:,:)   :: mbb_gauss      ! MBB Gaussian sampling params for thermal dust subtraction
+
         real(dp)                                          :: thresh         ! Threshold for the HI fitting (sample pixels under thresh)
         character(len=512)                                :: HI_file        ! HI map filename
         real(dp)                                          :: HI_Td_init     ! HI fitting dust temp estimate
@@ -448,6 +450,13 @@ contains
         call get_parameter_hashtable(htbl, 'NUMJOINT', par_int=par%njoint)
         call get_parameter_hashtable(htbl, 'JOINT_SAMPLE', par_lgt=par%joint_sample)
         call get_parameter_hashtable(htbl, 'DUST_CORR_TYPE', par_string=par%dust_corr_type)
+
+        allocate(par%mbb_gauss(2,2))
+        call get_parameter_hashtable(htbl, 'MBB_TD_MEAN',par_dp=par%mbb_gauss(1,1))
+        call get_parameter_hashtable(htbl, 'MBB_TD_STD',par_dp=par%mbb_gauss(1,2))
+        call get_parameter_hashtable(htbl, 'MBB_BETA_MEAN',par_dp=par%mbb_gauss(2,1))
+        call get_parameter_hashtable(htbl, 'MBB_BETA_STD',par_dp=par%mbb_gauss(2,2))
+
 
         n  = par%ncomp
         n2 = par%ntemp
