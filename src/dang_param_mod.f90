@@ -55,6 +55,7 @@ module dang_param_mod
         character(len=512), allocatable, dimension(:)     :: joint_comp     ! Fg label (for outputs)
         character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
+        character(len=512), allocatable, dimension(:,:)   :: fg_spec_map    ! Fg spectral parameter input map
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
         integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
         integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
@@ -467,6 +468,7 @@ contains
         allocate(par%fg_spec_like(n,2))
         allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
         allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
+        allocate(par%fg_spec_map(n,2))
 
         allocate(par%temp_file(n2))
         allocate(par%temp_label(n2))
@@ -519,6 +521,8 @@ contains
                     par_lgt=par%fg_samp_inc(i,1))
                 call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
                     par_lgt=par%fg_spec_like(i,1))
+                !call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
+                !    par_string=par%fg_spec_map(i,1))
             else if (trim(par%fg_type(i)) == 'mbb') then
                call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                     par_dp=par%fg_gauss(i,1,1))

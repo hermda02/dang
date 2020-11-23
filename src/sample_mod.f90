@@ -653,7 +653,10 @@ contains
               a         = 0.d0
               sol       = indx_low(i,self%pol_type(1))
               sam       = sol
-              
+
+              if (mask_low(i,1) == 0.d0) then
+                 cycle
+              end if
               ! Chi-square from the most recent Gibbs chain update
               do j = 1, nbands
                  do k = self%pol_type(1), self%pol_type(size(self%pol_type))
@@ -703,7 +706,12 @@ contains
            do i = 0, npix2-1
               a         = 0.d0
               sol       = indx_low(i,map_n)
+              sam       = sol
               
+              if (mask_low(i,1) == 0.d0) then
+                 cycle
+              end if
+
               ! Chi-square from the most recent Gibbs chain update
               do j = 1, nbands
                  a = a + (((fg_map_low(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
@@ -757,6 +765,12 @@ contains
         else
             indx_sample = indx_sample_low
         end if             
+
+        do i = 0, npix-1
+           if (indx_sample(i) .gt. self%fg_uni(ind,1,2) .or. indx_sample(i) .lt. self%fg_uni(ind,1,1)) then
+              indx_sample(i) = self%fg_gauss(ind,1,1)
+           end if
+        end do
 
         if (map_n == -1) then
            do k = self%pol_type(1), self%pol_type(size(self%pol_type))

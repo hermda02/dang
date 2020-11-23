@@ -5,6 +5,7 @@ import os
 
 
 def return_mean_map(list,outfile):
+    print('Creating '+str(outfile))
     nside = 64
     npix  = nside*nside*12
     samples = len(list)
@@ -27,6 +28,7 @@ def return_mean_map(list,outfile):
     hp.write_map('../'+dir+'/'+str(outfile),out_map)
 
 def return_std_map(list,outfile):
+    print('Creating '+str(outfile))
     nside = 64
     npix  = nside*nside*12
     samples = len(list)

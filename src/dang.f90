@@ -142,8 +142,9 @@ program dang
     end do
     write(*,*) ''
 
+    !call read_bintab(trim(par%fg_spec_map(1,1)),comp%beta_s,npix,3,nullval,anynull,header=header)
     comp%beta_s     = par%fg_gauss(1,1,1)!-3.10d0    ! Synchrotron beta initial guess
-    comp%beta_d     =  1.53d0    ! Dust beta initial guess
+    comp%beta_d     = 1.53d0    ! Dust beta initial guess
     comp%T_d        = 19.6d0
 
     !----------------------------------------------------------------------------------------------------------
@@ -301,7 +302,7 @@ program dang
                 write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 7e10.3)')&
                      iter, " - chisq: " , chisq, " - A_s: ",&
                      dang_data%fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                     sum(comp%beta_s(:,k))/npix, ' - A_d: ', dang_data%temp_amps(:,k,1)
+                     sum(comp%beta_s(:,k))/sum(dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
              if (mod(iter,output_iter) .EQ. 0) then
