@@ -14,22 +14,34 @@ module dang_component_mod
 
 contains 
 
-  subroutine init_synch(self,npix,nmaps)
+  subroutine init_synch(self,param,npix,nmaps)
     implicit none
     type(component)               :: self
-    integer(i4b), intent(in) :: npix, nmaps
+    type(params)                  :: param
+    integer(i4b), intent(in)      :: npix, nmaps
     
     allocate(self%beta_s(0:npix-1,nmaps))
+    write(*,*) 'allocated synch'
+    if (trim(param%fg_spec_map(1,1)) == 'none') then 
+       self%beta_s     = param%fg_gauss(1,1,1) ! Synchrotron beta initial guess
+    else
+       !call read_bintab(trim(param%fg_spec_map(1,1)),self%beta_s,npix,3,nullval,anynull,header=header)
+    end if
     
   end subroutine init_synch
   
-  subroutine init_dust(self,npix,nmaps)
+  subroutine init_dust(self,param,npix,nmaps)
     implicit none
     type(component)               :: self
-    integer(i4b), intent(in) :: npix, nmaps
+    type(params)                  :: param
+    integer(i4b), intent(in)      :: npix, nmaps
     
     allocate(self%beta_d(0:npix-1,nmaps))
     allocate(self%T_d(0:npix-1,nmaps))
+    write(*,*) 'allocated dust'
+
+    self%beta_d     = 1.53d0              ! Dust beta initial guess
+    self%T_d        = 19.6d0
     
   end subroutine init_dust
   

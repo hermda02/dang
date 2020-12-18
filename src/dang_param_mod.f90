@@ -6,21 +6,24 @@ module dang_param_mod
 
     type, public :: params
         ! Global parameters
-        integer(i4b)                            :: ngibbs      !  Number of Gibbs iterations
-        integer(i4b)                            :: nsample     ! For things like the metrop-hast alg
-        integer(i4b)                            :: iter_out    !  Out put maps every <- iterations
-        integer(i4b)                            :: cg_iter     ! Maximum cg iterations
-        integer(i4b)                            :: bp_burnin   ! Number of burn in samples for BP chains
-        integer(i4b)                            :: bp_max      ! Maximum number of maps from BP chains
-        logical(lgt)                            :: bp_swap     ! Do the BP map swapping?
-        logical(lgt)                            :: output_fg   ! Do we output the foregrounds at each frequency?
-        logical(lgt)                            :: output_unc  ! Do we output uncertainty of template fit?
-        character(len=512)                      :: outdir      ! Output directory
-        character(len=16)                       :: solver      ! Linear system solver type
-        character(len=16)                       :: mode        ! 'dang' mode ('comp_sep', 'HI_fit')
-        character(len=5)                        :: tqu         ! Which pol_type to sample
-        real(dp)                                :: cg_converge ! CG convergence criterion 
-        integer(i4b), allocatable, dimension(:) :: pol_type ! Points above to map number
+        integer(i4b)                                  :: ngibbs      !  Number of Gibbs iterations
+        integer(i4b)                                  :: nsample     ! For things like the metrop-hast alg
+        integer(i4b)                                  :: iter_out    !  Out put maps every <- iterations
+        integer(i4b)                                  :: cg_iter     ! Maximum cg iterations
+        integer(i4b)                                  :: bp_burnin   ! Number of burn in samples for BP chains
+        integer(i4b)                                  :: bp_max      ! Maximum number of maps from BP chains
+        integer(i4b)                                  :: num_chains  ! number of bp chains used
+        logical(lgt)                                  :: bp_swap     ! Do the BP map swapping?
+        logical(lgt)                                  :: output_fg   ! Do we output the foregrounds at each frequency?
+        logical(lgt)                                  :: output_unc  ! Do we output uncertainty of template fit?
+        character(len=512)                            :: outdir      ! Output directory
+        character(len=512)                            :: bp_chains   ! bp chains
+        character(len=16)                             :: solver      ! Linear system solver type
+        character(len=16)                             :: mode        ! 'dang' mode ('comp_sep', 'HI_fit')
+        character(len=5)                              :: tqu         ! Which pol_type to sample
+        real(dp)                                      :: cg_converge ! CG convergence criterion 
+        integer(i4b), allocatable, dimension(:)       :: pol_type ! Points above to map number
+        character(len=512), allocatable, dimension(:) :: bp_chain_list
                                                   
         ! Data parameters
         integer(i4b)                                    :: numband       ! Number of bands
@@ -359,6 +362,12 @@ contains
         call get_parameter_hashtable(htbl, 'BP_BURN_IN',par_int=par%bp_burnin)
         call get_parameter_hashtable(htbl, 'BP_MAX_ITER',par_int=par%bp_max)
         call get_parameter_hashtable(htbl, 'BP_DIRECTORY',par_string=par%bp_dir)
+        call get_parameter_hashtable(htbl, 'BP_CHAINS_LIST',par_string=par%bp_chains)
+        call get_parameter_hashtable(htbl, 'BP_NUM_CHAINS',par_int=par%num_chains)
+
+        allocate(par%bp_chain_list(par%num_chains))
+
+        call delimit_string(par%bp_chains,',',par%bp_chain_list)
         
         ! Surely an inefficient way to decide which maps to use (T -> 1, Q -> 2, U -> 3), but it works
         pol_count = 0
@@ -507,22 +516,22 @@ contains
             call get_parameter_hashtable(htbl, 'COMP_SAMPLE_AMP'//itext, len_itext=len_itext, par_lgt=par%fg_samp_amp(i))
 
             if (trim(par%fg_type(i)) == 'power-law') then
-                call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                     par_dp=par%fg_gauss(i,1,1))
-                call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
                     par_dp=par%fg_gauss(i,1,2))
-                call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
                     par_dp=par%fg_uni(i,1,1))
-                call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
+               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
                     par_dp=par%fg_uni(i,1,2))
-                call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
+               call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
                     par_int=par%fg_samp_nside(i,1))
-                call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
+               call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
                     par_lgt=par%fg_samp_inc(i,1))
-                call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
+               call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
                     par_lgt=par%fg_spec_like(i,1))
-                !call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
-                !    par_string=par%fg_spec_map(i,1))
+               call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
+                    par_string=par%fg_spec_map(i,1))
             else if (trim(par%fg_type(i)) == 'mbb') then
                call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                     par_dp=par%fg_gauss(i,1,1))
@@ -540,6 +549,22 @@ contains
                     par_dp=par%fg_uni(i,2,1))
                call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_HIGH'//itext, len_itext=len_itext,&
                     par_dp=par%fg_uni(i,2,2))
+               call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
+                    par_string=par%fg_spec_map(i,1))
+               call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
+                    par_int=par%fg_samp_nside(i,1))
+               call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
+                    par_lgt=par%fg_samp_inc(i,1))
+               call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
+                    par_lgt=par%fg_spec_like(i,1))
+               call get_parameter_hashtable(htbl, 'COMP_T_SAMP_NSIDE'//itext, len_itext=len_itext,&
+                    par_int=par%fg_samp_nside(i,2))
+               call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
+                    par_lgt=par%fg_samp_inc(i,2))
+               call get_parameter_hashtable(htbl, 'COMP_T_LIKELIHOOD'//itext, len_itext=len_itext,&
+                    par_lgt=par%fg_spec_like(i,2))
+               call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
+                    par_string=par%fg_spec_map(i,2))
             end if
             par%fg_ref_loc(i) = minloc(abs(par%dat_nu-par%fg_nu_ref(i)),1)
         end do
@@ -553,6 +578,28 @@ contains
         end if
 
     end subroutine read_comp_params
+
+    subroutine delimit_string(string, delimiter, list)
+      implicit none
+      character(len=*), intent(in)                :: string, delimiter
+      character(len=*), dimension(:), intent(out) :: list
+      integer(i4b)                                :: i, j, k
+
+      j = 1
+      k = 1
+      do i=1,len_trim(string)
+         if (string(i:i) == trim(delimiter)) then
+            list(k) = trim(string(j:i-1))
+            j = i+1
+            k = k + 1
+         end if
+      end do
+
+      if (k < len(list)+1) then
+         list(k) = trim(string(j:))
+      end if
+
+    end subroutine delimit_string
 
     function get_token(string, sep, num, group, allow_empty) result(res)
         implicit none

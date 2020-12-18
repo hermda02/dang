@@ -33,7 +33,7 @@ program dang
     !-----------------------------------------------------------------------------------------------------|  
       
     integer(i4b)       :: i, j, k, l, m
-    integer(i4b)       :: iterations, n2fit
+    integer(i4b)       :: iterations, n2fit, chain_num
     integer(i4b)       :: output_iter, bp_iter
     logical(lgt)       :: test, output_fg
   
@@ -79,15 +79,15 @@ program dang
     nmaps             = nmaps
     iterations        = par%nsample              ! # of iterations in the samplers
     if (par%bp_swap) then
-       niter          = par%bp_max - par%bp_burnin
+       niter          = (par%bp_max - par%bp_burnin)*par%num_chains
        bp_iter        = par%bp_burnin
+       chain_num      = 1
     else
        niter          = par%ngibbs               ! # of MC-MC iterations
     end if
     output_iter       = par%iter_out             ! Output maps every <- # of iterations
     output_fg         = par%output_fg            ! Option for outputting foregrounds for all bands
     direct            = par%outdir               ! Output directory name
-
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Array allocation
@@ -97,6 +97,13 @@ program dang
     allocate(rms(0:npix-1,nmaps))
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
+    ! Joint Sampler Info
+    solver = par%solver
+
+    joint_poltype(1) = 'Q'
+    joint_poltype(2) = 'U'
+    !----------------------------------------------------------------------------------------------------------
+    !----------------------------------------------------------------------------------------------------------
     ! Read maps
 
     call init_fg_map(dang_data,npix,nmaps,nbands,nfgs)
@@ -104,8 +111,8 @@ program dang
     call init_mask_maps(dang_data,npix,nmaps)
     call init_template(dang_data,npix,nmaps,par%ntemp)
     call init_temp_amps(dang_data,nbands,nmaps,par%ntemp)
-    call init_synch(comp,npix,nmaps)
-    call init_dust(comp,npix,nmaps)
+    call init_synch(comp,par,npix,nmaps)
+    call init_dust(comp,par,npix,nmaps)
 
     do i = 1, par%ntemp
        call read_bintab(par%temp_file(i), dang_data%temps(:,:,i), npix,nmaps,nullval,anynull,header=header)
@@ -134,27 +141,11 @@ program dang
 
     do j = 1, nbands
        ! Check to see if any maps need to be dust corrected
-       !if (j == nbands) write(*,*) dang_data%sig_map(0,2,j)
        if (par%dust_corr(j)) then
           call dust_correct_band(dang_data,par,comp,j)
        end if
-       !if (j == nbands) write(*,*) dang_data%sig_map(0,2,j)
     end do
     write(*,*) ''
-
-    !call read_bintab(trim(par%fg_spec_map(1,1)),comp%beta_s,npix,3,nullval,anynull,header=header)
-    comp%beta_s     = par%fg_gauss(1,1,1)!-3.10d0    ! Synchrotron beta initial guess
-    comp%beta_d     = 1.53d0    ! Dust beta initial guess
-    comp%T_d        = 19.6d0
-
-    !----------------------------------------------------------------------------------------------------------
-    ! Joint Sampler Info
-
-    solver = par%solver
-
-    joint_poltype(1) = 'Q'
-    joint_poltype(2) = 'U'
-    !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
     !----------------------------------------------------------------------------------------------------------
@@ -166,9 +157,18 @@ program dang
        
        ! ------------ BP SWAP CHUNK ------------------------------------------------------------------
        if (par%bp_swap) then
-          call swap_bp_maps(dang_data,par,bp_iter)
+          if (bp_iter > par%bp_max) then
+             write(*,*) ''
+             write(*,fmt='(a)') 'Switching to chain '// trim(par%bp_chain_list(chain_num+1))
+             write(*,*) ''
+             chain_num = chain_num + 1
+             bp_iter   = par%bp_burnin
+          end if
+          call swap_bp_maps(dang_data,par,bp_iter,par%bp_chain_list(chain_num))
+          write(*,*) ''
           bp_iter = bp_iter + 1
           call convert_maps_bp(par)
+          write(*,*) ''
           ! Check to see if any swapped maps need to be dust corrected
           do j = 1, nbands
              if ( par%bp_map(j)) then
@@ -177,14 +177,17 @@ program dang
                 end if
              end if
           end do
+          write(*,*) ''
        end if
+       ! -------------------------------------------------------------------------------------------------------------------
+
        ! -------------------------------------------------------------------------------------------------------------------
        if (par%joint_sample) then
           call sample_joint_amp(par,dang_data,comp,2,trim(solver),joint_poltype)
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+
              ! Extrapolating A_synch to bands
              if (ANY(par%joint_comp=='synch')) then
-                !write(*,*) 'Extrapolating A_synch to bands'
                 do i = 0, npix-1
                    do j = 1, nbands
                       dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
@@ -254,7 +257,7 @@ program dang
              if (rank == master) then
                 if (mod(iter, 1) == 0 .or. iter == 1) then
                    write(*,fmt='(i6, a, E10.3, a, f7.3, a, a, 7e10.3)')&
-                        iter, " - chisq: " , chisq, " - A_s: ", dang_data%fg_map(100,k,par%fg_ref_loc(1),1),& 
+                        iter, " - chisq: " , chisq, " - A_s: ", dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),& 
                         " Pol_type = " // trim(tqu(k)), ' - A_d ', dang_data%temp_amps(:,k,1)
                    write(*,fmt='(a)') '---------------------------------------------'
                 end if
@@ -301,7 +304,7 @@ program dang
              if (mod(iter, 1) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 7e10.3)')&
                      iter, " - chisq: " , chisq, " - A_s: ",&
-                     dang_data%fg_map(100,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
+                     dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
                      sum(comp%beta_s(:,k))/sum(dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
@@ -420,7 +423,7 @@ contains
 
         if (trim(mode) == 'comp_sep') then
 
-            title = trim(direct) // 'pixel_100_A_d_' // trim(tqu(k)) // '.dat'
+            title = trim(direct) // 'pixel_23000_A_d_' // trim(tqu(k)) // '.dat'
             inquire(file=title,exist=exist)
             if (exist) then
                 open(30,file=title, status="old",position="append", action="write")
@@ -428,27 +431,27 @@ contains
                 open(30,file=title, status="new", action="write")
                 write(30,*) 
             endif
-            write(30,*) dang_data%fg_map(100,k,par%fg_ref_loc(1),2)
+            write(30,*) dang_data%fg_map(23000,k,par%fg_ref_loc(1),2)
             close(30)
 
-            title = trim(direct) // 'pixel_100_A_s_' // trim(tqu(k)) // '.dat'
+            title = trim(direct) // 'pixel_23000_A_s_' // trim(tqu(k)) // '.dat'
             inquire(file=title,exist=exist)
             if (exist) then
                 open(31,file=title, status="old",position="append", action="write")
             else
                 open(31,file=title, status="new", action="write")
             endif
-            write(31,*) dang_data%fg_map(100,k,par%fg_ref_loc(1),1)
+            write(31,*) dang_data%fg_map(23000,k,par%fg_ref_loc(1),1)
             close(31)
 
-            title = trim(direct) // 'pixel_100_beta_s_' // trim(tqu(k)) // '.dat'
+            title = trim(direct) // 'pixel_23000_beta_s_' // trim(tqu(k)) // '.dat'
             inquire(file=title,exist=exist)
             if (exist) then
                 open(32,file=title, status="old",position="append", action="write")
             else
                 open(32,file=title, status="new", action="write")
             endif
-            write(32,*) comp%beta_s(100,k)
+            write(32,*) comp%beta_s(23000,k)
             close(32)
 
             title = trim(direct) // 'total_chisq_' // trim(tqu(k)) // '.dat'

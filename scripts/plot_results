@@ -10,7 +10,7 @@ maskfile="${maskfile#\'}"
 maskfile=../$maskfile
 
 
-bands=("bp_030" "bp_044" "bp_070" "wmap_Ka" "wmap_Q" "wmap_V")
+bands=("bp_030" "bp_044" "bp_070" "wmap_Ka" "wmap_Q" "wmap_V" "wmap_K")
 
 for ((i=0; i<${#bands[@]}; i++)); do
     band=${bands[$i]}
@@ -25,6 +25,9 @@ for ((i=0; i<${#bands[@]}; i++)); do
     $me apply_mask ${name_U/.fits/_3deg.fits} $maskfile ${name_U/.fits/_3deg.fits}
     
 done
+
+$me apply_mask synch_Q_std.fits $maskfile synch_Q_std.fits
+$me apply_mask synch_U_std.fits $maskfile synch_U_std.fits
 
 $c3pp plot bp_030_residual_Q_mean.fits -bar -range 3 -title '${\langle r_{30} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot bp_030_residual_Q_mean_3deg.fits -bar -range 3 -title '${\langle r_{30} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
@@ -46,6 +49,11 @@ $c3pp plot wmap_Ka_residual_Q_mean_3deg.fits -bar -range 3 -title '${\langle r_{
 $c3pp plot wmap_Ka_residual_U_mean.fits -bar -range 3 -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot wmap_Ka_residual_U_mean_3deg.fits -bar -range 3 -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
 
+$c3pp plot wmap_K_residual_Q_mean.fits -bar -range 3 -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_K_residual_Q_mean_3deg.fits -bar -range 3 -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_K_residual_U_mean.fits -bar -range 3 -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_K_residual_U_mean_3deg.fits -bar -range 3 -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
 $c3pp plot wmap_Q_residual_Q_mean.fits -bar -range 3 -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot wmap_Q_residual_Q_mean_3deg.fits -bar -range 3 -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot wmap_Q_residual_U_mean.fits -bar -range 3 -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
@@ -62,7 +70,7 @@ $c3pp plot synch_U_mean.fits -bar -range 5 -title '$\langle A_s \rangle$' -ltitl
 $c3pp plot synch_Q_std.fits -bar -min 1.5 -max 2.5 -title '$\sigma_s$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot synch_U_std.fits -bar -min 1.5 -max 2.5 -title '$\sigma_s$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
 
-$c3pp plot chisq_Q_mean.fits -bar -min 0 -max 3 -title '$ \chi^2$' -ltitle '$Q$' -unit '$\chi^2$' 
-$c3pp plot chisq_U_mean.fits -bar -min 0 -max 3 -title '$ \chi^2$' -ltitle '$U$' -unit '$\chi^2$' 
+$c3pp plot chisq_Q_mean.fits -bar -min 0 -max 1 -title '$ \chi^2$' -ltitle '$Q$' -unit '$\chi^2$' 
+$c3pp plot chisq_U_mean.fits -bar -min 0 -max 1 -title '$ \chi^2$' -ltitle '$U$' -unit '$\chi^2$' 
 
 $c3pp plot synch_beta_mean.fits -bar -min -3.15 -max -3.05 -title '$\beta_{\rm s}$' -ltitle '$P$'

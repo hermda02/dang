@@ -57,7 +57,7 @@ contains
 
 
         if (rank == master) then
-           write(*,fmt='(a)') 'Starting joint sampling for synch and dust_template.'
+           !write(*,fmt='(a)') 'Starting joint sampling for synch and dust_template.'
            !write(*,fmt='(a)') 'Pol_type = ', trim(poltype(:))
            t1 = mpi_wtime()
         end if
@@ -452,7 +452,7 @@ contains
            write(*,fmt='(a,f10.3,a)') 'Joint Sampler completed in ', t3-t1, 's.'
         end if
 
-        write(*,*) 'Exit joint_sampler'
+        write(*,*) ''
 
         ! Sure to deallocate all arrays here to free up memory
         deallocate(b)

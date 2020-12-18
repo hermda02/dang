@@ -14,10 +14,11 @@ module dang_swap_mod
 contains
 
 
-  subroutine swap_bp_maps(dat,param,iteration)
+  subroutine swap_bp_maps(dat,param,iteration,chain)
     type(params)                                    :: param
-    type(data),                intent(inout)        :: dat
-    integer(i4b),              intent(in)           :: iteration
+    type(data),                       intent(inout) :: dat
+    integer(i4b),                     intent(in)    :: iteration
+    character(len=512),               intent(in)    :: chain
     character(len=300), allocatable, dimension(:,:) :: bp_maps
     integer(i4b)                                    :: i, j
     character(len=6)                                :: iter_str
@@ -31,9 +32,11 @@ contains
 
     do j = 1, param%numband
        if (param%bp_map(j)) then
-          bp_maps(j,1) = trim(param%bp_dir) // trim(param%dat_label(j))//'_map_n0064_60arcmin_k'//trim(iter_str)  // '.fits'
-          bp_maps(j,2) = trim(param%bp_dir) // trim(param%dat_label(j))//'_rms_n0064_60arcmin_k'//trim(iter_str) // '.fits'
+          bp_maps(j,1) = trim(param%bp_dir) // trim(param%dat_label(j))//'_map_'//trim(chain)//'_n0064_60arcmin_k'//trim(iter_str)  // '.fits'
+          bp_maps(j,2) = trim(param%bp_dir) // trim(param%dat_label(j))//'_rms_'//trim(chain)//'_n0064_60arcmin_k'//trim(iter_str) // '.fits'
           write(*,'(a,a,a)') 'Swapping band ', trim(param%dat_label(j)), '.'
+          !write(*,*) trim(bp_maps(j,1))
+          !write(*,*) trim(bp_maps(j,2))
           call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header)
           dat%sig_map(:,:,j) = map
           call read_bintab(trim(bp_maps(j,2)),rms,dat%npix,3,nullval,anynull,header=header)
