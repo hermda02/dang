@@ -307,7 +307,7 @@ program dang
                 write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 7e10.3)')&
                      iter, " - chisq: " , chisq, " - A_s: ",&
                      dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                     sum(comp%beta_s(:,k))/sum(dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)
+                     mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
              if (mod(iter,output_iter) .EQ. 0) then
@@ -602,7 +602,24 @@ contains
     end subroutine convert_maps_bp
 
     function mask_avg(array,mask)
-      real(dp), allocatable, dimension(:), intent(in) :: array
-      real(dp), allocatable, dimension(:), intent(in) ::
+      real(dp), dimension(:), intent(in) :: array
+      real(dp), dimension(:), intent(in) :: mask
+      real(dp)                           :: sum, mask_avg
+      integer(i4b)                       :: mask_sum
 
+      sum = 0.d0
+      mask_sum = 0
+
+      do i = 1, npix
+         if (mask(i) == missval) then
+            cycle
+         else
+            sum      = sum + array(i)
+            mask_sum = mask_sum + 1
+         end if
+      end do
+
+      mask_avg = sum/mask_sum
+     
+    end function mask_avg
   end program dang
