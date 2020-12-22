@@ -67,13 +67,14 @@ contains
     real(dp), optional             :: param
     real(dp)                       :: z, compute_spectrum
     
+    !if (trim(self%fg_label(ind)) == 'power-law') then
     if (ind == 1) then
-       if (present(param)) then
+      if (present(param)) then
           compute_spectrum = (freq/self%fg_nu_ref(ind))**param
        else 
           compute_spectrum = (freq/self%fg_nu_ref(ind))**comp%beta_s(pix,mapn)
        end if
-!    else if (trim(self%fg_label(ind)) == 'mbb') then
+    !else if (trim(self%fg_label(ind)) == 'mbb') then
     else if (ind == 2) then
        z = h / (k_B*comp%T_d(pix,mapn))
 !       compute_spectrum = (exp(z*self%fg_nu_ref(ind)*1d9)-1.d0) / &

@@ -120,6 +120,11 @@ program dang
 
     write(*,*) 'Reading MASKFILE'
     call read_bintab(par%mask_file,dang_data%masks,npix,1,nullval,anynull,header=header)
+    do i = 0, npix-1
+       do j = 1, nmaps
+          if (dang_data%masks(i,j) == 0.d0) dang_data%masks(i,j) = missval
+       end do
+    end do
     write(*,*) ''
 
     ! Read maps in
@@ -242,6 +247,7 @@ program dang
        end if
 
        ! -------------------------------------------------------------------------------------------------------------------
+       ! For sampling foreground amplitudes individually
        ! -------------------------------------------------------------------------------------------------------------------
        if (par%fg_samp_amp(1)) then
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
@@ -273,13 +279,9 @@ program dang
              synchonly(:,:,:) = dang_data%sig_map(:,:,:)-dang_data%fg_map(:,:,:,i+1)
           end do
           call sample_index(par,comp,dang_data,synchonly,par%fg_samp_nside(1,1),1,-1)
-          !call write_bintab(comp%beta_s,npix,3,header,nlheader,trim(direct)//'synch_beta.fits')
           do i = 0, npix-1
-             comp%beta_s(i,:) = comp%beta_s(i,:)*dang_data%masks(i,1)
+             comp%beta_s(i,:) = comp%beta_s(i,:)!*dang_data%masks(i,1)
           end do
-          !call write_bintab(comp%beta_s,npix,3,header,nlheader,trim(direct)//'synch_beta_mask.fits')
-          !call write_bintab(dang_data%masks,npix,1,header,nlheader,trim(direct)//'mask.fits')
-          !stop
           do i = 0, npix-1
              do j = 1, nbands
                 do k = par%pol_type(1), par%pol_type(size(par%pol_type))
@@ -512,20 +514,21 @@ contains
       real(dp),                                     intent(inout) :: chisq
       real(dp)                                                    :: s, signal
       integer(i4b)                                                :: i,j,w
-  
+ 
       if (trim(mode) == 'comp_sep') then
 
         chisq = 0.d0
         do i = 0, npix-1
-            do j = 1, nbands
-               s = 0.d0
-               do w = 1, nfgs
-                  signal = dang_data%fg_map(i,map_n,j,w)
-                  s = s + signal
-               end do
-               chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)*dang_data%masks(i,1)
-            end do
-        end do 
+           if (dang_data%masks(i,1) == missval) cycle
+           do j = 1, nbands
+              s = 0.d0
+              do w = 1, nfgs
+                 signal = dang_data%fg_map(i,map_n,j,w)
+                 s = s + signal
+              end do
+              chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)!*mask(i,1)
+           end do
+        end do
         chisq = chisq/(npix+nbands+nfgs)
 
     else if (trim(mode) == 'HI_fit') then
@@ -597,5 +600,9 @@ contains
       end do
       
     end subroutine convert_maps_bp
+
+    function mask_avg(array,mask)
+      real(dp), allocatable, dimension(:), intent(in) :: array
+      real(dp), allocatable, dimension(:), intent(in) ::
 
   end program dang
