@@ -67,10 +67,10 @@ $c3pp plot wmap_V_residual_U_mean_3deg.fits -bar -range 3 -title '${\langle r_{\
 $c3pp plot synch_Q_mean.fits -bar -range 5 -title '$\langle A_s \rangle$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot synch_U_mean.fits -bar -range 5 -title '$\langle A_s \rangle$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
 
-$c3pp plot synch_Q_std.fits -bar -min 1.5 -max 2.5 -title '$\sigma_s$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
-$c3pp plot synch_U_std.fits -bar -min 1.5 -max 2.5 -title '$\sigma_s$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot synch_Q_std.fits -bar -min 0.0 -max 2.5 -title '$\sigma_s$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot synch_U_std.fits -bar -min 0.0 -max 2.5 -title '$\sigma_s$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
 
-$c3pp plot chisq_Q_mean.fits -bar -min 0 -max 1 -title '$ \chi^2$' -ltitle '$Q$' -unit '$\chi^2$' 
-$c3pp plot chisq_U_mean.fits -bar -min 0 -max 1 -title '$ \chi^2$' -ltitle '$U$' -unit '$\chi^2$' 
+$c3pp plot chisq_Q_mean.fits -bar -min 0 -max 2 -title '$ \chi^2$' -ltitle '$Q$' -unit '$\chi^2$' 
+$c3pp plot chisq_U_mean.fits -bar -min 0 -max 2 -title '$ \chi^2$' -ltitle '$U$' -unit '$\chi^2$' 
 
 $c3pp plot synch_beta_mean.fits -bar -min -3.15 -max -3.05 -title '$\beta_{\rm s}$' -ltitle '$P$'

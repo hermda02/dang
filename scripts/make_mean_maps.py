@@ -75,16 +75,19 @@ def read_params(filename):
                     fre  = str.strip(line.split('=')[1])
                     freq.append(float(fre))
     return labels, freq, numgibbs
-    
-dir = sys.argv[1] #str(input('Which directory to mean? '))
 
-files = os.listdir('../'+dir)
+try:    
+    dir = sys.argv[1] #str(input('Which directory to mean? '))
+    files = os.listdir('../'+dir)
+    names, freq, num_samp = read_params('../'+dir+'/param_'+dir+'.txt')
+    labels = [name.replace("'","") for name in names]
+    num_bands = len(freq)
+    print(labels)
+    print(freq)
 
-names, freq, num_samp = read_params('../'+dir+'/param_'+dir+'.txt')
-labels = [name.replace("'","") for name in names]
-num_bands = len(freq)
-print(labels)
-print(freq)
+except:
+    print("Input which directory you wish to point to (../ automatically included)")
+    exit()
 
 res_1_Q = []
 res_2_Q = []

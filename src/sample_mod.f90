@@ -559,6 +559,7 @@ contains
         real(dp), dimension(nbands)                            :: signal, tmp
         real(dp), dimension(2)                                 :: x
         real(dp)                                               :: a, b, c, num, sam, t, p, sol
+        real(dp)                                               :: time1, time2
 
         real(dp)                                               :: naccept   
         logical                                                :: exist
@@ -585,6 +586,8 @@ contains
                 write(*,fmt='(a,i4)') 'Sampling ' // trim(self%fg_label(ind)) // ' beta at nside', nside2
             end if
         end if
+
+        time1 = mpi_wtime()
 
         !------------------------------------------------------------------------
         ! Check to see if the data nside is the same as the sampling nside
@@ -797,6 +800,17 @@ contains
               comp%beta_d(:,k) = indx_sample
            end if
         end if
+
+        time2 = mpi_wtime()
+
+        write(*,*) ''
+        if (rank == master) then
+           time2 = mpi_wtime()
+           write(*,fmt='(a,f10.3,a)') 'Spectral index sampler completed in ', time2-time1, 's.'
+        end if
+
+        write(*,*) ''
+
         deallocate(data_low)
         deallocate(fg_map_low)
         deallocate(indx_low)
