@@ -10,7 +10,7 @@ maskfile="${maskfile#\'}"
 maskfile=../$maskfile
 
 
-bands=("bp_030" "bp_044" "bp_070" "wmap_Ka" "wmap_Q" "wmap_V" "wmap_K")
+bands=("bp_030" "bp_044" "bp_070" "wmap_Ka" "wmap_Q" "wmap_V" "wmap_K" "s-pass")
 
 for ((i=0; i<${#bands[@]}; i++)); do
     band=${bands[$i]}
@@ -43,6 +43,11 @@ $c3pp plot bp_070_residual_Q_mean.fits -bar -range 3 -title '${\langle r_{70} \r
 $c3pp plot bp_070_residual_Q_mean_3deg.fits -bar -range 3 -title '${\langle r_{70} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot bp_070_residual_U_mean.fits -bar -range 3 -title '${\langle r_{70} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot bp_070_residual_U_mean_3deg.fits -bar -range 3 -title '${\langle r_{70} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot s-pass_residual_Q_mean.fits -bar -range 1e2 -title '${\langle r_{SPASS} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot s-pass_residual_Q_mean_3deg.fits -bar -range 1e2 -title '${\langle r_{SPASS} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot s-pass_residual_U_mean.fits -bar -range 1e2 -title '${\langle r_{SPASS} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot s-pass_residual_U_mean_3deg.fits -bar -range 1e2 -title '${\langle r_{SPASS} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
 
 $c3pp plot wmap_Ka_residual_Q_mean.fits -bar -range 3 -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
 $c3pp plot wmap_Ka_residual_Q_mean_3deg.fits -bar -range 3 -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
