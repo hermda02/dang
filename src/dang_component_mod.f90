@@ -8,7 +8,7 @@ module dang_component_mod
   type, public                              :: component
      
      character(len=32), allocatable, dimension(:) :: joint
-     real(dp), allocatable, dimension(:,:)        :: beta_s, beta_d, T_d
+     real(dp), allocatable, dimension(:,:)        :: beta_s, beta_d, T_d, HI
 
   end type component
 
@@ -21,7 +21,7 @@ contains
     integer(i4b), intent(in)      :: npix, nmaps
     
     allocate(self%beta_s(0:npix-1,nmaps))
-    write(*,*) 'allocated synch'
+    write(*,*) 'Allocated synch maps'
     if (trim(param%fg_spec_map(1,1)) == 'none') then 
        self%beta_s     = param%fg_gauss(1,1,1) ! Synchrotron beta initial guess
     else
@@ -38,12 +38,27 @@ contains
     
     allocate(self%beta_d(0:npix-1,nmaps))
     allocate(self%T_d(0:npix-1,nmaps))
-    write(*,*) 'allocated dust'
+    write(*,*) 'Allocated dust maps!'
 
     self%beta_d     = 1.53d0              ! Dust beta initial guess
     self%T_d        = 19.6d0
     
   end subroutine init_dust
+
+  subroutine init_hi_fit(self, param, npix)
+    implicit none
+    type(component)          :: self
+    type(params)             :: param
+    integer(i4b), intent(in) :: npix
+
+    allocate(self%HI(0:npix-1,1))
+    allocate(self%T_d(0:npix-1,nmaps))
+    write(*,*) 'Allocated HI fitting maps!'
+
+    !call read_bintab(
+
+
+  end subroutine init_hi_fit
   
   function planck(fre,T)
     implicit none

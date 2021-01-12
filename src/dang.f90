@@ -158,6 +158,17 @@ program dang
     dang_data%fg_map    = 0.0
     dang_data%temp_amps = 0.0
 
+
+    if (trim(par%mode) == 'comp_sep') call comp_sep
+     if (trim(par%mode) == 'hi_fit') call hi_fit 
+       
+contains
+
+    !----------------------------------------------------------------------------------------------------------
+    ! Functions and subroutines
+    !----------------------------------------------------------------------------------------------------------
+
+  subroutine comp_sep
     do iter = 1, niter
        
        ! ------------ BP SWAP CHUNK ------------------------------------------------------------------
@@ -319,312 +330,312 @@ program dang
        write(*,*) ''
     end do
     call mpi_finalize(ierr)
+  end subroutine comp_sep
+
+  subroutine hi_fit
+    do iter = 1, niter
        
-contains
 
-    !----------------------------------------------------------------------------------------------------------
-    ! Functions and subroutines
-    !----------------------------------------------------------------------------------------------------------
+    end do
+  end subroutine hi_fit
 
-
-    subroutine write_maps(nm,mode)
-      implicit none
-
-      integer(i4b), intent(in)          :: nm
-      character(len=16), intent(in)     :: mode
-      real(dp), dimension(0:npix-1,1)   :: map
-      real(dp)                          :: s, signal
-      integer(i4b)                      :: n
-
-      write(*,*) 'Output data maps'
-
-      if (trim(mode) == 'comp_sep') then
-         
-         write(iter_str, '(i0.5)') iter
-         if (output_fg .eqv. .true.) then
-            do j = 1, nbands
-               do i = 1, par%ntemp
-                  title = trim(direct) // trim(par%dat_label(j)) //'_'// trim(par%temp_label(i)) //&
-                       '_'// trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
-                  map(:,1)   = dang_data%fg_map(:,nm,j,i+1)
-                  do n = 0, npix-1
-                     if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-                        map(n,1) = missval
-                     end if
-                  end do
-                  call write_bintab(map,npix,1, header, nlheader, trim(title))
-               end do
-               title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
-                    // '_' // trim(iter_str) // '.fits'
-               map(:,1)   = dang_data%fg_map(:,nm,j,1)
-               do n = 0, npix-1
-                  if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-                     map(n,1) = missval
-                  end if
-               end do
-               call write_bintab(map,npix,1, header, nlheader, trim(title))
-            end do
-         else 
-            title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
-                 // '_' // trim(iter_str) // '.fits'
-            map(:,1)   = dang_data%fg_map(:,nm,par%fg_ref_loc(1),1)
-            do n = 0, npix-1
-               if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-                  map(n,1) = missval
-               end if
-            end do
-            call write_bintab(map,npix,1, header, nlheader, trim(title))
-         end if
-         do j = 1, nbands
-            title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
-                 // '_' // trim(iter_str) // '.fits'
-            map(:,1)   = dang_data%res_map(:,nm,j)
-            do n = 0, npix-1
-               if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-                  map(n,1) = missval
-               end if
-            end do
-            call write_bintab(map,npix,1, header, nlheader, trim(title))
-         end do
-         title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
-         map(:,1)   = comp%beta_s(:,nm)
-         do n = 0, npix-1
-            if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-               map(n,1) = missval
-            end if
-         end do
-         call write_bintab(map,npix,1, header, nlheader, trim(title))
-         dang_data%chi_map = 0.d0
-         do i = 0, npix-1
-            do j = 1, nbands
-               s      = 0.d0
-               do l = 1, nfgs
-                  signal = dang_data%fg_map(i,nm,j,l)
-                  s      = s + signal
-               end do
-               dang_data%chi_map(i,nm) = dang_data%chi_map(i,nm) + dang_data%masks(i,1)*(dang_data%sig_map(i,nm,j) - s)**2.d0/dang_data%rms_map(i,nm,j)**2.d0
-            end do
-         end do
-         dang_data%chi_map(:,nm) = dang_data%chi_map(:,nm)/(nbands+nfgs)
-         title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
-         map(:,1)   = dang_data%chi_map(:,nm)
-         do n = 0, npix-1
-            if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-               map(n,1) = missval
-            end if
-         end do
-         call write_bintab(map,npix,1, header, nlheader, trim(title))
-      end if
-
-    end subroutine write_maps
-
-    subroutine write_data(mode)
-        implicit none
-        character(len=16), intent(in) :: mode
-        character(len=2)              :: temp_n
-
-        if (trim(mode) == 'comp_sep') then
-
-            title = trim(direct) // 'pixel_23000_A_d_' // trim(tqu(k)) // '.dat'
-            inquire(file=title,exist=exist)
-            if (exist) then
-                open(30,file=title, status="old",position="append", action="write")
-            else
-                open(30,file=title, status="new", action="write")
-                write(30,*) 
-            endif
-            write(30,*) dang_data%fg_map(23000,k,par%fg_ref_loc(1),2)
-            close(30)
-
-            title = trim(direct) // 'pixel_23000_A_s_' // trim(tqu(k)) // '.dat'
-            inquire(file=title,exist=exist)
-            if (exist) then
-                open(31,file=title, status="old",position="append", action="write")
-            else
-                open(31,file=title, status="new", action="write")
-            endif
-            write(31,*) dang_data%fg_map(23000,k,par%fg_ref_loc(1),1)
-            close(31)
-
-            title = trim(direct) // 'pixel_23000_beta_s_' // trim(tqu(k)) // '.dat'
-            inquire(file=title,exist=exist)
-            if (exist) then
-                open(32,file=title, status="old",position="append", action="write")
-            else
-                open(32,file=title, status="new", action="write")
-            endif
-            write(32,*) comp%beta_s(23000,k)
-            close(32)
-
-            title = trim(direct) // 'total_chisq_' // trim(tqu(k)) // '.dat'
-            inquire(file=title,exist=exist)
-            if (exist) then
-                open(33,file=title, status="old",position="append", action="write")
-            else
-                open(33,file=title, status="new", action="write")
-            endif
-            call compute_chisq(k,chisq,par%mode)
-            write(33,*) chisq
-            close(33)
-
-            do i = 1, par%ntemp
-               title = trim(direct) //  trim(par%temp_label(i)) // '_' //trim(tqu(k)) // '_amplitudes.dat'
-               inquire(file=title,exist=exist)
-               if (exist) then
-                  open(34,file=title, status="old", &
-                       position="append", action="write")
-               else
-                  open(34,file=title, status="new", action="write")
-               endif
-               write(34,'(10(E17.8))') dang_data%temp_amps(:,k,i)
-               close(34)
-            end do
-
-        else if (trim(mode) == 'HI_fit') then
-            title = trim(direct)//'HI_amplitudes.dat'
-            inquire(file=title,exist=exist)
-            if (exist) then
-                open(35,file=title,status="old",position="append",action="write") 
-            else
-                open(35,file=title,status="new",action="write")
-            end if
-            write(35,'(6(E17.8))')
-            close(35)
-
-            title = trim(direct)//'HI_chisq.dat'
-            inquire(file=title,exist=exist)
-            if (exist) then
-                open(36,file=title,status="old",position="append",action="write") 
-            else
-                open(36,file=title,status="new",action="write")
-            end if
-            call compute_chisq(k,chisq,par%mode)
-            write(36,'(E17.8)') chisq
-            close(36)
-
-        end if
-
-    end subroutine write_data
-  
-    subroutine compute_chisq(map_n,chisq,mode)
-      use healpix_types
-      implicit none
-      integer(i4b),                                 intent(in)    :: map_n
-      character(len=16),                            intent(in)    :: mode
-      real(dp),                                     intent(inout) :: chisq
-      real(dp)                                                    :: s, signal
-      integer(i4b)                                                :: i,j,w
- 
-      if (trim(mode) == 'comp_sep') then
-
-        chisq = 0.d0
-        do i = 0, npix-1
-           if (dang_data%masks(i,1) == missval) cycle
-           do j = 1, nbands
-              s = 0.d0
-              do w = 1, nfgs
-                 signal = dang_data%fg_map(i,map_n,j,w)
-                 s = s + signal
-              end do
-              chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)!*mask(i,1)
-           end do
-        end do
-        chisq = chisq/(npix+nbands+nfgs)
-
-    else if (trim(mode) == 'HI_fit') then
-        chisq = 0.d0
-        do i = 0, npix-1
-            if (HI(i,1) > par%thresh) then
-                cycle
-            else
-                do j = 1, nbands    
-                    ! s = temp01_amps(j)*HI(i,1)*planck(par%dat_nu(j)*1.d9,T_d(i,1))
-                    ! chisq = chisq + (dang_data%sig_map(i,map_n,j)-s)**2.d0/(dang_data%rms_map(i,map_n,j)**2.d0)*mask(i,1)
-                    chisq = chisq + (res(i,map_n,j))**2.d0/(dang_data%rms_map(i,map_n,j)**2.d0)
+  subroutine write_maps(nm,mode)
+    implicit none
+    
+    integer(i4b), intent(in)          :: nm
+    character(len=16), intent(in)     :: mode
+    real(dp), dimension(0:npix-1,1)   :: map
+    real(dp)                          :: s, signal
+    integer(i4b)                      :: n
+    
+    write(*,*) 'Output data maps'
+    
+    if (trim(mode) == 'comp_sep') then
+       
+       write(iter_str, '(i0.5)') iter
+       if (output_fg .eqv. .true.) then
+          do j = 1, nbands
+             do i = 1, par%ntemp
+                title = trim(direct) // trim(par%dat_label(j)) //'_'// trim(par%temp_label(i)) //&
+                     '_'// trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
+                map(:,1)   = dang_data%fg_map(:,nm,j,i+1)
+                do n = 0, npix-1
+                   if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+                      map(n,1) = missval
+                   end if
                 end do
-            end if
-        end do
-        chisq = chisq/(n2fit+1)
+                call write_bintab(map,npix,1, header, nlheader, trim(title))
+             end do
+             title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
+                  // '_' // trim(iter_str) // '.fits'
+             map(:,1)   = dang_data%fg_map(:,nm,j,1)
+             do n = 0, npix-1
+                if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+                   map(n,1) = missval
+                end if
+             end do
+             call write_bintab(map,npix,1, header, nlheader, trim(title))
+          end do
+       else 
+          title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
+               // '_' // trim(iter_str) // '.fits'
+          map(:,1)   = dang_data%fg_map(:,nm,par%fg_ref_loc(1),1)
+          do n = 0, npix-1
+             if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+                map(n,1) = missval
+             end if
+          end do
+          call write_bintab(map,npix,1, header, nlheader, trim(title))
+       end if
+       do j = 1, nbands
+          title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
+               // '_' // trim(iter_str) // '.fits'
+          map(:,1)   = dang_data%res_map(:,nm,j)
+          do n = 0, npix-1
+             if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+                map(n,1) = missval
+             end if
+          end do
+          call write_bintab(map,npix,1, header, nlheader, trim(title))
+       end do
+       title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
+       map(:,1)   = comp%beta_s(:,nm)
+       do n = 0, npix-1
+          if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+             map(n,1) = missval
+          end if
+       end do
+       call write_bintab(map,npix,1, header, nlheader, trim(title))
+       dang_data%chi_map = 0.d0
+       do i = 0, npix-1
+          do j = 1, nbands
+             s      = 0.d0
+             do l = 1, nfgs
+                signal = dang_data%fg_map(i,nm,j,l)
+                s      = s + signal
+             end do
+             dang_data%chi_map(i,nm) = dang_data%chi_map(i,nm) + dang_data%masks(i,1)*(dang_data%sig_map(i,nm,j) - s)**2.d0/dang_data%rms_map(i,nm,j)**2.d0
+          end do
+       end do
+       dang_data%chi_map(:,nm) = dang_data%chi_map(:,nm)/(nbands+nfgs)
+       title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
+       map(:,1)   = dang_data%chi_map(:,nm)
+       do n = 0, npix-1
+          if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
+             map(n,1) = missval
+          end if
+       end do
+       call write_bintab(map,npix,1, header, nlheader, trim(title))
     end if
-
-    end subroutine compute_chisq
-
-    subroutine convert_maps(self)
-      implicit none
-      type(params), intent(inout) :: self
-      real(dp)                    :: cmb_to_rj, y
-      
-      do j = 1, nbands
-         if (.not. par%bp_map(j)) then
-            if (trim(self%dat_unit(j)) == 'uK_RJ') then
-               cycle
-            else if (trim(self%dat_unit(j)) == 'uK_cmb') then
-               write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from uK_cmb to uK_RJ.'
-               y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
-               cmb_to_rj   = (y**2.d0*exp(y))/(exp(y)-1)**2.d0
-               dang_data%sig_map(:,:,j) = cmb_to_rj*dang_data%sig_map(:,:,j)
-            else if (trim(self%dat_unit(j)) == 'MJy/sr') then
-               write(*,*) 'Unit conversion not for MJy/sr not added!'
-               stop
-            else
-               write(*,*) 'Not a unit, dumbass!'
-               stop
-            end if
-         end if
-      end do
-      
-    end subroutine convert_maps
-
-    subroutine convert_maps_bp(self)
-      implicit none
-      type(params), intent(inout) :: self
-      real(dp)                    :: cmb_to_rj, y
-      real(dp)                    :: mjy_to_rj
-      
-      do j = 1, nbands
-         if (par%bp_map(j)) then
-            if (trim(self%dat_unit(j)) == 'uK_RJ') then
-               cycle
-            else if (trim(self%dat_unit(j)) == 'uK_cmb') then
-               write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from uK_cmb to uK_RJ.'
-               y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
-               cmb_to_rj   = (y**2.d0*exp(y))/(exp(y)-1)**2.d0
-               dang_data%sig_map(:,:,j) = cmb_to_rj*dang_data%sig_map(:,:,j)
-            else if (trim(self%dat_unit(j)) == 'MJy/sr') then
-               y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
-               mjy_to_rj   = 1.0/(1e14*(2.0*h*(self%dat_nu(j)*1.0d9)**3.d0/&
-                    &(c**2.d0*(exp(y)-1)))*(exp(y)/(exp(y)-1.d0))*(h*(self%dat_nu(j)*1.0d9))/(k_B*T_CMB**2.d0))
-               dang_data%sig_map(:,:,j) = mjy_to_rj*dang_data%sig_map(:,:,j)
-               write(*,*) 'Unit conversion not for MJy/sr not added!'
-               stop
-            else
-               write(*,*) 'Not a unit, dumbass!'
-               stop
-            end if
-         end if
-      end do
-      
-    end subroutine convert_maps_bp
-
-    function mask_avg(array,mask)
-      real(dp), dimension(:), intent(in) :: array
-      real(dp), dimension(:), intent(in) :: mask
-      real(dp)                           :: sum, mask_avg
-      integer(i4b)                       :: mask_sum
-
-      sum = 0.d0
-      mask_sum = 0
-
-      do i = 1, npix
-         if (mask(i) == missval) then
-            cycle
-         else
-            sum      = sum + array(i)
-            mask_sum = mask_sum + 1
-         end if
-      end do
-
-      mask_avg = sum/mask_sum
-     
-    end function mask_avg
-  end program dang
+    
+  end subroutine write_maps
+  
+  subroutine write_data(mode)
+    implicit none
+    character(len=16), intent(in) :: mode
+    character(len=2)              :: temp_n
+    
+    if (trim(mode) == 'comp_sep') then
+       
+       title = trim(direct) // 'pixel_23000_A_d_' // trim(tqu(k)) // '.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(30,file=title, status="old",position="append", action="write")
+       else
+          open(30,file=title, status="new", action="write")
+          write(30,*) 
+       endif
+       write(30,*) dang_data%fg_map(23000,k,par%fg_ref_loc(1),2)
+       close(30)
+       
+       title = trim(direct) // 'pixel_23000_A_s_' // trim(tqu(k)) // '.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(31,file=title, status="old",position="append", action="write")
+       else
+          open(31,file=title, status="new", action="write")
+       endif
+       write(31,*) dang_data%fg_map(23000,k,par%fg_ref_loc(1),1)
+       close(31)
+       
+       title = trim(direct) // 'pixel_23000_beta_s_' // trim(tqu(k)) // '.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(32,file=title, status="old",position="append", action="write")
+       else
+          open(32,file=title, status="new", action="write")
+       endif
+       write(32,*) comp%beta_s(23000,k)
+       close(32)
+       
+       title = trim(direct) // 'total_chisq_' // trim(tqu(k)) // '.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(33,file=title, status="old",position="append", action="write")
+       else
+          open(33,file=title, status="new", action="write")
+       endif
+       call compute_chisq(k,chisq,par%mode)
+       write(33,*) chisq
+       close(33)
+       
+       do i = 1, par%ntemp
+          title = trim(direct) //  trim(par%temp_label(i)) // '_' //trim(tqu(k)) // '_amplitudes.dat'
+          inquire(file=title,exist=exist)
+          if (exist) then
+             open(34,file=title, status="old", &
+                  position="append", action="write")
+          else
+             open(34,file=title, status="new", action="write")
+          endif
+          write(34,'(10(E17.8))') dang_data%temp_amps(:,k,i)
+          close(34)
+       end do
+       
+    else if (trim(mode) == 'HI_fit') then
+       title = trim(direct)//'HI_amplitudes.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(35,file=title,status="old",position="append",action="write") 
+       else
+          open(35,file=title,status="new",action="write")
+       end if
+       write(35,'(6(E17.8))')
+       close(35)
+       
+       title = trim(direct)//'HI_chisq.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(36,file=title,status="old",position="append",action="write") 
+       else
+          open(36,file=title,status="new",action="write")
+       end if
+       call compute_chisq(k,chisq,par%mode)
+       write(36,'(E17.8)') chisq
+       close(36)
+       
+    end if
+    
+  end subroutine write_data
+  
+  subroutine compute_chisq(map_n,chisq,mode)
+    use healpix_types
+    implicit none
+    integer(i4b),                                 intent(in)    :: map_n
+    character(len=16),                            intent(in)    :: mode
+    real(dp),                                     intent(inout) :: chisq
+    real(dp)                                                    :: s, signal
+    integer(i4b)                                                :: i,j,w
+    
+    if (trim(mode) == 'comp_sep') then
+       
+       chisq = 0.d0
+       do i = 0, npix-1
+          if (dang_data%masks(i,1) == missval) cycle
+          do j = 1, nbands
+             s = 0.d0
+             do w = 1, nfgs
+                signal = dang_data%fg_map(i,map_n,j,w)
+                s = s + signal
+             end do
+             chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)
+          end do
+       end do
+       chisq = chisq/(npix+nbands+nfgs)
+       
+    else if (trim(mode) == 'HI_fit') then
+       chisq = 0.d0
+       do i = 0, npix-1
+          if (HI(i,1) > par%thresh) then
+             cycle
+          else
+             do j = 1, nbands    
+                chisq = chisq + (res(i,map_n,j))**2.d0/(dang_data%rms_map(i,map_n,j)**2.d0)
+             end do
+          end if
+       end do
+       chisq = chisq/(n2fit+1)
+    end if
+    
+  end subroutine compute_chisq
+  
+  subroutine convert_maps(self)
+    implicit none
+    type(params), intent(inout) :: self
+    real(dp)                    :: cmb_to_rj, y
+    real(dp)                    :: mjy_to_rj
+    
+    do j = 1, nbands
+       if (.not. par%bp_map(j)) then
+          if (trim(self%dat_unit(j)) == 'uK_RJ') then
+             cycle
+          else if (trim(self%dat_unit(j)) == 'uK_cmb') then
+             write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from uK_cmb to uK_RJ.'
+             y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
+             cmb_to_rj   = (y**2.d0*exp(y))/(exp(y)-1)**2.d0
+             dang_data%sig_map(:,:,j) = cmb_to_rj*dang_data%sig_map(:,:,j)
+          else if (trim(self%dat_unit(j)) == 'MJy/sr') then
+             y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
+             mjy_to_rj   = 1.0/(1e14*(2.0*h*(self%dat_nu(j)*1.0d9)**3.d0/&
+                  &(c**2.d0*(exp(y)-1)))*(exp(y)/(exp(y)-1.d0))*(h*(self%dat_nu(j)*1.0d9))/(k_B*T_CMB**2.d0))
+             dang_data%sig_map(:,:,j) = mjy_to_rj*dang_data%sig_map(:,:,j)
+          else
+             write(*,*) 'Not a unit, dumbass!'
+             stop
+          end if
+       end if
+    end do
+    
+  end subroutine convert_maps
+  
+  subroutine convert_maps_bp(self)
+    implicit none
+    type(params), intent(inout) :: self
+    real(dp)                    :: cmb_to_rj, y
+    real(dp)                    :: mjy_to_rj
+    
+    do j = 1, nbands
+       if (par%bp_map(j)) then
+          if (trim(self%dat_unit(j)) == 'uK_RJ') then
+             cycle
+          else if (trim(self%dat_unit(j)) == 'uK_cmb') then
+             write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from uK_cmb to uK_RJ.'
+             y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
+             cmb_to_rj   = (y**2.d0*exp(y))/(exp(y)-1)**2.d0
+             dang_data%sig_map(:,:,j) = cmb_to_rj*dang_data%sig_map(:,:,j)
+          else if (trim(self%dat_unit(j)) == 'MJy/sr') then
+             y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
+             mjy_to_rj   = 1.0/(1e14*(2.0*h*(self%dat_nu(j)*1.0d9)**3.d0/&
+                  &(c**2.d0*(exp(y)-1)))*(exp(y)/(exp(y)-1.d0))*(h*(self%dat_nu(j)*1.0d9))/(k_B*T_CMB**2.d0))
+             dang_data%sig_map(:,:,j) = mjy_to_rj*dang_data%sig_map(:,:,j)
+          else
+             write(*,*) 'Not a unit, dumbass!'
+             stop
+          end if
+       end if
+    end do
+    
+  end subroutine convert_maps_bp
+  
+  function mask_avg(array,mask)
+    real(dp), dimension(:), intent(in) :: array
+    real(dp), dimension(:), intent(in) :: mask
+    real(dp)                           :: sum, mask_avg
+    integer(i4b)                       :: mask_sum
+    
+    sum = 0.d0
+    mask_sum = 0
+    
+    do i = 1, npix
+       if (mask(i) == missval) then
+          cycle
+       else
+          sum      = sum + array(i)
+          mask_sum = mask_sum + 1
+       end if
+    end do
+    
+    mask_avg = sum/mask_sum
+    
+  end function mask_avg
+end program dang
