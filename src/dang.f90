@@ -9,7 +9,7 @@ program dang
     use linalg_mod
     use dang_data_mod
     use dang_component_mod
-    use sample_mod
+    use dang_sample_mod
     use dang_swap_mod
     implicit none
   

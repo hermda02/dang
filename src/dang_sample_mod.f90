@@ -1,4 +1,4 @@
-module sample_mod
+module dang_sample_mod
     use healpix_types
     use pix_tools
     use fitstools
@@ -944,4 +944,4 @@ contains
     end subroutine sample_HI_T
     ! ------------------------------------------------------------
 
-end module sample_mod
+end module dang_sample_mod
