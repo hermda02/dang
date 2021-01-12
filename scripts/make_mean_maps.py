@@ -146,9 +146,9 @@ for file in files:
         if file.endswith('.fits'):
             res_7_Q.append(file)
 
-    if file.startswith(labels[7]+'_residual_Q'):
-        if file.endswith('.fits'):
-            res_8_Q.append(file)
+#    if file.startswith(labels[7]+'_residual_Q'):
+#        if file.endswith('.fits'):
+#            res_8_Q.append(file)
 
     # Residuals U
     
@@ -180,9 +180,9 @@ for file in files:
         if file.endswith('.fits'):
             res_7_U.append(file)
             
-    if file.startswith(labels[7]+'_residual_U'):
-        if file.endswith('.fits'):
-            res_8_U.append(file)
+    # if file.startswith(labels[7]+'_residual_U'):
+    #     if file.endswith('.fits'):
+    #         res_8_U.append(file)
             
     # Synch maps
             
@@ -220,6 +220,8 @@ return_mean_map(beta_ss,'synch_beta_mean.fits')
 return_std_map(synch_Qs,'synch_Q_std.fits')
 return_std_map(synch_Us,'synch_U_std.fits')
 
+return_std_map(beta_ss,'synch_beta_std.fits')
+
 return_mean_map(res_1_Q,labels[0]+'_residual_Q_mean.fits')
 return_mean_map(res_2_Q,labels[1]+'_residual_Q_mean.fits')
 return_mean_map(res_3_Q,labels[2]+'_residual_Q_mean.fits')
@@ -227,7 +229,7 @@ return_mean_map(res_4_Q,labels[3]+'_residual_Q_mean.fits')
 return_mean_map(res_5_Q,labels[4]+'_residual_Q_mean.fits')
 return_mean_map(res_6_Q,labels[5]+'_residual_Q_mean.fits')
 return_mean_map(res_7_Q,labels[6]+'_residual_Q_mean.fits')
-return_mean_map(res_8_Q,labels[7]+'_residual_Q_mean.fits')
+#return_mean_map(res_8_Q,labels[7]+'_residual_Q_mean.fits')
 
 return_mean_map(res_1_U,labels[0]+'_residual_U_mean.fits')
 return_mean_map(res_2_U,labels[1]+'_residual_U_mean.fits')
@@ -236,4 +238,4 @@ return_mean_map(res_4_U,labels[3]+'_residual_U_mean.fits')
 return_mean_map(res_5_U,labels[4]+'_residual_U_mean.fits')
 return_mean_map(res_6_U,labels[5]+'_residual_U_mean.fits')
 return_mean_map(res_7_U,labels[6]+'_residual_U_mean.fits')
-return_mean_map(res_8_U,labels[7]+'_residual_U_mean.fits')
+#return_mean_map(res_8_U,labels[7]+'_residual_U_mean.fits')

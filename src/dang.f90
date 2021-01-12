@@ -579,6 +579,7 @@ contains
       implicit none
       type(params), intent(inout) :: self
       real(dp)                    :: cmb_to_rj, y
+      real(dp)                    :: mjy_to_rj
       
       do j = 1, nbands
          if (par%bp_map(j)) then
@@ -590,6 +591,10 @@ contains
                cmb_to_rj   = (y**2.d0*exp(y))/(exp(y)-1)**2.d0
                dang_data%sig_map(:,:,j) = cmb_to_rj*dang_data%sig_map(:,:,j)
             else if (trim(self%dat_unit(j)) == 'MJy/sr') then
+               y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
+               mjy_to_rj   = 1.0/(1e14*(2.0*h*(self%dat_nu(j)*1.0d9)**3.d0/&
+                    &(c**2.d0*(exp(y)-1)))*(exp(y)/(exp(y)-1.d0))*(h*(self%dat_nu(j)*1.0d9))/(k_B*T_CMB**2.d0))
+               dang_data%sig_map(:,:,j) = mjy_to_rj*dang_data%sig_map(:,:,j)
                write(*,*) 'Unit conversion not for MJy/sr not added!'
                stop
             else

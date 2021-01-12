@@ -69,7 +69,7 @@ module dang_param_mod
 
         real(dp)                                          :: thresh         ! Threshold for the HI fitting (sample pixels under thresh)
         character(len=512)                                :: HI_file        ! HI map filename
-        real(dp)                                          :: HI_Td_init     ! HI fitting dust temp estimate
+        character(len=512)                                :: HI_Td_init     ! HI fitting dust temp estimate
         real(dp)                                          :: HI_Td_mean     ! HI Temperature sampling mean
         real(dp)                                          :: HI_Td_std      ! HI Temperature sampling std
 
@@ -571,8 +571,8 @@ contains
 
         if (trim(par%mode) == 'HI_fit') then
             call get_parameter_hashtable(htbl,'HI_THRESH', par_dp=par%thresh)
-            call get_parameter_hashtable(htbl,'HI_file',par_string=par%HI_file)
-            call get_parameter_hashtable(htbl,'T_MAP_INIT',par_dp=par%HI_Td_init)
+            call get_parameter_hashtable(htbl,'HI_FILE',par_string=par%HI_file)
+            call get_parameter_hashtable(htbl,'T_MAP_INIT',par_string=par%HI_Td_init)
             call get_parameter_hashtable(htbl,'T_MEAN',par_dp=par%HI_Td_mean)
             call get_parameter_hashtable(htbl,'T_STD',par_dp=par%HI_Td_std)
         end if
