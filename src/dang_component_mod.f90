@@ -1,5 +1,7 @@
 module dang_component_mod
   use healpix_types
+  use pix_tools
+  use fitstools
   use utility_mod
   use dang_param_mod
   use dang_data_mod
@@ -9,6 +11,7 @@ module dang_component_mod
      
      character(len=32), allocatable, dimension(:) :: joint
      real(dp), allocatable, dimension(:,:)        :: beta_s, beta_d, T_d, HI
+     real(dp), allocatable, dimension(:)          :: HI_amps
 
   end type component
 
@@ -50,13 +53,20 @@ contains
     type(component)          :: self
     type(params)             :: param
     integer(i4b), intent(in) :: npix
+    character(len=80), dimension(180) :: head
 
     allocate(self%HI(0:npix-1,1))
     allocate(self%T_d(0:npix-1,nmaps))
+    allocate(self%HI_amps(param%numband))
     write(*,*) 'Allocated HI fitting maps!'
 
-    !call read_bintab(
+    call read_bintab(trim(param%datadir)//trim(param%HI_file),self%HI,npix,1,nullval,anynull,header=head)
 
+    if (trim(param%HI_Td_init) == 'none') then
+       self%T_d = param%HI_Td_mean
+    else
+       call read_bintab(trim(param%HI_Td_init),self%T_d,npix,1,nullval,anynull,header=head)
+    end if
 
   end subroutine init_hi_fit
   

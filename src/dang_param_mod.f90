@@ -455,126 +455,140 @@ contains
         len_itext = len(trim(itext))
         len_jtext = len(trim(jtext))
 
-        call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
-        call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
-        call get_parameter_hashtable(htbl, 'NUMJOINT', par_int=par%njoint)
-        call get_parameter_hashtable(htbl, 'JOINT_SAMPLE', par_lgt=par%joint_sample)
-        call get_parameter_hashtable(htbl, 'DUST_CORR_TYPE', par_string=par%dust_corr_type)
 
-        allocate(par%mbb_gauss(2,2))
-        call get_parameter_hashtable(htbl, 'MBB_TD_MEAN',par_dp=par%mbb_gauss(1,1))
-        call get_parameter_hashtable(htbl, 'MBB_TD_STD',par_dp=par%mbb_gauss(1,2))
-        call get_parameter_hashtable(htbl, 'MBB_BETA_MEAN',par_dp=par%mbb_gauss(2,1))
-        call get_parameter_hashtable(htbl, 'MBB_BETA_STD',par_dp=par%mbb_gauss(2,2))
+        if (trim(par%mode) == 'comp_sep') then
+           call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
+           call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
+           call get_parameter_hashtable(htbl, 'NUMJOINT', par_int=par%njoint)
+           call get_parameter_hashtable(htbl, 'JOINT_SAMPLE', par_lgt=par%joint_sample)
+           call get_parameter_hashtable(htbl, 'DUST_CORR_TYPE', par_string=par%dust_corr_type)
 
+           allocate(par%mbb_gauss(2,2))
 
-        n  = par%ncomp
-        n2 = par%ntemp
-        n3 = par%njoint
+           call get_parameter_hashtable(htbl, 'MBB_TD_MEAN',par_dp=par%mbb_gauss(1,1))
+           call get_parameter_hashtable(htbl, 'MBB_TD_STD',par_dp=par%mbb_gauss(1,2))
+           call get_parameter_hashtable(htbl, 'MBB_BETA_MEAN',par_dp=par%mbb_gauss(2,1))
+           call get_parameter_hashtable(htbl, 'MBB_BETA_STD',par_dp=par%mbb_gauss(2,2))
 
-        allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
-        allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_samp_amp(n))
-        allocate(par%fg_spec_like(n,2))
-        allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
-        allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
-        allocate(par%fg_spec_map(n,2))
+           
+           n  = par%ncomp
+           n2 = par%ntemp
+           n3 = par%njoint
+           
+           allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
+           allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_samp_amp(n))
+           allocate(par%fg_spec_like(n,2))
+           allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
+           allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
+           allocate(par%fg_spec_map(n,2))
+           
+           allocate(par%temp_file(n2))
+           allocate(par%temp_label(n2))
+           allocate(par%temp_nfit(n2))
+           allocate(par%temp_corr(n2,par%numband))
+           
+           par%temp_nfit = 0
+           
+           allocate(par%joint_comp(n3))
 
-        allocate(par%temp_file(n2))
-        allocate(par%temp_label(n2))
-        allocate(par%temp_nfit(n2))
-        allocate(par%temp_corr(n2,par%numband))
-
-        par%temp_nfit = 0
-
-        allocate(par%joint_comp(n3))
-
-        do i = 1, n2
-           call int2string(i, itext)
-           call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext, len_itext=len_itext, par_string=par%temp_file(i))
-           call get_parameter_hashtable(htbl, 'TEMPLATE_LABEL'//itext, len_itext=len_itext, par_string=par%temp_label(i))
-           do j = 1, par%numband
-              call int2string(j,jtext)
-              call get_parameter_hashtable(htbl, 'TEMPLATE'//trim(itext)//'_FIT'//jtext,&
-                   len_itext=len_jtext,par_lgt=par%temp_corr(i,j))
-              if (par%temp_corr(i,j)) then
-                 par%temp_nfit(i) = par%temp_nfit(i) + 1
-              end if
+           do i = 1, n2
+              call int2string(i, itext)
+              call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext, len_itext=len_itext, par_string=par%temp_file(i))
+              call get_parameter_hashtable(htbl, 'TEMPLATE_LABEL'//itext, len_itext=len_itext, par_string=par%temp_label(i))
+              do j = 1, par%numband
+                 call int2string(j,jtext)
+                 call get_parameter_hashtable(htbl, 'TEMPLATE'//trim(itext)//'_FIT'//jtext,&
+                      len_itext=len_jtext,par_lgt=par%temp_corr(i,j))
+                 if (par%temp_corr(i,j)) then
+                    par%temp_nfit(i) = par%temp_nfit(i) + 1
+                 end if
+              end do
            end do
-        end do
+           
+           do i = 1, n3
+              call int2string(i, itext)
+              call get_parameter_hashtable(htbl, 'JOINT_SAMPLE_COMP'//itext, len_itext=len_itext, par_string=par%joint_comp(i))
+           end do
+           
+           do i = 1, n
+              call int2string(i, itext)
+              call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
+              call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i))
+              call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
+              call get_parameter_hashtable(htbl, 'COMP_INCLUDE'//itext, len_itext=len_itext, par_lgt=par%fg_inc(i))
+              call get_parameter_hashtable(htbl, 'COMP_SAMPLE_AMP'//itext, len_itext=len_itext, par_lgt=par%fg_samp_amp(i))
+              
+              if (trim(par%fg_type(i)) == 'power-law') then
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_gauss(i,1,1))
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_gauss(i,1,2))
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_uni(i,1,1))
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_uni(i,1,2))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
+                      par_int=par%fg_samp_nside(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
+                      par_lgt=par%fg_samp_inc(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
+                      par_lgt=par%fg_spec_like(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
+                      par_string=par%fg_spec_map(i,1))
+              else if (trim(par%fg_type(i)) == 'mbb') then
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_gauss(i,1,1))
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_gauss(i,1,2))
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_uni(i,1,1))
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_uni(i,1,2))
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_T_MEAN'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_gauss(i,2,1))
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_T_STD'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_gauss(i,2,2))
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_LOW'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_uni(i,2,1))
+                 call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_HIGH'//itext, len_itext=len_itext,&
+                      par_dp=par%fg_uni(i,2,2))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
+                      par_string=par%fg_spec_map(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
+                      par_int=par%fg_samp_nside(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
+                      par_lgt=par%fg_samp_inc(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
+                      par_lgt=par%fg_spec_like(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_T_SAMP_NSIDE'//itext, len_itext=len_itext,&
+                      par_int=par%fg_samp_nside(i,2))
+                 call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
+                      par_lgt=par%fg_samp_inc(i,2))
+                 call get_parameter_hashtable(htbl, 'COMP_T_LIKELIHOOD'//itext, len_itext=len_itext,&
+                      par_lgt=par%fg_spec_like(i,2))
+                 call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
+                      par_string=par%fg_spec_map(i,2))
+              end if
+              par%fg_ref_loc(i) = minloc(abs(par%dat_nu-par%fg_nu_ref(i)),1)
+           end do
 
-        do i = 1, n3
-           call int2string(i, itext)
-           call get_parameter_hashtable(htbl, 'JOINT_SAMPLE_COMP'//itext, len_itext=len_itext, par_string=par%joint_comp(i))
-        end do
+        else if (trim(par%mode) == 'hi_fit') then
+           call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
+           call get_parameter_hashtable(htbl,'HI_THRESH', par_dp=par%thresh)
+           call get_parameter_hashtable(htbl,'HI_FILE',par_string=par%HI_file)
+           call get_parameter_hashtable(htbl,'T_MAP_INIT',par_string=par%HI_Td_init)
+           call get_parameter_hashtable(htbl,'T_MEAN',par_dp=par%HI_Td_mean)
+           call get_parameter_hashtable(htbl,'T_STD',par_dp=par%HI_Td_std)
 
-        do i = 1, n
-            call int2string(i, itext)
-            call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
-            call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i))
-            call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
-            call get_parameter_hashtable(htbl, 'COMP_INCLUDE'//itext, len_itext=len_itext, par_lgt=par%fg_inc(i))
-            call get_parameter_hashtable(htbl, 'COMP_SAMPLE_AMP'//itext, len_itext=len_itext, par_lgt=par%fg_samp_amp(i))
+           n2            = par%ntemp
 
-            if (trim(par%fg_type(i)) == 'power-law') then
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_gauss(i,1,1))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_gauss(i,1,2))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_uni(i,1,1))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_uni(i,1,2))
-               call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
-                    par_int=par%fg_samp_nside(i,1))
-               call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
-                    par_lgt=par%fg_samp_inc(i,1))
-               call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
-                    par_lgt=par%fg_spec_like(i,1))
-               call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
-                    par_string=par%fg_spec_map(i,1))
-            else if (trim(par%fg_type(i)) == 'mbb') then
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_gauss(i,1,1))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_gauss(i,1,2))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_uni(i,1,1))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_uni(i,1,2))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_T_MEAN'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_gauss(i,2,1))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_T_STD'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_gauss(i,2,2))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_LOW'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_uni(i,2,1))
-               call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_HIGH'//itext, len_itext=len_itext,&
-                    par_dp=par%fg_uni(i,2,2))
-               call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
-                    par_string=par%fg_spec_map(i,1))
-               call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
-                    par_int=par%fg_samp_nside(i,1))
-               call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
-                    par_lgt=par%fg_samp_inc(i,1))
-               call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
-                    par_lgt=par%fg_spec_like(i,1))
-               call get_parameter_hashtable(htbl, 'COMP_T_SAMP_NSIDE'//itext, len_itext=len_itext,&
-                    par_int=par%fg_samp_nside(i,2))
-               call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
-                    par_lgt=par%fg_samp_inc(i,2))
-               call get_parameter_hashtable(htbl, 'COMP_T_LIKELIHOOD'//itext, len_itext=len_itext,&
-                    par_lgt=par%fg_spec_like(i,2))
-               call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
-                    par_string=par%fg_spec_map(i,2))
-            end if
-            par%fg_ref_loc(i) = minloc(abs(par%dat_nu-par%fg_nu_ref(i)),1)
-        end do
+           allocate(par%temp_file(n2))
+           allocate(par%temp_label(n2))
+           allocate(par%temp_nfit(n2))
+           allocate(par%temp_corr(n2,par%numband))
 
-        if (trim(par%mode) == 'HI_fit') then
-            call get_parameter_hashtable(htbl,'HI_THRESH', par_dp=par%thresh)
-            call get_parameter_hashtable(htbl,'HI_FILE',par_string=par%HI_file)
-            call get_parameter_hashtable(htbl,'T_MAP_INIT',par_string=par%HI_Td_init)
-            call get_parameter_hashtable(htbl,'T_MEAN',par_dp=par%HI_Td_mean)
-            call get_parameter_hashtable(htbl,'T_STD',par_dp=par%HI_Td_std)
+           par%temp_corr(1,:) = .true.
+
         end if
 
     end subroutine read_comp_params

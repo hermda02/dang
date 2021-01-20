@@ -18,7 +18,7 @@ module dang_sample_mod
 
 contains
 
-    subroutine sample_joint_amp(para, dat, compo, map_n, method, poltype)
+    subroutine sample_joint_amp(self, dat, compo, map_n, method, poltype)
         !------------------------------------------------------------------------
         ! Solving the matrix equation Ab = c                                    |
         !                                                                       |
@@ -34,7 +34,7 @@ contains
         !------------------------------------------------------------------------
 
         implicit none
-        type(params)                               :: para
+        type(params)                               :: self
         type(data),                intent(inout)   :: dat
         type(component)                            :: compo
         integer(i4b),              intent(in)      :: map_n
@@ -66,23 +66,23 @@ contains
         ! vv These will not change based off of components
         x = dat%npix
         y = 0
-        z = para%numband
+        z = self%numband
 
-        do i = 1, size(para%joint_comp)
-           if (para%joint_comp(i) == 'synch') then
+        do i = 1, size(self%joint_comp)
+           if (self%joint_comp(i) == 'synch') then
               do l = 1, size(poltype)
                  y = y + dat%npix
               end do
-           else if (para%joint_comp(i) == 'dust') then
+           else if (self%joint_comp(i) == 'dust') then
               y = y + dat%npix
-           else if (para%joint_comp(i) == 'template01') then
-              y = y + para%temp_nfit(1)
-           else if (para%joint_comp(i) == 'template02') then
-              y = y + para%temp_nfit(2)
-           else if (para%joint_comp(i) == 'template03') then
-              y = y + para%temp_nfit(3)
-           else if (para%joint_comp(i) == 'template04') then
-              y = y + para%temp_nfit(4)
+           else if (self%joint_comp(i) == 'template01') then
+              y = y + self%temp_nfit(1)
+           else if (self%joint_comp(i) == 'template02') then
+              y = y + self%temp_nfit(2)
+           else if (self%joint_comp(i) == 'template03') then
+              y = y + self%temp_nfit(3)
+           else if (self%joint_comp(i) == 'template04') then
+              y = y + self%temp_nfit(4)
            end if
         end do
 
@@ -96,8 +96,8 @@ contains
         ! Computing the LHS and RHS of the linear equation
         ! RHS
         w = 0 
-        do m = 1, size(para%joint_comp)
-            if (para%joint_comp(m) == 'synch') then
+        do m = 1, size(self%joint_comp)
+            if (self%joint_comp(m) == 'synch') then
                if (size(poltype) == 1) then
                   do j=1, z
                      do i=1, x
@@ -105,7 +105,7 @@ contains
                            c(i) = 0.d0
                            cycle
                         else
-                           c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
+                           c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n)
                         end if
                      end do
                   end do
@@ -118,30 +118,30 @@ contains
                            c(x+i) = 0.d0
                            cycle
                         else                           
-                           c(i)   = c(i)   + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n)
-                           c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*compute_spectrum(para,compo,1,para%dat_nu(j),i-1,map_n+1)
+                           c(i)   = c(i)   + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n)
+                           c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n+1)
                         end if
                      end do
                   end do
                   w = w + 2*x
                end if
-            else if (para%joint_comp(m) == 'dust') then
+            else if (self%joint_comp(m) == 'dust') then
                do j=1, z
                   do i=1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) c(i) = 0.d0
-                     c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(para,compo,2,para%dat_nu(j),i-1,map_n)
+                     c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(self,compo,2,self%dat_nu(j),i-1,map_n)
                   end do
                end do
                w = w + x
             end if
         end do
-        do m = 1, size(para%joint_comp)
-           if (para%joint_comp(m) == 'template01') then
+        do m = 1, size(self%joint_comp)
+           if (self%joint_comp(m) == 'template01') then
            ! Template 1
               if (size(poltype) == 1) then
                  l = 1
                  do j = 1, z
-                    if (para%temp_corr(1,j)) then
+                    if (self%temp_corr(1,j)) then
                        do i = 1, x
                           if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
@@ -150,12 +150,12 @@ contains
                        l = l + 1
                     end if
                  end do
-                 w = w + para%temp_nfit(1)
+                 w = w + self%temp_nfit(1)
               else if (size(poltype) == 2) then
               ! If sampling Q and U jointly
                  l = 1
                  do j = 1, z
-                    if (para%temp_corr(1,j)) then
+                    if (self%temp_corr(1,j)) then
                        do i = 1, x
                           if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
@@ -166,15 +166,15 @@ contains
                        l = l + 1
                     end if
                  end do
-                 w = w + para%temp_nfit(1)
+                 w = w + self%temp_nfit(1)
               end if
 
-           else if (para%joint_comp(m) == 'template02') then
+           else if (self%joint_comp(m) == 'template02') then
               ! Template 2
               if (size(poltype) == 1) then
                  l = 1
                  do j = 1, z
-                    if (para%temp_corr(2,j)) then
+                    if (self%temp_corr(2,j)) then
                        do i = 1, x
                           if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
@@ -183,12 +183,12 @@ contains
                        l = l + 1
                     end if
                  end do
-                 w = w + para%temp_nfit(2)
+                 w = w + self%temp_nfit(2)
               else if (size(poltype) == 2) then
               ! If sampling Q and U jointly
                  l = 1
                  do j = 1, z
-                    if (para%temp_corr(2,j)) then
+                    if (self%temp_corr(2,j)) then
                        do i = 1, x
                           if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
@@ -199,15 +199,15 @@ contains
                        l = l + 1
                     end if
                  end do
-                 w = w + para%temp_nfit(2)
+                 w = w + self%temp_nfit(2)
               end if
 
-           else if (para%joint_comp(m) == 'template03') then
+           else if (self%joint_comp(m) == 'template03') then
               ! Template 3
               if (size(poltype) == 1) then
                  l = 1
                  do j = 1, z
-                    if (para%temp_corr(3,j)) then
+                    if (self%temp_corr(3,j)) then
                        do i = 1, x
                           if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
@@ -216,12 +216,12 @@ contains
                        l = l + 1
                     end if
                  end do
-                 w = w + para%temp_nfit(3)
+                 w = w + self%temp_nfit(3)
               else if (size(poltype) == 2) then
               ! If sampling Q and U jointly
                  l = 1
                  do j = 1, z
-                    if (para%temp_corr(3,j)) then
+                    if (self%temp_corr(3,j)) then
                        do i = 1, x
                           if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
@@ -232,15 +232,15 @@ contains
                        l = l + 1
                     end if
                  end do
-                 w = w + para%temp_nfit(3)
+                 w = w + self%temp_nfit(3)
               end if
 
-           else if (para%joint_comp(m) == 'template04') then
+           else if (self%joint_comp(m) == 'template04') then
               ! Template 4
               if (size(poltype) == 1) then
                  l = 1
                  do j = 1, z
-                    if (para%temp_corr(4,j)) then
+                    if (self%temp_corr(4,j)) then
                        do i = 1, x
                           if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
@@ -249,12 +249,12 @@ contains
                        l = l + 1
                     end if
                  end do
-                 w = w + para%temp_nfit(4)
+                 w = w + self%temp_nfit(4)
               else if (size(poltype) == 2) then
               ! If sampling Q and U jointly
                  l = 1
                  do j = 1, z
-                    if (para%temp_corr(4,j)) then
+                    if (self%temp_corr(4,j)) then
                        do i = 1, x
                           if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                           c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
@@ -265,7 +265,7 @@ contains
                        l = l + 1
                     end if
                  end do
-                 w = w + para%temp_nfit(4)
+                 w = w + self%temp_nfit(4)
               end if
            end if
         end do
@@ -281,12 +281,12 @@ contains
         else if (trim(method) == 'cg') then
            if (rank == master) write(*,*) 'Joint sampling using CG.'
            ! Optimize
-           !call compute_cg(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
-           !call compute_cg_precond(A,b,c,y,nnz_a,para%cg_iter,para%cg_converge)
-           !call compute_cg_vec(b,c,y,para,dat,compo)
+           !call compute_cg(A,b,c,y,nnz_a,self%cg_iter,self%cg_converge)
+           !call compute_cg_precond(A,b,c,y,nnz_a,self%cg_iter,self%cg_converge)
+           !call compute_cg_vec(b,c,y,self,dat,compo)
            ! Sample
-           !call sample_cg(A,b,c,2*npix,nnz_a,para%cg_iter,para%cg_converge,para,dat,compo)
-           call sample_cg_vec(b,c,y,para,dat,compo)
+           !call sample_cg(A,b,c,2*npix,nnz_a,self%cg_iter,self%cg_converge,self,dat,compo)
+           call sample_cg_vec(b,c,y,self,dat,compo)
         else if (trim(method) == 'lu') then
            !write(*,*) 'Currently deprecated -- replace with LAPACK'
            !stop
@@ -300,25 +300,25 @@ contains
         ! Output amplitudes to the appropriate variables
         if (size(poltype) == 1) then
            w = 0
-           do m = 1, size(para%joint_comp)
-              if (para%joint_comp(m) == 'synch') then
+           do m = 1, size(self%joint_comp)
+              if (self%joint_comp(m) == 'synch') then
                  do i = 1, x
-                    dat%fg_map(i-1,map_n,para%fg_ref_loc(1),1) = b(w+i)
+                    dat%fg_map(i-1,map_n,self%fg_ref_loc(1),1) = b(w+i)
                  end do
                  w = w + x
-              else if (para%joint_comp(m) == 'dust') then
+              else if (self%joint_comp(m) == 'dust') then
                  do i = 1, x
-                    dat%fg_map(i-1,map_n,para%fg_ref_loc(2),3) = b(w+i)
+                    dat%fg_map(i-1,map_n,self%fg_ref_loc(2),3) = b(w+i)
                  end do
                  w = w + x
               end if
            end do
-           do m = 1, size(para%joint_comp)
-              if (para%joint_comp(m) == 'template01') then
+           do m = 1, size(self%joint_comp)
+              if (self%joint_comp(m) == 'template01') then
                  l = 1
-                 do while (l .lt. para%temp_nfit(1))
+                 do while (l .lt. self%temp_nfit(1))
                     do j= 1, z
-                       if (para%temp_corr(1,j)) then
+                       if (self%temp_corr(1,j)) then
                           dat%temp_amps(j,map_n,1) = b(w+l)
                           l = l + 1
                        else
@@ -327,11 +327,11 @@ contains
                     end do
                  end do
                  w = w + l -1
-              else if (para%joint_comp(m) == 'template02') then
+              else if (self%joint_comp(m) == 'template02') then
                  l = 1
-                 do while (l .lt. para%temp_nfit(2))
+                 do while (l .lt. self%temp_nfit(2))
                     do j= 1, z
-                       if (para%temp_corr(2,j)) then
+                       if (self%temp_corr(2,j)) then
                           dat%temp_amps(j,map_n,2) = b(w+l)
                           l = l + 1
                        end if
@@ -341,38 +341,38 @@ contains
            end do
         else if (size(poltype) == 2) then
            w = 0
-           do m = 1, size(para%joint_comp)
-              if (para%joint_comp(m) == 'synch') then
+           do m = 1, size(self%joint_comp)
+              if (self%joint_comp(m) == 'synch') then
                  do i = 1, x
-                    dat%fg_map(i-1,map_n,para%fg_ref_loc(1),1) = b(w+i)
+                    dat%fg_map(i-1,map_n,self%fg_ref_loc(1),1) = b(w+i)
                  end do
                  w = w + x
                  do i = 1, x
-                    dat%fg_map(i-1,map_n+1,para%fg_ref_loc(1),1) = b(w+i)
+                    dat%fg_map(i-1,map_n+1,self%fg_ref_loc(1),1) = b(w+i)
                  end do
                  w = w + x
-              else if (para%joint_comp(m) == 'dust') then
+              else if (self%joint_comp(m) == 'dust') then
                  do i = 1, x
-                    dat%fg_map(i-1,map_n,para%fg_ref_loc(2),3) = b(w+i)
+                    dat%fg_map(i-1,map_n,self%fg_ref_loc(2),3) = b(w+i)
                  end do
                  w = w + x
               end if
            end do
-           do m = 1, size(para%joint_comp)
-              if (para%joint_comp(m) == 'template01') then
+           do m = 1, size(self%joint_comp)
+              if (self%joint_comp(m) == 'template01') then
                  l = 1
-                 do while (l .lt. para%temp_nfit(1))
+                 do while (l .lt. self%temp_nfit(1))
                     do j= 1, z
-                       if (para%temp_corr(1,j)) then
+                       if (self%temp_corr(1,j)) then
                           dat%temp_amps(j,map_n,1)   = b(w+l)
                           dat%temp_amps(j,map_n+1,1) = b(w+l)
                           l = l + 1
                        end if
                     end do
                  end do
-                 if (para%temp_nfit(1) == 1) then
+                 if (self%temp_nfit(1) == 1) then
                     do j= 1, z
-                       if (para%temp_corr(1,j)) then
+                       if (self%temp_corr(1,j)) then
                           dat%temp_amps(j,map_n,1)   = b(w+l)
                           dat%temp_amps(j,map_n+1,1) = b(w+l)
                           l = l + 1
@@ -380,20 +380,20 @@ contains
                     end do
                  end if
                  w = w + l - 1
-              else if (para%joint_comp(m) == 'template02') then
+              else if (self%joint_comp(m) == 'template02') then
                  l = 1
-                 do while (l .lt. para%temp_nfit(2))
+                 do while (l .lt. self%temp_nfit(2))
                     do j= 1, z
-                       if (para%temp_corr(2,j)) then
+                       if (self%temp_corr(2,j)) then
                           dat%temp_amps(j,map_n,2)   = b(w+l)
                           dat%temp_amps(j,map_n+1,2) = b(w+l)
                           l = l + 1
                        end if
                     end do
                  end do
-                 if (para%temp_nfit(2) == 1) then
+                 if (self%temp_nfit(2) == 1) then
                     do j= 1, z
-                       if (para%temp_corr(2,j)) then
+                       if (self%temp_corr(2,j)) then
                           dat%temp_amps(j,map_n,2)   = b(w+l)
                           dat%temp_amps(j,map_n+1,2) = b(w+l)
                           l = l + 1
@@ -401,20 +401,20 @@ contains
                     end do
                  end if
                  w = w + l - 1
-              else if (para%joint_comp(m) == 'template03') then
+              else if (self%joint_comp(m) == 'template03') then
                  l = 1
-                 do while (l .lt. para%temp_nfit(3))
+                 do while (l .lt. self%temp_nfit(3))
                     do j= 1, z
-                       if (para%temp_corr(3,j)) then
+                       if (self%temp_corr(3,j)) then
                           dat%temp_amps(j,map_n,3)   = b(w+l)
                           dat%temp_amps(j,map_n+1,3) = b(w+l)
                           l = l + 1
                        end if
                     end do
                  end do
-                 if (para%temp_nfit(3) == 1) then
+                 if (self%temp_nfit(3) == 1) then
                     do j= 1, z
-                       if (para%temp_corr(3,j)) then
+                       if (self%temp_corr(3,j)) then
                           dat%temp_amps(j,map_n,3)   = b(w+l)
                           dat%temp_amps(j,map_n+1,3) = b(w+l)
                           l = l + 1
@@ -422,20 +422,20 @@ contains
                     end do
                  end if
                  w = w + l - 1
-              else if (para%joint_comp(m) == 'template04') then
+              else if (self%joint_comp(m) == 'template04') then
                  l = 1
-                 do while (l .lt. para%temp_nfit(4))
+                 do while (l .lt. self%temp_nfit(4))
                     do j= 1, z
-                       if (para%temp_corr(4,j)) then
+                       if (self%temp_corr(4,j)) then
                           dat%temp_amps(j,map_n,4)   = b(w+l)
                           dat%temp_amps(j,map_n+1,4) = b(w+l)
                           l = l + 1
                        end if
                     end do
                  end do
-                 if (para%temp_nfit(4) == 1) then
+                 if (self%temp_nfit(4) == 1) then
                     do j= 1, z
-                       if (para%temp_corr(4,j)) then
+                       if (self%temp_corr(4,j)) then
                           dat%temp_amps(j,map_n,4)   = b(w+l)
                           dat%temp_amps(j,map_n+1,4) = b(w+l)
                           l = l + 1
@@ -459,49 +459,52 @@ contains
         deallocate(c)
     end subroutine sample_joint_amp
 
-    !function temp_fit(data,template,noise,t_mask,freq)
-    !    implicit none
-    
-    !    real(dp), dimension(0:npix-1), intent(in) :: data, template, noise, t_mask
-    !    real(dp), optional, intent(in)            :: freq
-    !    real(dp), dimension(0:npix-1)             :: cov
-    !    real(dp)                                  :: temp_fit, norm, sam, p
-    !    real(dp)                                  :: amp, old, sum1, sum2, num
-    
-    !    cov = noise*2
+    subroutine template_fit(self, dat, comp, noise, mapn,temp_num)
+      !------------------------------------------------------------------------
+      ! Simple linear fit of a template to data map with a sampling term
+      !------------------------------------------------------------------------
+      implicit none
+      
+      type(params)                                           :: self
+      type(component)                                        :: comp
+      real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: dat, noise
+      real(dp), dimension(0:npix-1,nbands)                   :: cov, nos
+      integer(i4b),                               intent(in) :: mapn
+      integer(i4b), optional,                     intent(in) :: temp_num
+      real(dp)                                               :: temp, sum1, sum2, norm
 
-        ! Uncertainty, used for sampling.
-    !    norm = 0.d0
-    !    sum1 = 0.d0
-    !    sum2 = 0.d0
-    
-    !    if (present(freq)) then
-    !        do i=0,npix-1
-    !            if (HI(i,1) > par%thresh) cycle
-    !            p      = template(i)*planck(freq*1.d9,T_d(i,1))
-    !            sum1   = sum1 + (data(i)*p)/cov(i)*t_mask(i)
-    !            sum2   = sum2 + (p)**2.d0/cov(i)*t_mask(i)
-    !            norm   = norm + (p)**2.d0/cov(i)*t_mask(i)
-    !        end do
-    !        norm = norm/n2fit
-    !    else
-    !        norm  = sum((template(:)**2.d0)/cov(:))/sum(t_mask)
-    !        do i=0,npix-1
-    !            sum1   = sum1 + (data(i)*template(i))/cov(i)*t_mask(i)
-    !            sum2   = sum2 + template(i)**2.d0/cov(i)*t_mask(i)
-    !        end do
-    !    end if
+      nos = noise(:,mapn,:)
+      cov = nos**2.d0
 
-    !    ! Don't allow negative amplitudes, if negative, set to 0.d0.
-    !    if (sum1 < 0.d0) then
-    !        amp = 0.d0
-    !    else
-    !        amp   = sum1/sum2! + rand_normal(0.d0,1.d0)/sqrt(norm)
-    !    end if
-    !    temp_fit  = amp
-    !end function temp_fit
+      if (trim(self%mode) == 'comp_sep') then
+         !do j = 1, self%numband
+         !   if (self%temp_corr(temp_num,j)) then
+            
+         !   end if
+         !end do
+      else if (trim(self%mode) == 'hi_fit') then
+         do j = 1, self%numband
+            sum1 = 0.d0
+            sum2 = 0.d0
+            norm = 0.d0
+            temp = 0.d0
+            if (self%temp_corr(1,j)) then
+               do i = 0, npix-1
+                  if (comp%HI(i,1) > self%thresh) cycle
+                  temp = comp%HI(i,1)*planck(self%dat_nu(j)*1d9,comp%T_d(i,1))
+                  sum1 = sum1 + (dat(i,mapn,j)*temp)/cov(i,j)
+                  sum2 = sum2 + (temp)**2.d0/cov(i,j)
+                  norm = norm + (temp)**2.d0/cov(i,j)
+               end do
+            end if
+            comp%HI_amps(j) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
+         end do
+      end if
 
-   function sample_spec_amp(self, comp, data, noise, ind, mapn)
+    end subroutine template_fit
+
+
+   function sample_spec_amp(self, dat, comp, noise, ind, mapn)
         !------------------------------------------------------------------------
         ! Samples spectral amplitude (per pixel), following the spectrum of foreground 'type'. Returns a full map of amplitudes.
         !------------------------------------------------------------------------
@@ -509,7 +512,7 @@ contains
   
         class(params)                                          :: self
         type(component)                                        :: comp
-        real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data, noise
+        real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: dat, noise
         integer(i4b),                               intent(in) :: ind
         integer(i4b),                               intent(in) :: mapn
         real(dp)                                               :: sum1, sum2, spec
@@ -530,7 +533,7 @@ contains
             norm(i) = 0.d0
             do j = 1, nbands
                 spec           = compute_spectrum(self,comp,ind,self%dat_nu(j),i,mapn)
-                sum1           = sum1 + (data(i,mapn,j)*spec)/cov(i,j)
+                sum1           = sum1 + (dat(i,mapn,j)*spec)/cov(i,j)
                 sum2           = sum2 + (spec)**2.d0/cov(i,j)
                 norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,j)
             end do
@@ -540,7 +543,7 @@ contains
         end do
     end function sample_spec_amp
 
-    subroutine sample_index(self, comp, dat, duta, nside2, ind, map_n)
+    subroutine sample_index(self, dat, comp, duta, nside2, ind, map_n)
         implicit none
   
         class(params)                                          :: self
@@ -743,7 +746,7 @@ contains
                  ! Sampling from the prior
                  if (self%fg_spec_like(ind,1)) then
                     t      = rand_normal(sol, self%fg_gauss(ind,1,2))
-                 else if (.not. self%fg_spec_like(ind,1)) then
+                  else if (.not. self%fg_spec_like(ind,1)) then
                     t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
                  end if
                  b         = 0.d0
@@ -819,128 +822,130 @@ contains
     end subroutine sample_index
 
     ! This architecture of this function has not been verified yet
-    subroutine sample_HI_T(self, dat, comp, map_n) !(self, band, nside2, map_n)
-        implicit none
-  
-        class(params)                                          :: self
-        type(data)                                             :: dat
-        type(component)                                        :: comp
-        integer(i4b), intent(in)                               :: map_n
-        integer(i4b)                                           :: nside1, npix2, nside2
-        real(dp), dimension(0:npix-1,nmaps,nbands)             :: cov
-        real(dp), dimension(0:npix-1,nmaps)                    :: te
-        real(dp), dimension(0:npix-1)                          :: te_sample
-        real(dp), allocatable, dimension(:,:,:)                :: maps_low, cov_low
-        real(dp), allocatable, dimension(:,:)                  :: T_low
-        real(dp), allocatable, dimension(:)                    :: sample_T_low
-        real(dp), dimension(nbands)                            :: signal, tmp
-        real(dp), dimension(2)                                 :: x
-        real(dp)                                               :: a, b, c, num, sam, t, p, sol, naccept_t_d
+    subroutine sample_HI_T(self, dat, comp, map_n)
+      implicit none
+      
+      class(params)                                          :: self
+      type(data)                                             :: dat
+      type(component)                                        :: comp
+      integer(i4b), intent(in)                               :: map_n
+      integer(i4b)                                           :: nside1, npix2, nside2
+      real(dp), dimension(0:npix-1,nmaps,nbands)             :: cov
+      real(dp), dimension(0:npix-1,nmaps)                    :: te
+      real(dp), dimension(0:npix-1)                          :: te_sample
+      real(dp), allocatable, dimension(:,:,:)                :: maps_low, cov_low
+      real(dp), allocatable, dimension(:,:)                  :: T_low
+      real(dp), allocatable, dimension(:)                    :: sample_T_low
+      real(dp), dimension(nbands)                            :: signal, tmp
+      real(dp), dimension(2)                                 :: x
+      real(dp)                                               :: a, b, c, num, sam, t, p, sol, naccept_t_d
+      
+      te      = comp%T_d
+      cov     = dat%rms_map*dat%rms_map
 
-        te      = self%HI_Td_mean
-        cov     = dat%rms_map*dat%rms_map
-
-        nside2 = 8
-
-        nside1 = npix2nside(npix)
-        if (nside1 == nside2) then
-            npix2 = npix
-        else
-            npix2 = nside2npix(nside2)
-        end if
-        allocate(maps_low(0:npix2-1,nmaps,nbands))
-        allocate(T_low(0:npix2-1,nmaps),cov_low(0:npix2-1,nmaps,nbands))
-        allocate(sample_T_low(0:npix2-1))
-
-        ! if (nside1 /= nside2) then 
-        !     if (ordering == 1) then
-        !         call udgrade_ring(te,nside1,T_low,nside2)
-        !     else
-        !         call udgrade_nest(te,nside1,T_low,nside2)
-        !     end if
-        !     do j = 1, nbands
-        !         if (ordering == 1) then
-        !             call udgrade_ring(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
-        !             call convert_nest2ring(nside1,map2fit(:,:,j))
-        !             call udgrade_ring(cov(:,:,j),nside1,cov_low(:,:,j),nside2)
-        !             call convert_nest2ring(nside1,dat%rms_map(:,:,j))
-        !         else
-        !             call udgrade_nest(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
-        !             call udgrade_nest(dat%rms_map(:,:,j),nside1,cov_low(:,:,j),nside2)
-        !         end if
-        !     end do
-        !     cov_low = sqrt(cov_low / (npix/npix2))
-        ! else
-        do j = 1, nbands
-            maps_low(:,:,j)   = dat%sig_map(:,:,j)
-            cov_low(:,:,j)    = cov(:,:,j)
-        end do
-        T_low = te
-        ! end if
-
-        x(1) = 1.d0
-        do i = 0, npix2-1
-            if (dat%masks(i,1) == 0.d0  .or. dat%masks(i,1) == missval) then
-                sample_T_low(i) = missval
-                cycle
-            else
-                a   = 0.d0
-                sol = T_low(i,map_n)
-
-                ! Chi-square from the most recent Gibbs chain update
-                do j = 1, nbands
-                    a = a + (((dat%temp_amps(j,map_n,1)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,sol)) &
-                        - maps_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
-                end do
-                c   = a
-
-                do l = 1, self%nsample
-                    ! Begin sampling from the prior
-                    ! t = rand_normal(sol,self%HI_Td_std)
-                    t = rand_normal(self%HI_Td_mean,self%HI_Td_std)
-                    b = 0.d0
-                    do j = 1, nbands
-                        tmp(j) = dat%temp_amps(j,map_n,1)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,t)
-                        b      = b + ((tmp(j)-maps_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
-                    end do
-                    b = b
-
-                    if (b < c .and. t .lt. 35.d0 .and. t .gt. 10.d0) then
+      sam = 0.0
+      
+      nside2 = 64
+      
+      nside1 = npix2nside(npix)
+      if (nside1 == nside2) then
+         npix2 = npix
+      else
+         npix2 = nside2npix(nside2)
+      end if
+      allocate(maps_low(0:npix2-1,nmaps,nbands))
+      allocate(T_low(0:npix2-1,nmaps),cov_low(0:npix2-1,nmaps,nbands))
+      allocate(sample_T_low(0:npix2-1))
+      
+      ! if (nside1 /= nside2) then 
+      !     if (ordering == 1) then
+      !         call udgrade_ring(te,nside1,T_low,nside2)
+      !     else
+      !         call udgrade_nest(te,nside1,T_low,nside2)
+      !     end if
+      !     do j = 1, nbands
+      !         if (ordering == 1) then
+      !             call udgrade_ring(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
+      !             call convert_nest2ring(nside1,map2fit(:,:,j))
+      !             call udgrade_ring(cov(:,:,j),nside1,cov_low(:,:,j),nside2)
+      !             call convert_nest2ring(nside1,dat%rms_map(:,:,j))
+      !         else
+      !             call udgrade_nest(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
+      !             call udgrade_nest(dat%rms_map(:,:,j),nside1,cov_low(:,:,j),nside2)
+      !         end if
+      !     end do
+      !     cov_low = sqrt(cov_low / (npix/npix2))
+      ! else
+      do j = 1, nbands
+         maps_low(:,:,j)   = dat%sig_map(:,:,j)
+         cov_low(:,:,j)    = cov(:,:,j)
+      end do
+      T_low = te
+      ! end if
+      
+      x(1) = 1.d0
+      do i = 0, npix2-1
+         if (dat%masks(i,1) == 0.d0  .or. dat%masks(i,1) == missval) then
+            sample_T_low(i) = missval
+            cycle
+         else
+            a   = 0.d0
+            sol = T_low(i,map_n)
+            
+            ! Chi-square from the most recent Gibbs chain update
+            do j = 1, nbands
+               a = a + (((comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,sol)) &
+                    - maps_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
+            end do
+            c   = a
+            
+            do l = 1, self%nsample
+               ! Begin sampling from the prior
+               t = rand_normal(sol,self%HI_Td_std)
+               !t = rand_normal(self%HI_Td_mean,self%HI_Td_std)
+               b = 0.d0
+               do j = 1, nbands
+                  tmp(j) = comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,t)
+                  b      = b + ((tmp(j)-maps_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
+               end do
+               b = b
+               
+               if (b < c .and. t .lt. 35.d0 .and. t .gt. 10.d0) then
+                  sam = t
+                  c   = b
+               else
+                  x(2) = exp(0.5d0*(c-b))
+                  p = minval(x)
+                  call RANDOM_NUMBER(num)
+                  if (num < p) then
+                     if (t .lt. 35.d0 .and. t .gt. 10.d0) then
                         sam = t
                         c   = b
-                    else
-                        x(2) = exp(0.5d0*(c-b))
-                        p = minval(x)
-                        call RANDOM_NUMBER(num)
-                        if (num < p) then
-                            if (t .lt. 35.d0 .and. t .gt. 10.d0) then
-                                sam = t
-                                c   = b
-                            end if
-                        end if
-                    end if
-                end do
-                sol             = sam
-                sample_T_low(i) = sol
-            end if
-        end do
-        if (nside1 /= nside2) then
-            if (ordering == 1) then
-                call udgrade_ring(sample_T_low, nside2, te_sample, nside1)
-                call convert_nest2ring(nside2, sample_T_low)
-            else
-                call udgrade_nest(sample_T_low, nside2, te_sample, nside1)
-            end if
-        else
-            te_sample =  sample_T_low
-        end if
-        comp%T_d(:,1) = te_sample
-
-        deallocate(maps_low)
-        deallocate(T_low)
-        deallocate(cov_low)
-        deallocate(sample_T_low)
-
+                     end if
+                  end if
+               end if
+            end do
+            sol             = sam
+            sample_T_low(i) = sol
+         end if
+      end do
+      if (nside1 /= nside2) then
+         if (ordering == 1) then
+            call udgrade_ring(sample_T_low, nside2, te_sample, nside1)
+            call convert_nest2ring(nside2, sample_T_low)
+         else
+            call udgrade_nest(sample_T_low, nside2, te_sample, nside1)
+         end if
+      else
+         te_sample =  sample_T_low
+      end if
+      comp%T_d(:,1) = te_sample
+      
+      deallocate(maps_low)
+      deallocate(T_low)
+      deallocate(cov_low)
+      deallocate(sample_T_low)
+      
     end subroutine sample_HI_T
     ! ------------------------------------------------------------
 
