@@ -188,6 +188,9 @@ program dang
         call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
              map,npix,nmaps,nullval,anynull,header=header)
         dang_data%sig_map(:,:,j) = map
+        ! Initialize gain and offset values from parameter file
+        dang_data%gain(j)   = par%init_gain(j)
+        dang_data%offset(j) = par%init_offs(j) 
      end do
      
      deallocate(map,rms)
@@ -372,13 +375,31 @@ contains
   
   subroutine hi_fit
     do iter = 1, niter
-       call template_fit(par, dang_data%sig_map, comp, dang_data%rms_map, 1)
+
+       if (iter > 1) then
+          write(*,*) 'Calc HI gain offset'
+          do j = 1, nbands
+             if (par%fit_gain(j) .and. par%fit_offs(j)) then
+                call calc_HI_gain_offset(par, dang_data, comp, 1, 1, j)
+             else if (par%fit_gain(j) .and. .not. par%fit_offs(j)) then
+                call sample_band_gain(par, dang_data, comp, 1, 1, j)
+             else if (par%fit_offs(j) .and. .not. par%fit_gain(j)) then
+                call sample_band_offset(par, dang_data, comp, 1, 1, j)
+             end if
+          end do
+          write(*,"(3x,8(A16))") par%dat_label
+          write(*,"(8(E16.4))") dang_data%gain
+          write(*,"(8(E16.4))") dang_data%offset
+       end if
+
+       call template_fit(par, dang_data, comp, 1)
        call sample_HI_T(par, dang_data, comp, 1)
 
        do j = 1, nbands
           do i = 0, npix-1
              if (dang_data%masks(i,1) == missval .or. dang_data%masks(i,1) == 0.d0) cycle
-             dang_data%res_map(i,1,j) = dang_data%sig_map(i,1,j) - comp%HI_amps(j)*comp%HI(i,1)*planck(par%dat_nu(j)*1d9,comp%T_d(i,1))
+             dang_data%res_map(i,1,j) = (dang_data%sig_map(i,1,j)-dang_data%offset(j))/dang_data%gain(j) &
+                  - comp%HI_amps(j)*comp%HI(i,1)*planck(par%dat_nu(j)*1d9,comp%T_d(i,1))
           end do
        end do
 
@@ -624,6 +645,28 @@ contains
        call compute_chisq(1,chisq,mode)
        write(36,'(E17.8)') chisq
        close(36)
+
+       title = trim(direct)//'band_gains.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(37,file=title,status="old",position="append",action="write") 
+       else
+          open(37,file=title,status="new",action="write")
+          write(37,"(3x,8(A16))") par%dat_label
+       end if
+       write(37,"(8(E16.4))") dang_data%gain
+       close(37)
+
+       title = trim(direct)//'band_offset.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(38,file=title,status="old",position="append",action="write") 
+       else
+          open(38,file=title,status="new",action="write")
+          write(38,"(3x,8(A16))") par%dat_label
+       end if
+       write(38,"(8(E16.4))") dang_data%offset
+       close(38)
        
     end if
     

@@ -17,11 +17,14 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:,:)   :: res_map
     real(dp), allocatable, dimension(:,:)     :: chi_map
     real(dp), allocatable, dimension(:,:,:,:) :: fg_map
+
+    real(dp), allocatable, dimension(:)       :: gain
+    real(dp), allocatable, dimension(:)       :: offset
     
     real(dp), allocatable, dimension(:,:)     :: masks
 
     real(dp), allocatable, dimension(:,:,:)   :: temps
-
+   
     real(dp), allocatable, dimension(:,:,:)   :: temp_amps
   end type data
 
@@ -54,6 +57,12 @@ contains
     allocate(self%rms_map(0:npix-1,nmaps,nbands))
     allocate(self%res_map(0:npix-1,nmaps,nbands))
     allocate(self%chi_map(0:npix-1,nmaps))
+
+    allocate(self%gain(nbands))
+    allocate(self%offset(nbands))
+
+    self%gain   = 1.d0
+    self%offset = 0.d0
 
   end subroutine init_data_maps
 

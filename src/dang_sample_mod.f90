@@ -272,6 +272,8 @@ contains
 
         ! Computation
         if (trim(method) == 'cholesky') then
+           write(*,*) 'Currently deprecated.'
+           stop
            !mat_u(:,:)        = 0.d0
            !if (rank == master) write(*,fmt='(a)') 'Joint sampling using Cholesky Decomposition.'
            !call cholesky_decomp(A,mat_l)
@@ -288,8 +290,8 @@ contains
            !call sample_cg(A,b,c,2*npix,nnz_a,self%cg_iter,self%cg_converge,self,dat,compo)
            call sample_cg_vec(b,c,y,self,dat,compo)
         else if (trim(method) == 'lu') then
-           !write(*,*) 'Currently deprecated -- replace with LAPACK'
-           !stop
+           write(*,*) 'Currently deprecated.'
+           stop
            !mat_u(:,:)        = 0.d0
            if (rank == master) write(*,*) 'Joint sampling using LU Decomp'
            !call LUDecomp(A,mat_l,mat_u,y)
@@ -459,7 +461,7 @@ contains
         deallocate(c)
     end subroutine sample_joint_amp
 
-    subroutine template_fit(self, dat, comp, noise, mapn,temp_num)
+    subroutine template_fit(self, dat, comp,map_n, temp_num)
       !------------------------------------------------------------------------
       ! Simple linear fit of a template to data map with a sampling term
       !------------------------------------------------------------------------
@@ -467,16 +469,20 @@ contains
       
       type(params)                                           :: self
       type(component)                                        :: comp
-      real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: dat, noise
-      real(dp), dimension(0:npix-1,nbands)                   :: cov, nos
-      integer(i4b),                               intent(in) :: mapn
+      type(data)                                             :: dat
+      !real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: dat, noise
+      real(dp), dimension(0:npix-1,nbands)                   :: cov, nos, map
+      integer(i4b),                               intent(in) :: map_n
       integer(i4b), optional,                     intent(in) :: temp_num
       real(dp)                                               :: temp, sum1, sum2, norm
 
-      nos = noise(:,mapn,:)
+      nos = dat%rms_map(:,map_n,:)
       cov = nos**2.d0
 
       if (trim(self%mode) == 'comp_sep') then
+
+         write(*,*) "Template fitting NOT coded for general case yet!"
+         stop
          !do j = 1, self%numband
          !   if (self%temp_corr(temp_num,j)) then
             
@@ -492,7 +498,7 @@ contains
                do i = 0, npix-1
                   if (comp%HI(i,1) > self%thresh) cycle
                   temp = comp%HI(i,1)*planck(self%dat_nu(j)*1d9,comp%T_d(i,1))
-                  sum1 = sum1 + (dat(i,mapn,j)*temp)/cov(i,j)
+                  sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/cov(i,j)
                   sum2 = sum2 + (temp)**2.d0/cov(i,j)
                   norm = norm + (temp)**2.d0/cov(i,j)
                end do
@@ -504,7 +510,7 @@ contains
     end subroutine template_fit
 
 
-   function sample_spec_amp(self, dat, comp, noise, ind, mapn)
+   function sample_spec_amp(self, dat, comp, noise, ind, map_n)
         !------------------------------------------------------------------------
         ! Samples spectral amplitude (per pixel), following the spectrum of foreground 'type'. Returns a full map of amplitudes.
         !------------------------------------------------------------------------
@@ -514,7 +520,7 @@ contains
         type(component)                                        :: comp
         real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: dat, noise
         integer(i4b),                               intent(in) :: ind
-        integer(i4b),                               intent(in) :: mapn
+        integer(i4b),                               intent(in) :: map_n
         real(dp)                                               :: sum1, sum2, spec
         real(dp)                                               :: chi, chi_0, chi_00, p
         real(dp)                                               :: amp, num, t, sam
@@ -524,7 +530,7 @@ contains
         real(dp), dimension(0:npix-1,nbands)                   :: cov, nos
         real(dp), dimension(0:npix-1)                          :: sample_spec_amp
 
-        nos = noise(:,mapn,:)
+        nos = noise(:,map_n,:)
         cov = nos**2.d0
 
         do i = 0, npix-1
@@ -532,8 +538,8 @@ contains
             sum2    = 0.0d0
             norm(i) = 0.d0
             do j = 1, nbands
-                spec           = compute_spectrum(self,comp,ind,self%dat_nu(j),i,mapn)
-                sum1           = sum1 + (dat(i,mapn,j)*spec)/cov(i,j)
+                spec           = compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n)
+                sum1           = sum1 + (dat(i,map_n,j)*spec)/cov(i,j)
                 sum2           = sum2 + (spec)**2.d0/cov(i,j)
                 norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,j)
             end do
@@ -656,6 +662,7 @@ contains
 
         x(1) = 1.d0           
         !------------------------------------------------------------------------
+        ! Metropolis algorithm:
         ! Sampling portion. Determine the log-likelihood, and accept based off of
         ! the improvement in the fit.
         !------------------------------------------------------------------------
@@ -882,6 +889,8 @@ contains
       end do
       T_low = te
       ! end if
+
+      ! Metropolis algorithm
       
       x(1) = 1.d0
       do i = 0, npix2-1
@@ -895,7 +904,7 @@ contains
             ! Chi-square from the most recent Gibbs chain update
             do j = 1, nbands
                a = a + (((comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,sol)) &
-                    - maps_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
+                    - (maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/cov_low(i,map_n,j)
             end do
             c   = a
             
@@ -906,7 +915,7 @@ contains
                b = 0.d0
                do j = 1, nbands
                   tmp(j) = comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,t)
-                  b      = b + ((tmp(j)-maps_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
+                  b      = b + ((tmp(j)-(maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/cov_low(i,map_n,j)
                end do
                b = b
                
@@ -948,5 +957,174 @@ contains
       
     end subroutine sample_HI_T
     ! ------------------------------------------------------------
+
+    subroutine sample_band_gain(self, dat, comp, map_n, band, fg, sample)
+      class(params)                                          :: self
+      type(data)                                             :: dat
+      type(component)                                        :: comp
+      integer(i4b),                               intent(in) :: map_n
+      integer(i4b),                               intent(in) :: band
+      integer(i4b),                               intent(in) :: fg
+      integer(i4b), optional,                     intent(in) :: sample
+      real(dp), allocatable, dimension(:)                    :: map1, map2, mask
+      real(dp)                                               :: norm, gain
+
+      allocate(map1(0:dat%npix-1))
+      allocate(map2(0:dat%npix-1))
+      allocate(mask(0:dat%npix-1))
+      
+      map1 = 0.d0
+      map2 = 0.d0
+      mask = 0.d0
+
+      mask = dat%masks(:,1)
+
+      ! map1 is the map we calibrate against here, being a component map.
+      ! Must ensure the map is calculated prior to gain fitting
+      ! for the HI fit, we use the foreground model to fit
+
+      if (trim(self%mode) == 'hi_fit') then
+         do i = 0, dat%npix-1
+            if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+            map1(i) = comp%HI(i,1)*planck(self%dat_nu(band)*1d9,comp%T_d(i,1))
+         end do
+      else
+         map1 = dat%fg_map(:,map_n,band,fg)
+      end if
+         
+      map2 = dat%sig_map(:,map_n,band)-dat%offset(band)
+
+      ! Super simple - find the multiplicative factor by finding the maximum likelihood
+      ! solution through a linear fit to the foreground map.
+
+      gain = sum(mask*map1*map2)/sum(mask*map1**2)
+
+      norm = sqrt(sum(map1(:)**2.d0))
+
+      ! Sample variable can be any number. If it's present, we sample!
+      if (present(sample)) then
+         gain = gain + rand_normal(0.d0,1.d0)/norm
+      end if
+
+      ! Save to data type variable corresponding to the band.
+      dat%gain(band) = gain
+
+    end subroutine sample_band_gain
+
+    subroutine sample_band_offset(self, dat, comp, map_n, fg, band)
+      class(params)                                          :: self
+      type(data)                                             :: dat
+      type(component)                                        :: comp
+      integer(i4b),                               intent(in) :: map_n
+      integer(i4b),                               intent(in) :: band
+      integer(i4b),                               intent(in) :: fg
+      real(dp)                                               :: offset
+      real(dp), allocatable, dimension(:)                    :: map1, map2, mask
+
+      allocate(map1(0:dat%npix-1))
+      allocate(map2(0:dat%npix-1))
+      allocate(mask(0:dat%npix-1))
+
+      mask = dat%masks(:,1)
+
+      ! map1 is the map we calibrate against here, being a component map.
+      ! Must ensure the map is calculated prior to gain fitting
+      ! for the HI fit, we use the foreground model to fit (amplitude*HI*B_nu(T))
+
+      if (trim(self%mode) == 'hi_fit') then
+         do i = 0, dat%npix-1
+            if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+            map1(i) = comp%HI_amps(band)*comp%HI(i,1)*planck(self%dat_nu(band)*1d9,comp%T_d(i,1))
+         end do
+      else
+         map1 = dat%fg_map(:,map_n,band,fg)
+      end if
+
+      map2 = dat%sig_map(:,map_n,band)/dat%gain(band)
+
+      ! offset = sum(mask(:)*(map2(:) - dat%gain(band)*map1(:)))/sum(mask(:))
+
+      offset = ((sum(mask(:)*(map1(:)**2))*(sum(mask(:)*map2(:)))) - (sum(mask(:)*map1(:)*map2(:))*sum(mask(:)*map1(:))))/&
+               ((sum(mask(:))*sum(mask(:)*(map1(:)**2)))-(sum(mask(:)*(map1(:)**2))))
+
+      dat%offset(band) = offset
+
+    end subroutine sample_band_offset
+
+    subroutine calc_hi_gain_offset(self, dat, comp, map_n, fg, band)
+      class(params)                                          :: self
+      type(data)                                             :: dat
+      type(component)                                        :: comp
+      integer(i4b),                               intent(in) :: map_n
+      integer(i4b),                               intent(in) :: band
+      integer(i4b),                               intent(in) :: fg
+      real(dp), allocatable, dimension(:)                    :: map1, map2, mask
+      real(dp), allocatable, dimension(:)                    :: gain, offset
+
+
+      allocate(map1(0:dat%npix-1))
+      allocate(map2(0:dat%npix-1))
+      allocate(mask(0:dat%npix-1))
+      
+      allocate(gain(0:self%nsample))
+      allocate(offset(0:self%nsample))
+
+      gain(0)   = 1.d0
+      offset(0) = 0.d0
+
+      map1 = 0.d0
+      map2 = 0.d0
+      mask = 0.d0
+
+      mask = dat%masks(:,1)
+
+      ! map1 is the map we calibrate against here, being a component map.
+      ! Must ensure the map is calculated prior to gain fitting
+      ! for the HI fit, we use the foreground model to fit
+
+      ! For the HI fit, we know that as the dust emission goes to 0, so does HI column density.
+      ! This relationship is approximately linear below HI ~ 4e20 cm-2. In this fit we fit the gain
+      ! to the full HI model presented, but the offset will be determined using the dust-HI relationship
+
+      if (trim(self%mode) == 'hi_fit') then
+         do i = 0, dat%npix-1
+            if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+            map1(i) = comp%HI_amps(band)*comp%HI(i,1)*planck(self%dat_nu(band)*1d9,comp%T_d(i,1))
+         end do
+      else
+         map1 = dat%fg_map(:,map_n,band,fg)
+      end if
+
+      map2 = dat%sig_map(:,map_n,band)
+
+      do i = 1, self%nsample-1
+         
+         ! Fit gain to the SED first (HI in the HI fit case)
+
+         ! if (trim(self%mode) == 'hi_fit') then
+         !    offset(i) = sum(mask(:)*(map2(:) - gain(i-1)*comp%HI(:,1)))/sum(mask(:))
+         ! else
+         offset(i) = sum(mask(:)*(map2(:) - gain(i-1)*map1(:)))/sum(mask(:))
+         ! end if                 
+         ! Calculate the offset using the HI map from the calibrated band
+         
+         gain(i)   = sum(mask(:)*(map1(:)*(map2(:)-offset(i))))/sum(mask(:)*(map1(:)**2))
+
+         if (i > self%nsample) then
+            exit
+         end if
+         
+         if (i > 10) then
+            if (abs(gain(i)-gain(i-10))/abs(gain(i)) < 1d-6 .and. abs(offset(i) - offset(i-10)) < 1d-6) exit
+         end if
+      end do
+
+      ! write(*,*) gain(i-1)
+      ! write(*,*) offset(i-1)
+      
+      dat%gain(band)   = gain(i-1)
+      dat%offset(band) = offset(i-1)
+
+    end subroutine calc_hi_gain_offset
 
 end module dang_sample_mod

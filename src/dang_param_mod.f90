@@ -34,8 +34,12 @@ module dang_param_mod
         character(len=512), allocatable, dimension(:)   :: dat_mapfile   ! Band filename
         character(len=512), allocatable, dimension(:)   :: dat_noisefile ! Band rms filename
         real(dp),           allocatable, dimension(:)   :: dat_nu        ! Band frequency (in GHz)
+        real(dp),           allocatable, dimension(:)   :: init_gain     ! initial gain value for each band
+        real(dp),           allocatable, dimension(:)   :: init_offs     ! initial offset value for each band
         character(len=512), allocatable, dimension(:)   :: dat_unit      ! Band units (uK_CMB, uK_RJ, MJy/sr)
         logical(lgt),       allocatable, dimension(:)   :: bp_map        ! True false (know when to swap)
+        logical(lgt),       allocatable, dimension(:)   :: fit_gain      ! Do we fit the gain for this band?
+        logical(lgt),       allocatable, dimension(:)   :: fit_offs      ! Do we fit the offset for this band?
         
         ! Component parameters
         integer(i4b)      :: ncomp                                          ! # of foregrounds
@@ -268,7 +272,8 @@ contains
         CHARACTER(len=:), ALLOCATABLE   :: val,val2,val3
         integer(i4b)                    :: i,j
 
-        key=trim(parname)
+        key=adjustl(trim(parname))
+        write(*,*) key
         call tolower(key)
         call get_hash_tbl_sll(htbl,trim(key),val)
         if (.not. allocated(val)) then
@@ -426,6 +431,11 @@ contains
         allocate(par%bp_map(n))
         allocate(par%dust_corr(n))
 
+        allocate(par%init_gain(n))
+        allocate(par%init_offs(n))
+        allocate(par%fit_gain(n))
+        allocate(par%fit_offs(n))
+
         do i = 1, n
             call int2string(i, itext)
             call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%dat_label(i))
@@ -433,10 +443,13 @@ contains
             call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%dat_noisefile(i))
             call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%dat_nu(i))
             call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%dat_unit(i))
+            call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(i))
+            call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(i))
+            call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(i))
+            !call get_parameter_hashtable(htbl, 'BAND_FIT_OFFSET'//itext, len_itext=len_itext, par_lgt=par%fit_offs(i))
             call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(i))
             call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(i))
          end do
-
     end subroutine read_data_params
 
     subroutine read_comp_params(htbl,par)
