@@ -190,8 +190,10 @@ program dang
         dang_data%sig_map(:,:,j) = map
         ! Initialize gain and offset values from parameter file
         dang_data%gain(j)   = par%init_gain(j)
-        dang_data%offset(j) = par%init_offs(j) 
+        dang_data%offset(j) = 0.d0 
      end do
+
+     par%fit_offs(:) = .true.
      
      deallocate(map,rms)
 
@@ -657,7 +659,7 @@ contains
        write(37,"(8(E16.4))") dang_data%gain
        close(37)
 
-       title = trim(direct)//'band_offset.dat'
+       title = trim(direct)//'band_offsets.dat'
        inquire(file=title,exist=exist)
        if (exist) then
           open(38,file=title,status="old",position="append",action="write") 

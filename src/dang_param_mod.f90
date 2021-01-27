@@ -148,11 +148,12 @@ contains
         call init_hash_tbl_sll(htable,tbl_len=10*parfile_len)
         ! Put the parameter file into the hash table                                                     
         call put_ascii_into_hashtable(parfile_cache,htable)
-        deallocate(parfile_cache)
+        !deallocate(parfile_cache)
  
         call read_global_params(htable,par)    
         call read_data_params(htable,par)
         call read_comp_params(htable,par)
+        deallocate(parfile_cache)
 
     end subroutine read_param_file
 
@@ -273,7 +274,6 @@ contains
         integer(i4b)                    :: i,j
 
         key=adjustl(trim(parname))
-        write(*,*) key
         call tolower(key)
         call get_hash_tbl_sll(htbl,trim(key),val)
         if (.not. allocated(val)) then
@@ -444,9 +444,8 @@ contains
             call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%dat_nu(i))
             call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%dat_unit(i))
             call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(i))
-            call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(i))
             call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(i))
-            !call get_parameter_hashtable(htbl, 'BAND_FIT_OFFSET'//itext, len_itext=len_itext, par_lgt=par%fit_offs(i))
+            !call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(i))
             call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(i))
             call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(i))
          end do

@@ -23,7 +23,7 @@
 
 MODULE hashtbl
   IMPLICIT NONE ! Use strong typing
-  INTEGER, PARAMETER :: tbl_size = 50000
+  INTEGER, PARAMETER :: tbl_size = 100000
 
   TYPE sllist
      TYPE(sllist), POINTER :: child => NULL()
@@ -78,6 +78,9 @@ CONTAINS
     CHARACTER(len=:), ALLOCATABLE, INTENT(out)   :: val
     INTEGER                                      :: vallen
 
+    ! write(*,*) 'enter'
+    ! write(*,*) key
+    ! write(*,*) list%key
     vallen = 0
     IF (ALLOCATED(list%key) .AND. (list%key == key)) THEN
        vallen = LEN(list%val)
@@ -149,7 +152,6 @@ CONTAINS
     CHARACTER(len=*),              INTENT(in)    :: key
     CHARACTER(len=:), ALLOCATABLE, INTENT(out)   :: val
     INTEGER                                      :: hash
-
     hash = MOD(sum_string(key),tbl%vec_len)
     CALL tbl%vec(hash)%get(key=key,val=val)
   END SUBROUTINE get_hash_tbl_sll
