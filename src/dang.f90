@@ -381,17 +381,23 @@ contains
        if (iter > 1) then
           write(*,*) 'Calc HI gain offset'
           do j = 1, nbands
-             if (par%fit_gain(j) .and. par%fit_offs(j)) then
-                call calc_HI_gain_offset(par, dang_data, comp, 1, 1, j)
-             else if (par%fit_gain(j) .and. .not. par%fit_offs(j)) then
-                call sample_band_gain(par, dang_data, comp, 1, 1, j)
-             else if (par%fit_offs(j) .and. .not. par%fit_gain(j)) then
-                call sample_band_offset(par, dang_data, comp, 1, 1, j)
+             if (par%fit_gain(j)) then
+                call sample_band_gain(par, dang_data, comp, 1, j, 1, 1)
              end if
+             if (par%fit_offs(j)) then
+                call sample_band_offset(par, dang_data, comp, 1, j, 1)
+             end if
+             ! if (par%fit_gain(j) .and. par%fit_offs(j)) then
+             !    call calc_HI_gain_offset(par, dang_data, comp, 1, 1, j)
+             ! else if (par%fit_gain(j) .and. .not. par%fit_offs(j)) then
+             !    call sample_band_gain(par, dang_data, comp, 1, 1, j)
+             ! else if (par%fit_offs(j) .and. .not. par%fit_gain(j)) then
+             !    call sample_band_offset(par, dang_data, comp, 1, 1, j)
+             ! end if
           end do
-          write(*,"(3x,8(A16))") par%dat_label
-          write(*,"(8(E16.4))") dang_data%gain
-          write(*,"(8(E16.4))") dang_data%offset
+          write(*,"(12x,8(A16))") par%dat_label
+          write(*,"(a8,8(E16.4))") 'Gain: ',dang_data%gain
+          write(*,"(a8,8(E16.4))") 'Offset: ',dang_data%offset
        end if
 
        call template_fit(par, dang_data, comp, 1)
@@ -419,6 +425,7 @@ contains
           end if
           call write_data(par%mode)
        end if
+       write(*,*) ''
     end do
   end subroutine hi_fit
   
@@ -707,7 +714,7 @@ contains
           else
              do j = 1, nbands    
                 s = 0.0
-                s = comp%HI_amps(j)*comp%HI(i,1)*planck(par%dat_nu(j)*1d9,comp%T_d(i,1))
+                s = dang_data%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(par%dat_nu(j)*1d9,comp%T_d(i,1))+dang_data%offset(j)
                 chisq = chisq + (dang_data%sig_map(i,map_n,j)-s)**2.d0/(dang_data%rms_map(i,map_n,j)**2.d0)
              end do
           end if

@@ -934,6 +934,11 @@ contains
                   end if
                end if
             end do
+            if (sam == 0.d0) then
+               write(*,*) 'Error: T_d = 0.d0 accepted!'
+               stop
+            end if
+
             sol             = sam
             sample_T_low(i) = sol
          end if
@@ -966,12 +971,14 @@ contains
       integer(i4b),                               intent(in) :: band
       integer(i4b),                               intent(in) :: fg
       integer(i4b), optional,                     intent(in) :: sample
-      real(dp), allocatable, dimension(:)                    :: map1, map2, mask
+      real(dp), allocatable, dimension(:)                    :: map1, map2, mask, noise, N_inv
       real(dp)                                               :: norm, gain
 
       allocate(map1(0:dat%npix-1))
       allocate(map2(0:dat%npix-1))
       allocate(mask(0:dat%npix-1))
+      allocate(noise(0:dat%npix-1))
+      allocate(N_inv(0:dat%npix-1))
       
       map1 = 0.d0
       map2 = 0.d0
@@ -986,20 +993,22 @@ contains
       if (trim(self%mode) == 'hi_fit') then
          do i = 0, dat%npix-1
             if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-            map1(i) = comp%HI(i,1)*planck(self%dat_nu(band)*1d9,comp%T_d(i,1))
+            map1(i) = comp%HI_amps(band)*comp%HI(i,1)*planck(self%dat_nu(band)*1d9,comp%T_d(i,1))
          end do
       else
          map1 = dat%fg_map(:,map_n,band,fg)
       end if
          
-      map2 = dat%sig_map(:,map_n,band)-dat%offset(band)
+      map2  = dat%sig_map(:,map_n,band)-dat%offset(band)
+      noise = dat%rms_map(:,map_n,band)
+      N_inv = 1.d0/(noise**2)
 
       ! Super simple - find the multiplicative factor by finding the maximum likelihood
       ! solution through a linear fit to the foreground map.
 
-      gain = sum(mask*map1*map2)/sum(mask*map1**2)
+      gain = sum(mask*map1*N_inv*map2)/sum(mask*map1*N_inv*map1)
 
-      norm = sqrt(sum(map1(:)**2.d0))
+      norm = sqrt(sum(mask*map1*N_inv*map1))
 
       ! Sample variable can be any number. If it's present, we sample!
       if (present(sample)) then
@@ -1011,15 +1020,25 @@ contains
 
     end subroutine sample_band_gain
 
-    subroutine sample_band_offset(self, dat, comp, map_n, fg, band)
+    subroutine sample_band_offset(self, dat, comp, map_n, band, fg, sample)
       class(params)                                          :: self
       type(data)                                             :: dat
       type(component)                                        :: comp
       integer(i4b),                               intent(in) :: map_n
       integer(i4b),                               intent(in) :: band
       integer(i4b),                               intent(in) :: fg
-      real(dp)                                               :: offset
+      integer(i4b), optional,                     intent(in) :: sample
       real(dp), allocatable, dimension(:)                    :: map1, map2, mask
+      real(dp)                                               :: norm, offset
+      real(dp)                                               :: n, x, x2, y, y2, xy
+
+      n  = 0.d0
+      x  = 0.d0
+      x2 = 0.d0
+      y  = 0.d0
+      y2 = 0.d0
+      xy = 0.d0
+
 
       allocate(map1(0:dat%npix-1))
       allocate(map2(0:dat%npix-1))
@@ -1034,7 +1053,7 @@ contains
       if (trim(self%mode) == 'hi_fit') then
          do i = 0, dat%npix-1
             if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-            map1(i) = comp%HI_amps(band)*comp%HI(i,1)*planck(self%dat_nu(band)*1d9,comp%T_d(i,1))
+            map1(i) = comp%HI(i,1)
          end do
       else
          map1 = dat%fg_map(:,map_n,band,fg)
@@ -1044,8 +1063,25 @@ contains
 
       ! offset = sum(mask(:)*(map2(:) - dat%gain(band)*map1(:)))/sum(mask(:))
 
-      offset = ((sum(mask(:)*(map1(:)**2))*(sum(mask(:)*map2(:)))) - (sum(mask(:)*map1(:)*map2(:))*sum(mask(:)*map1(:))))/&
-               ((sum(mask(:))*sum(mask(:)*(map1(:)**2)))-(sum(mask(:)*(map1(:)**2))))
+      do i = 0, dat%npix-1
+         if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+         n  = n + 1.d0
+         x  = x + map1(i)
+         x2 = x2 + map1(i)*map1(i)
+         y  = y + map2(i)
+         y2 = y2 + map2(i)*map2(i)
+         xy = xy + map1(i)*map2(i)
+      end do
+
+      offset = (y*x2 - x*xy)/(n*x2 - x**2)
+
+      ! stop
+
+      ! norm   = sum(mask(:))*sum(mask(:)*(map1(:)**2))-(sum(mask(:)*map1(:))**2)
+
+      ! if (present(sample)) then
+      !    offset = offset + rand_normal(0.d0,1.d0)/norm
+      ! end if
 
       dat%offset(band) = offset
 
