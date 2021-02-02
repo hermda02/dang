@@ -412,7 +412,7 @@ contains
         type(params),       intent(inout) :: par
 
         integer(i4b)     :: i, j, n, len_itext
-        character(len=2) :: itext
+        character(len=3) :: itext
         character(len=2) :: jtext
 
         write(*,*) "Read data parameters."
@@ -460,7 +460,7 @@ contains
         integer(i4b)     :: i, j, n, n2, n3
         integer(i4b)     :: len_itext, len_jtext
         character(len=2) :: itext
-        character(len=2) :: jtext
+        character(len=3) :: jtext
 
         write(*,*) "Read component parameters."
 
