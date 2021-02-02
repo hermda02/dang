@@ -852,7 +852,7 @@ contains
 
       sam = 0.0
       
-      nside2 = 64
+      nside2 = 16!64
       
       nside1 = npix2nside(npix)
       if (nside1 == nside2) then

@@ -395,9 +395,9 @@ contains
              !    call sample_band_offset(par, dang_data, comp, 1, 1, j)
              ! end if
           end do
-          write(*,"(12x,8(A16))") par%dat_label
-          write(*,"(a8,8(E16.4))") 'Gain: ',dang_data%gain
-          write(*,"(a8,8(E16.4))") 'Offset: ',dang_data%offset
+          ! write(*,"(12x,8(A16))") par%dat_label
+          ! write(*,"(a8,8(E16.4))") 'Gain: ',dang_data%gain
+          ! write(*,"(a8,8(E16.4))") 'Offset: ',dang_data%offset
        end if
 
        call template_fit(par, dang_data, comp, 1)
@@ -415,10 +415,17 @@ contains
 
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
-             write(*,fmt='(i6, a, E10.3, a, e10.3, a, 10e10.3)')&
-                  iter, " - chisq: " , chisq, " - T_d: ",&
-                  mask_avg(comp%T_d(:,1),dang_data%masks(:,1)), ' - A_HI: ', comp%HI_amps
-             write(*,fmt='(a)') '---------------------------------------------'
+             if (nbands .lt. 10) then
+                write(*,fmt='(i6, a, E10.3, a, e10.3, a, 10e10.3)')&
+                     iter, " - chisq: " , chisq, " - T_d: ",&
+                     mask_avg(comp%T_d(:,1),dang_data%masks(:,1)), ' - A_HI: ', comp%HI_amps
+                write(*,fmt='(a)') '---------------------------------------------'
+             else
+                write(*,fmt='(i6, a, E10.3, a, e10.3)')&
+                     iter, " - chisq: " , chisq, " - T_d: ",&
+                     mask_avg(comp%T_d(:,1),dang_data%masks(:,1))
+                write(*,fmt='(a)') '---------------------------------------------'
+             end if
           end if
           if (mod(iter,output_iter) .EQ. 0) then
              call write_maps(1,par%mode)
