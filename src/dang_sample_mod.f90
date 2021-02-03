@@ -941,7 +941,7 @@ contains
       if (nside1 /= nside2) then
          if (ordering == 1) then
             call udgrade_ring(sample_T_low, nside2, te_sample, nside1)
-            call convert_nest2ring(nside2, sample_T_low)
+            !call convert_nest2ring(nside2, sample_T_low)
          else
             call udgrade_nest(sample_T_low, nside2, te_sample, nside1)
          end if
