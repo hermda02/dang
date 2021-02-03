@@ -621,21 +621,26 @@ contains
 
         if (nside1 /= nside2) then 
             if (ordering == 1) then
-                call udgrade_ring(indx,nside1,indx_low,nside2)
+               call convert_nest2ring(nside1,indx)
+               call udgrade_ring(indx,nside1,indx_low,nside2)
             else
-                call udgrade_nest(indx,nside1,indx_low,nside2)
+               call udgrade_nest(indx,nside1,indx_low,nside2)
             end if
             do j = 1, nbands
-                if (ordering == 1) then
-                    call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                    call udgrade_ring(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
-                    call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
-                    call udgrade_ring(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
-                else
-                    call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                    call udgrade_nest(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
-                    call udgrade_nest(dat%rms_map(:,:,j),nside1,rms_low(:,:,j),nside2)
-                    call udgrade_nest(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
+               if (ordering == 1) then
+                  call convert_nest2ring(nside1, map2fit(:,:,j))
+                  call convert_nest2ring(nside1, dat%fg_map(:,:,j,1))
+                  call convert_nest2ring(nside2,rms_low(:,:,j))
+                  call convert_nest2ring(nside2,mask_low)
+                  call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
+                  call udgrade_ring(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
+                  call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
+                  call udgrade_ring(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
+               else
+                  call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
+                  call udgrade_nest(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
+                  call udgrade_nest(dat%rms_map(:,:,j),nside1,rms_low(:,:,j),nside2)
+                  call udgrade_nest(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
                end if
             end do
             rms_low = sqrt(rms_low / (npix/npix2))

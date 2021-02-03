@@ -162,8 +162,6 @@ program dang
      dang_data%fg_map    = 0.0
      dang_data%temp_amps = 0.0
 
-     write(*,*) ordering
-
      call comp_sep
   
   else if (trim(par%mode) == 'hi_fit') then
