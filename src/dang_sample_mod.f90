@@ -630,8 +630,8 @@ contains
                if (ordering == 1) then
                   call convert_nest2ring(nside1, map2fit(:,:,j))
                   call convert_nest2ring(nside1, dat%fg_map(:,:,j,1))
-                  call convert_nest2ring(nside2,rms_low(:,:,j))
-                  call convert_nest2ring(nside2,mask_low)
+                  call convert_nest2ring(nside2, rms_low(:,:,j))
+                  call convert_nest2ring(nside2, mask_low)
                   call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
                   call udgrade_ring(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
                   call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
@@ -787,6 +787,7 @@ contains
 
         if (nside1 /= nside2) then
             if (ordering == 1) then
+                call convert_ring2nest(nside2,indx_sample_low)
                 call udgrade_ring(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
             else
                 call udgrade_nest(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
