@@ -1,17 +1,23 @@
 import healpy as hp
 import numpy as np 
 import os
+import sys
 
-dir = str(input('Which directory to mean? '))
+try:    
+    dir = sys.argv[1] 
+    print(dir)
+except:
+    print("Input which directory you wish to point to (../ automatically included)")
+    exit()
 
 def write_diff(title,map):
-    hp.write_map('../'+dir+title,map)
+    hp.write_map('../'+dir+'/'+title,map)
 
 scale_to_30 = (30./44.)**(-3.1)
 scale_to_spass = (2.305/44.)**(-3.1)
 
-joint_synch_Q = hp.read_map('../'+dir+'synch_Q_mean.fits')
-joint_synch_U = hp.read_map('../'+dir+'synch_U_mean.fits')
+joint_synch_Q = hp.read_map('../'+dir+'/synch_Q_mean.fits')
+joint_synch_U = hp.read_map('../'+dir+'/synch_U_mean.fits')
 
 joint_Q_30 = scale_to_30*joint_synch_Q
 joint_U_30 = scale_to_30*joint_synch_U

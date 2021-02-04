@@ -63,8 +63,8 @@ def read_params(filename):
     blabs = []
     bfreq = []
     for band in range(numbands):
-        blabs.append('BAND_LABEL'+str(band+1).zfill(2))
-        bfreq.append('BAND_FREQ'+str(band+1).zfill(2))        
+        blabs.append('BAND_LABEL'+str(band+1).zfill(3))
+        bfreq.append('BAND_FREQ'+str(band+1).zfill(3))        
     for band in range(numbands):
          with open(filename,'r') as infile:
             for line in infile:
