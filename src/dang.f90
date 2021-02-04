@@ -103,6 +103,9 @@ program dang
   !----------------------------------------------------------------------------------------------------------
   !----------------------------------------------------------------------------------------------------------
   ! Either do component separation, or carry out the HI fit
+
+  call RANDOM_SEED()
+
   if (trim(par%mode) == 'comp_sep') then
      ! Joint Sampler Info
      !----------------------------------------------------------------------------------------------------------
@@ -212,14 +215,22 @@ contains
     !----------------------------------------------------------------------------------------------------------
 
     do iter = 1, niter
-       
-       ! ------------ BP SWAP CHUNK ------------------------------------------------------------------
+
+       ! ------------ BP SWAP CHUNK ----------------------------------------------------------------$
        if (par%bp_swap) then
-          call swap_bp_maps(dang_data,par)
+          ! if (bp_iter > par%bp_max) then
+          !    write(*,*) ''
+          !    write(*,fmt='(a)') 'Switching to chain '// trim(par%bp_chain_list(chain_num+1))
+          !    write(*,*) ''
+          !    chain_num = chain_num + 1
+          !    bp_iter   = par%bp_burnin
+          ! end if
+          call swap_bp_maps(dang_data,par)!,bp_iter),par%bp_chain_list(chain_num))
           write(*,*) ''
+          bp_iter = bp_iter + 1
           call convert_maps_bp(par)
           write(*,*) ''
-          ! Check to see if any swapped maps need to be dust corrected
+          ! Check to see if any swapped maps need to be dust corrected                               
           do j = 1, nbands
              if ( par%bp_map(j)) then
                 if (par%dust_corr(j)) then
@@ -229,6 +240,23 @@ contains
           end do
           write(*,*) ''
        end if
+       
+       ! ! ------------ BP SWAP CHUNK ------------------------------------------------------------------
+       ! if (par%bp_swap) then
+       !    call swap_bp_maps(dang_data,par)
+       !    write(*,*) ''
+       !    call convert_maps_bp(par)
+       !    write(*,*) ''
+       !    ! Check to see if any swapped maps need to be dust corrected
+       !    do j = 1, nbands
+       !       if ( par%bp_map(j)) then
+       !          if (par%dust_corr(j)) then
+       !             call dust_correct_band(dang_data,par,comp,j)
+       !          end if
+       !       end if
+       !    end do
+       !    write(*,*) ''
+       ! end if
        ! -------------------------------------------------------------------------------------------------------------------
        
        ! -------------------------------------------------------------------------------------------------------------------

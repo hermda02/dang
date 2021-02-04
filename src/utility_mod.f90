@@ -85,9 +85,6 @@ contains
 
     function rand_normal(mean,stdev) result(c)
          double precision :: mean,stdev,c,temp(2),theta,r
-         
-         call RANDOM_SEED()
-
          if (stdev <= 0.0d0) then
             write(*,*) "Standard Deviation must be positive."
          else
