@@ -14,30 +14,47 @@ module dang_swap_mod
 contains
 
 
-  subroutine swap_bp_maps(dat,param,iteration)
+  subroutine swap_bp_maps(dat,param)
     type(params)                                    :: param
-    type(data),                intent(inout)        :: dat
-    integer(i4b),              intent(in)           :: iteration
+    type(data),                       intent(inout) :: dat
+    character(len=512)                              :: chain_c
     character(len=300), allocatable, dimension(:,:) :: bp_maps
-    integer(i4b)                                    :: i, j
+    integer(i4b)                                    :: i, j, iter_i, chain_i
     character(len=6)                                :: iter_str
     real(dp), allocatable, dimension(:,:)           :: map, rms
+    real(dp)                                        :: norm
+    double precision                                :: temp(1)
 
     allocate(map(0:npix-1,3))
     allocate(rms(0:npix-1,3))
     allocate(bp_maps(param%numband,2))
 
-    write(iter_str,'(i0.6)') iteration
-
     do j = 1, param%numband
        if (param%bp_map(j)) then
-          bp_maps(j,1) = trim(param%bp_dir) // trim(param%dat_label(j))//'_map_n0064_60arcmin_k'//trim(iter_str)  // '.fits'
-          bp_maps(j,2) = trim(param%bp_dir) // trim(param%dat_label(j))//'_rms_n0064_60arcmin_k'//trim(iter_str) // '.fits'
+
+          call RANDOM_SEED()
+          call RANDOM_NUMBER(temp)
+          
+          norm    = temp(1)*param%num_chains
+          chain_i = int(norm)+1
+          chain_c = param%bp_chain_list(chain_i)
+          
+          call RANDOM_SEED()
+          call RANDOM_NUMBER(temp)
+          
+          norm    = temp(1)*(param%bp_max-param%bp_burnin)
+          iter_i    = int(norm)+1+param%bp_burnin
+          
+          write(iter_str,'(i0.6)') iter_i
+
+          bp_maps(j,1) = trim(param%bp_dir) // trim(param%dat_label(j))//'_map_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str)  // '.fits'
+          bp_maps(j,2) = trim(param%bp_dir) // trim(param%dat_label(j))//'_rms_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str) // '.fits'
           write(*,'(a,a,a)') 'Swapping band ', trim(param%dat_label(j)), '.'
           call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header)
           dat%sig_map(:,:,j) = map
           call read_bintab(trim(bp_maps(j,2)),rms,dat%npix,3,nullval,anynull,header=header)
           dat%rms_map(:,:,j) = rms
+          ! write(*,*) trim(chain_c), ' ', iter_str
        end if
     end do
 

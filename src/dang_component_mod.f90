@@ -1,5 +1,7 @@
 module dang_component_mod
   use healpix_types
+  use pix_tools
+  use fitstools
   use utility_mod
   use dang_param_mod
   use dang_data_mod
@@ -8,30 +10,65 @@ module dang_component_mod
   type, public                              :: component
      
      character(len=32), allocatable, dimension(:) :: joint
-     real(dp), allocatable, dimension(:,:)        :: beta_s, beta_d, T_d
+     real(dp), allocatable, dimension(:,:)        :: beta_s, beta_d, T_d, HI
+     real(dp), allocatable, dimension(:)          :: HI_amps
 
   end type component
 
 contains 
 
-  subroutine init_synch(self,npix,nmaps)
+  subroutine init_synch(self,param,npix,nmaps)
     implicit none
     type(component)               :: self
-    integer(i4b), intent(in) :: npix, nmaps
+    type(params)                  :: param
+    integer(i4b), intent(in)      :: npix, nmaps
     
     allocate(self%beta_s(0:npix-1,nmaps))
+    write(*,*) 'Allocated synch maps'
+    if (trim(param%fg_spec_map(1,1)) == 'none') then 
+       self%beta_s     = param%fg_gauss(1,1,1) ! Synchrotron beta initial guess
+    else
+       !call read_bintab(trim(param%fg_spec_map(1,1)),self%beta_s,npix,3,nullval,anynull,header=header)
+    end if
     
   end subroutine init_synch
   
-  subroutine init_dust(self,npix,nmaps)
+  subroutine init_dust(self,param,npix,nmaps)
     implicit none
     type(component)               :: self
-    integer(i4b), intent(in) :: npix, nmaps
+    type(params)                  :: param
+    integer(i4b), intent(in)      :: npix, nmaps
     
     allocate(self%beta_d(0:npix-1,nmaps))
     allocate(self%T_d(0:npix-1,nmaps))
+    write(*,*) 'Allocated dust maps!'
+
+    self%beta_d     = 1.53d0              ! Dust beta initial guess
+    self%T_d        = 19.6d0
     
   end subroutine init_dust
+
+  subroutine init_hi_fit(self, param, npix)
+    implicit none
+    type(component)          :: self
+    type(params)             :: param
+    integer(i4b), intent(in) :: npix
+    character(len=80), dimension(180) :: head
+
+    allocate(self%HI(0:npix-1,1))
+    allocate(self%T_d(0:npix-1,nmaps))
+    allocate(self%HI_amps(param%numband))
+    write(*,*) 'Allocated HI fitting maps!'
+
+    call read_bintab(trim(param%datadir)//trim(param%HI_file),self%HI,npix,1,nullval,anynull,header=head)
+
+    if (trim(param%HI_Td_init) == 'none') then
+       self%T_d = param%HI_Td_mean
+    else
+       call read_bintab(trim(param%HI_Td_init),self%T_d,npix,1,nullval,anynull,header=head)
+    end if
+
+  end subroutine init_hi_fit
   
   function planck(fre,T)
     implicit none
@@ -55,13 +92,14 @@ contains
     real(dp), optional             :: param
     real(dp)                       :: z, compute_spectrum
     
+    !if (trim(self%fg_label(ind)) == 'power-law') then
     if (ind == 1) then
-       if (present(param)) then
+      if (present(param)) then
           compute_spectrum = (freq/self%fg_nu_ref(ind))**param
        else 
           compute_spectrum = (freq/self%fg_nu_ref(ind))**comp%beta_s(pix,mapn)
        end if
-!    else if (trim(self%fg_label(ind)) == 'mbb') then
+    !else if (trim(self%fg_label(ind)) == 'mbb') then
     else if (ind == 2) then
        z = h / (k_B*comp%T_d(pix,mapn))
 !       compute_spectrum = (exp(z*self%fg_nu_ref(ind)*1d9)-1.d0) / &

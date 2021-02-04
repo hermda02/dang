@@ -1,0 +1,122 @@
+#!/bin/bash
+
+c3pp=/mn/stornext/u3/daniher/.local/bin/c3pp
+me="/mn/stornext/u3/daniher/master/cmbcocopy/src/f90/map_editor/map_editor"
+param=$1
+
+if [ $# -lt 2 ]; then
+  echo "default map size: -size m"
+  size=m
+else
+  size=$2
+fi
+
+
+maskfile=$(awk -F'[=[:blank:]#]+' '$1 == "MASKFILE" {print $2}' $param)
+maskfile="${maskfile%\'}"
+maskfile="${maskfile#\'}"
+maskfile=../$maskfile
+
+bands=("bp_030" "bp_044" "bp_070" "wmap_Ka" "wmap_Q" "wmap_V" "wmap_K" "s-pass")
+
+for ((i=0; i<${#bands[@]}; i++)); do
+    band=${bands[$i]}
+
+    name_Q=${band}_residual_Q_mean.fits
+    name_U=${band}_residual_U_mean.fits
+
+    $me smooth g2g $name_Q 0 200 64 60.0 120.0 ${name_Q/.fits/_2deg.fits}
+    $me apply_mask ${name_Q/.fits/_2deg.fits} $maskfile ${name_Q/.fits/_2deg.fits}
+
+    $me smooth g2g $name_U 0 200 64 60.0 120.0 ${name_U/.fits/_2deg.fits}
+    $me apply_mask ${name_U/.fits/_2deg.fits} $maskfile ${name_U/.fits/_2deg.fits}
+    
+done
+
+$me apply_mask synch_Q_std.fits $maskfile synch_Q_std.fits
+$me apply_mask synch_U_std.fits $maskfile synch_U_std.fits
+$me apply_mask synch_beta_std.fits $maskfile synch_beta_std.fits
+
+$c3pp plot bp_030_residual_Q_mean.fits -bar -range 3 -size $size -title '${\langle r_{30} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$'
+$c3pp plot bp_030_residual_Q_mean_2deg.fits -bar -range 3 -size $size -title '${\langle r_{30} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_030_residual_U_mean.fits -bar -range 3 -size $size -title '${\langle r_{30} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_030_residual_U_mean_2deg.fits -bar -range 3 -size $size -title '${\langle r_{30} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_030_residual_Q_mean.fits -range 3 -size $size -title '${\langle r_{30} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$'
+$c3pp plot bp_030_residual_Q_mean_2deg.fits -range 3 -size $size -title '${\langle r_{30} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_030_residual_U_mean.fits -range 3 -size $size -title '${\langle r_{30} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_030_residual_U_mean_2deg.fits -range 3 -size $size -title '${\langle r_{30} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot bp_044_residual_Q_mean.fits -bar -range 3 -size $size -title '${\langle r_{44} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_044_residual_Q_mean_2deg.fits -bar -range 3 -size $size -title '${\langle r_{44} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_044_residual_U_mean.fits -bar -range 3 -size $size -title '${\langle r_{44} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_044_residual_U_mean_2deg.fits -bar -range 3 -size $size -title '${\langle r_{44} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_044_residual_Q_mean.fits -range 3 -size $size -title '${\langle r_{44} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_044_residual_Q_mean_2deg.fits -range 3 -size $size -title '${\langle r_{44} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_044_residual_U_mean.fits -range 3 -size $size -title '${\langle r_{44} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_044_residual_U_mean_2deg.fits -range 3 -size $size -title '${\langle r_{44} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot bp_070_residual_Q_mean.fits -bar -range 3 -size $size -title '${\langle r_{70} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_070_residual_Q_mean_2deg.fits -bar -range 3 -size $size -title '${\langle r_{70} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_070_residual_U_mean.fits -bar -range 3 -size $size -title '${\langle r_{70} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_070_residual_U_mean_2deg.fits -bar -range 3 -size $size -title '${\langle r_{70} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_070_residual_Q_mean.fits -range 3 -size $size -title '${\langle r_{70} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_070_residual_Q_mean_2deg.fits -range 3 -size $size -title '${\langle r_{70} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_070_residual_U_mean.fits -range 3 -size $size -title '${\langle r_{70} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot bp_070_residual_U_mean_2deg.fits -range 3 -size $size -title '${\langle r_{70} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+# $c3pp plot s-pass_residual_Q_mean.fits -bar -range 3 -size $size -title '${\langle r_{SPASS} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+# $c3pp plot s-pass_residual_Q_mean_2deg.fits -bar -range 3 -size $size -title '${\langle r_{SPASS} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+# $c3pp plot s-pass_residual_U_mean.fits -bar -range 3 -size $size -title '${\langle r_{SPASS} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+# $c3pp plot s-pass_residual_U_mean_2deg.fits -bar -range 3 -size $size -title '${\langle r_{SPASS} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot wmap_Ka_residual_Q_mean.fits -bar -range 10 -size $size -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Ka_residual_Q_mean_2deg.fits -bar -range 10 -size $size -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Ka_residual_U_mean.fits -bar -range 10 -size $size -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Ka_residual_U_mean_2deg.fits -bar -range 10 -size $size -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Ka_residual_Q_mean.fits -range 10 -size $size -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Ka_residual_Q_mean_2deg.fits -range 10 -size $size -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Ka_residual_U_mean.fits -range 10 -size $size -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Ka_residual_U_mean_2deg.fits -range 10 -size $size -title '${\langle r_{\rm Ka} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot wmap_K_residual_Q_mean.fits -bar -range 10 -size $size -title '${\langle r_{\rm K} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_K_residual_Q_mean_2deg.fits -bar -range 10 -size $size -title '${\langle r_{\rm K} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_K_residual_U_mean.fits -bar -range 10 -size $size -title '${\langle r_{\rm K} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_K_residual_U_mean_2deg.fits -bar -range 10 -size $size -title '${\langle r_{\rm K} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_K_residual_Q_mean.fits -range 10 -size $size -title '${\langle r_{\rm K} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_K_residual_Q_mean_2deg.fits -range 10 -size $size -title '${\langle r_{\rm K} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_K_residual_U_mean.fits -range 10 -size $size -title '${\langle r_{\rm K} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_K_residual_U_mean_2deg.fits -range 10 -size $size -title '${\langle r_{\rm K} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot wmap_Q_residual_Q_mean.fits -bar -range 10 -size $size -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Q_residual_Q_mean_2deg.fits -bar -range 10 -size $size -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Q_residual_U_mean.fits -bar -range 10 -size $size -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Q_residual_U_mean_2deg.fits -bar -range 10 -size $size -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Q_residual_Q_mean.fits -range 10 -size $size -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Q_residual_Q_mean_2deg.fits -range 10 -size $size -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Q_residual_U_mean.fits -range 10 -size $size -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_Q_residual_U_mean_2deg.fits -range 10 -size $size -title '${\langle r_{\rm Q} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot wmap_V_residual_Q_mean.fits -bar -range 10 -size $size -title '${\langle r_{\rm V} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_V_residual_Q_mean_2deg.fits -bar -range 10 -size $size -title '${\langle r_{\rm V} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_V_residual_U_mean.fits -bar -range 10 -size $size -title '${\langle r_{\rm V} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_V_residual_U_mean_2deg.fits -bar -range 10 -size $size -title '${\langle r_{\rm V} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_V_residual_Q_mean.fits -range 10 -size $size -title '${\langle r_{\rm V} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_V_residual_Q_mean_2deg.fits -range 10 -size $size -title '${\langle r_{\rm V} \rangle}$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_V_residual_U_mean.fits -range 10 -size $size -title '${\langle r_{\rm V} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot wmap_V_residual_U_mean_2deg.fits -range 10 -size $size -title '${\langle r_{\rm V} \rangle}$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot synch_Q_mean.fits -bar -range 5 -size $size -title '$\langle A_s \rangle$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot synch_U_mean.fits -bar -range 5 -size $size -title '$\langle A_s \rangle$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot synch_Q_mean.fits -range 5 -size $size -title '$\langle A_s \rangle$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot synch_U_mean.fits -range 5 -size $size -title '$\langle A_s \rangle$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot synch_Q_std.fits -bar -min 0.0 -max 2.5 -size $size -title '$\sigma_s$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot synch_U_std.fits -bar -min 0.0 -max 2.5 -size $size -title '$\sigma_s$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot synch_Q_std.fits -min 0.0 -max 2.5 -size $size -title '$\sigma_s$' -ltitle '$Q$' -unit '$\mu K_{\rm RJ}$' 
+$c3pp plot synch_U_std.fits -min 0.0 -max 2.5 -size $size -title '$\sigma_s$' -ltitle '$U$' -unit '$\mu K_{\rm RJ}$' 
+
+$c3pp plot chisq_Q_mean.fits -bar -min 0 -max 2 -size $size -title '$ \chi^2$' -ltitle '$Q$' -unit '$\chi^2$' 
+$c3pp plot chisq_U_mean.fits -bar -min 0 -max 2 -size $size -title '$ \chi^2$' -ltitle '$U$' -unit '$\chi^2$' 
+
+$c3pp plot synch_beta_mean.fits -bar -min -3.15 -max -3.05 -size $size -title '$\beta_{\rm s}$' -ltitle '$P$'
+$c3pp plot synch_beta_std.fits -bar -min 0.03 -max 0.08 -size $size -title '$\sigma_{\beta_{\rm s}}$' -ltitle '$P$'
