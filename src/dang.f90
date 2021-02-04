@@ -83,13 +83,13 @@ program dang
   nlheader          = size(header)
   nmaps             = nmaps
   iterations        = par%nsample              ! # of iterations in the samplers
-  if (par%bp_swap) then
-     niter          = (par%bp_max - par%bp_burnin)*par%num_chains
-     bp_iter        = par%bp_burnin
-     chain_num      = 1
-  else
-     niter          = par%ngibbs               ! # of MC-MC iterations
-  end if
+  ! if (par%bp_swap) then
+  !    niter          = (par%bp_max - par%bp_burnin)*par%num_chains
+  !    bp_iter        = par%bp_burnin
+  !    chain_num      = 1
+  ! else
+  niter             = par%ngibbs               ! # of MC-MC iterations
+  ! end if
   output_iter       = par%iter_out             ! Output maps every <- # of iterations
   output_fg         = par%output_fg            ! Option for outputting foregrounds for all bands
   direct            = par%outdir               ! Output directory name
@@ -215,16 +215,8 @@ contains
        
        ! ------------ BP SWAP CHUNK ------------------------------------------------------------------
        if (par%bp_swap) then
-          if (bp_iter > par%bp_max) then
-             write(*,*) ''
-             write(*,fmt='(a)') 'Switching to chain '// trim(par%bp_chain_list(chain_num+1))
-             write(*,*) ''
-             chain_num = chain_num + 1
-             bp_iter   = par%bp_burnin
-          end if
-          call swap_bp_maps(dang_data,par,bp_iter,par%bp_chain_list(chain_num))
+          call swap_bp_maps(dang_data,par)
           write(*,*) ''
-          bp_iter = bp_iter + 1
           call convert_maps_bp(par)
           write(*,*) ''
           ! Check to see if any swapped maps need to be dust corrected
