@@ -1,0 +1,34 @@
+#!/bin/bash
+
+c3pp='/home/daniel/.local/bin/c3pp'
+me='/home/daniel/danieltools/map_editor/map_editor'
+
+param=$1
+
+if [ $# -lt 1 ]; then
+    echo "Error: parameter file needed as argument 1!"
+    exit
+fi
+
+maskfile=$(awk -F'[=[:blank:]#]+' '$1 == "MASKFILE" {print $2}' $param)
+maskfile="${maskfile%\'}"
+maskfile="${maskfile#\'}"
+maskfile=../$maskfile
+
+for i in *minus*fits; do 
+    $me smooth g2g $i 0 180 64 60.0 180.0 ${i/60arcmin/3deg}
+    $me ap_mask ${i/60arcmin/3deg} $maskfile ${i/60arcmin/3deg}
+
+done
+
+$me ap_mask spass_minus_joint_Q_3deg_n0064.fits ../data/masks/mask_spass_rm_n0064.fits spass_minus_joint_Q_3deg_n0064.fits
+$me ap_mask spass_minus_joint_U_3deg_n0064.fits ../data/masks/mask_spass_rm_n0064.fits spass_minus_joint_U_3deg_n0064.fits
+
+$c3pp plot BP_minus_joint_Q_3deg_n0064.fits -range 3 -title '$\Delta A_{\rm s}^{\rm BP}$' -ltitle '$Q$'
+$c3pp plot BP_minus_joint_U_3deg_n0064.fits -range 3 -title '$\Delta A_{\rm s}^{\rm BP}$' -ltitle '$U$'
+
+$c3pp plot npipe_minus_joint_Q_3deg_n0064.fits -range 3 -bar -title '$\Delta A_{\rm s}^{\rm NPIPE}$' -ltitle '$Q$' -unit '${\rm \mu K_{RJ}}$'
+$c3pp plot npipe_minus_joint_U_3deg_n0064.fits -range 3 -bar -title '$\Delta A_{\rm s}^{\rm NPIPE}$' -ltitle '$U$' -unit '${\rm \mu K_{RJ}}$'
+
+$c3pp plot spass_minus_joint_Q_3deg_n0064.fits -range 10000 -bar -title '$\Delta A_{\rm s}^{\rm SPASS}$' -ltitle '$Q$'
+$c3pp plot spass_minus_joint_U_3deg_n0064.fits -range 10000 -bar -title '$\Delta A_{\rm s}^{\rm SPASS}$' -ltitle '$U$'
