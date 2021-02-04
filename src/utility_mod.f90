@@ -1,5 +1,8 @@
 module utility_mod
     use healpix_types
+    use pix_tools
+    use fitstools
+    use head_fits
     use mpi
     use omp_lib
     implicit none
@@ -107,5 +110,53 @@ contains
         end if
      end do
    end function getlun
+
+   subroutine write_result_map(filename, nside, ordering, header, map)
+     ! Copied from map_editor - CMB/CO fortran 90 fits file tool
+     implicit none
+
+     character(len=*),                    intent(in)    :: filename
+     integer(i4b),                        intent(in)    :: nside, ordering
+     character(len=80), dimension(180),   intent(inout) :: header
+     real(dp),          dimension(0:,1:), intent(in)   :: map
+     
+     integer(i4b) :: i, nlheader, nmaps, npix, j
+     character(len=80)               :: line
+     character(len=80), dimension(1) :: line2
+     character(len=256)              :: outfile
+
+     npix  = size(map(:,1))
+     nmaps = size(map(0,:))
+
+     !Modify necessary header keywords; leave all others as they were
+     nlheader = size(header)
+     do i = 1, nlheader
+        line  = header(i)
+        line2 = ''
+        if (line(1:8) == 'ORDERING') then
+           if (ordering == 1) then
+              call add_card(line2, "ORDERING","RING", "Pixel ordering scheme, either RING or NESTED")
+           else
+              call add_card(line2, "ORDERING","NESTED", "Pixel ordering scheme, either RING or NESTED")
+           end if
+        end if
+
+        if (line(1:5) == 'NSIDE') then
+           call add_card(line2, "NSIDE", nside, "Resolution parameter for HEALPix")
+        end if
+
+        if (line(1:7) == "LASTPIX") then
+           call add_card(line2, "LASTPIX", npix-1, "Last pixel # (starts at 0)")
+        end if
+
+        if (trim(line2(1)) /= '') header(i) = line2(1)
+
+     end do
+
+     outfile = trim(filename)
+     
+     call write_bintab(map, npix, nmaps, header, nlheader, outfile)
+
+   end subroutine write_result_map
 
 end module utility_mod

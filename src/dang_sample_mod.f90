@@ -565,6 +565,7 @@ contains
         real(dp), allocatable, dimension(:,:,:)                :: data_low, fg_map_low, rms_low
         real(dp), allocatable, dimension(:,:)                  :: indx_low, mask_low
         real(dp), allocatable, dimension(:)                    :: indx_sample_low
+        real(dp), allocatable, dimension(:,:,:)                :: fg_map_high
         real(dp), dimension(nbands)                            :: signal, tmp
         real(dp), dimension(2)                                 :: x
         real(dp)                                               :: a, b, c, num, sam, t, p, sol
@@ -572,6 +573,10 @@ contains
 
         real(dp)                                               :: naccept   
         logical                                                :: exist
+
+        real(dp), allocatable, dimension(:,:)                  :: map, map2
+        character(len=128) ::title
+ 
 
         !------------------------------------------------------------------------
         ! Spectral index sampler, using the Metropolis approach.
@@ -601,6 +606,9 @@ contains
         !------------------------------------------------------------------------
         ! Check to see if the data nside is the same as the sampling nside
         ! If not equal, downgrade the data before sampling
+        !
+        ! VITAL: Make dummy varables for each map before ud_grading
+        !
         !------------------------------------------------------------------------
         nside1 = npix2nside(npix)
         if (nside1 == nside2) then
@@ -612,6 +620,7 @@ contains
         allocate(indx_low(0:npix2-1,nmaps),rms_low(0:npix2-1,nmaps,nbands))
         allocate(indx_sample_low(0:npix2-1))
         allocate(mask_low(0:npix2-1,nmaps))
+        allocate(fg_map_high(0:npix-1,nmaps,nbands))
 
         do i = 0, npix-1
            if (mask(i,self%pol_type(1)) == 0.d0) then
@@ -619,30 +628,42 @@ contains
            end if
         end do
 
+        fg_map_high(:,:,:) = dat%fg_map(:,:,:,1)
+
         if (nside1 /= nside2) then 
             if (ordering == 1) then
-               call convert_nest2ring(nside1,indx)
+               call udgrade_ring(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
                call udgrade_ring(indx,nside1,indx_low,nside2)
+               do j = 1, nbands
+                  call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
+                  call udgrade_ring(fg_map_high(:,:,j),nside1,fg_map_low(:,:,j),nside2)
+                  call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
+                  ! title = trim(self%outdir) // trim(self%dat_label(j)) // '_synch_amplitude_Q_n0004.fits'
+                  ! map(:,1)   = fg_map_low(:,2,j)
+                  ! do i = 0, npix2-1
+                  !    if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
+                  !       map(i,1) = missval
+                  !    end if
+                  ! end do
+                  ! call write_result_map(trim(title), nside2, ordering, header, map)
+                  ! title = trim(self%outdir) // trim(self%dat_label(j)) // '_synch_amplitude_Q_n0064.fits'
+                  ! map2(:,1)   = dat%fg_map(:,2,j,1)
+                  ! do i = 0, npix-1
+                  !    if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                  !       map2(i,1) = missval
+                  !    end if
+                  ! end do
+                  ! call write_result_map(trim(title), nside1, ordering, header, map2)
+               end do
             else
                call udgrade_nest(indx,nside1,indx_low,nside2)
-            end if
-            do j = 1, nbands
-               if (ordering == 1) then
-                  call convert_nest2ring(nside1, map2fit(:,:,j))
-                  call convert_nest2ring(nside1, dat%fg_map(:,:,j,1))
-                  call convert_nest2ring(nside2, rms_low(:,:,j))
-                  call convert_nest2ring(nside2, mask_low)
-                  call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                  call udgrade_ring(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
-                  call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
-                  call udgrade_ring(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
-               else
+               call udgrade_nest(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
+               do j = 1, nbands
                   call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
                   call udgrade_nest(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
                   call udgrade_nest(dat%rms_map(:,:,j),nside1,rms_low(:,:,j),nside2)
-                  call udgrade_nest(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
-               end if
-            end do
+               end do
+            end if
             rms_low = sqrt(rms_low / (npix/npix2))
             do i = 0, npix2-1
                if (mask_low(i,1) .lt. 0.50) then
@@ -787,7 +808,6 @@ contains
 
         if (nside1 /= nside2) then
             if (ordering == 1) then
-                call convert_ring2nest(nside2,indx_sample_low)
                 call udgrade_ring(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
             else
                 call udgrade_nest(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
@@ -799,16 +819,16 @@ contains
         if (map_n == -1) then
            do k = self%pol_type(1), self%pol_type(size(self%pol_type))
               if (trim(self%fg_label(ind)) == 'synch') then 
-                 comp%beta_s(:,k) = indx_sample
+                 comp%beta_s(:,k) = indx_sample(:)
               else if (trim(self%fg_label(ind)) == 'dust') then 
-                 comp%beta_d(:,k) = indx_sample
+                 comp%beta_d(:,k) = indx_sample(:)
               end if
            end do
         else
            if (trim(self%fg_label(ind)) == 'synch') then 
-              comp%beta_s(:,k) = indx_sample
+              comp%beta_s(:,k) = indx_sample(:)
            else if (trim(self%fg_label(ind)) == 'dust') then 
-              comp%beta_d(:,k) = indx_sample
+              comp%beta_d(:,k) = indx_sample(:)
            end if
         end if
 

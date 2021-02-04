@@ -460,7 +460,7 @@ contains
                       map(n,1) = missval
                    end if
                 end do
-                call write_bintab(map,npix,1, header, nlheader, trim(title))
+                call write_result_map(trim(title), nside, ordering, header, map)
              end do
              title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
                   // '_' // trim(iter_str) // '.fits'
@@ -470,7 +470,7 @@ contains
                    map(n,1) = missval
                 end if
              end do
-             call write_bintab(map,npix,1, header, nlheader, trim(title))
+             call write_result_map(trim(title), nside, ordering, header, map)
           end do
        else 
           title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
@@ -481,7 +481,7 @@ contains
                 map(n,1) = missval
              end if
           end do
-          call write_bintab(map,npix,1, header, nlheader, trim(title))
+          call write_result_map(trim(title), nside, ordering, header, map)
        end if
        do j = 1, nbands
           title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
@@ -492,7 +492,7 @@ contains
                 map(n,1) = missval
              end if
           end do
-          call write_bintab(map,npix,1, header, nlheader, trim(title))
+          call write_result_map(trim(title), nside, ordering, header, map)
        end do
        title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
        map(:,1)   = comp%beta_s(:,nm)
@@ -501,7 +501,7 @@ contains
              map(n,1) = missval
           end if
        end do
-       call write_bintab(map,npix,1, header, nlheader, trim(title))
+       call write_result_map(trim(title), nside, ordering, header, map)
        dang_data%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
@@ -521,7 +521,7 @@ contains
              map(n,1) = missval
           end if
        end do
-       call write_bintab(map,npix,1, header, nlheader, trim(title))
+       call write_result_map(trim(title), nside, ordering, header, map)
     else if (trim(mode) == 'hi_fit') then
 
        write(iter_str, '(i0.5)') iter
