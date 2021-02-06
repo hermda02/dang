@@ -5,7 +5,6 @@ import seaborn as sns
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
-import corner
 from scipy import stats
 import sys
 import os
@@ -365,7 +364,8 @@ def chisq_trace(pol):
         # plt.show()
 
 def hjornet(burnin,pol):
-
+    import corner
+    
     if pol == "Q":
         samples = np.vstack(data_Q).T
         samples = samples[burnin:]
