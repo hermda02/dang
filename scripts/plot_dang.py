@@ -137,7 +137,7 @@ def correlate_dust_amps(burnin):
             ax=ax, vmin=-1.0, vmax=1.0)
 
     plt.savefig('../'+dir+'/a_ame_corr_plot.pdf', bbox_inches='tight')
-    plt.show()
+    # plt.show()
 
 def trace_all(pol):
 
@@ -186,9 +186,9 @@ def trace_all(pol):
         axes[3][1].hist(chiQ,bins=binnum)
         axes[3][1].set_ylabel('Count',size=15)
         axes[3][1].set_xlabel(r'$\chi^2$',size=10)
-        # plt.savefig('all_trace_Q',dpi=150,bbox_inches='tight')
-        # plt.close()
-        plt.show()
+        plt.savefig('all_trace_Q',dpi=150,bbox_inches='tight')
+        plt.close()
+        # plt.show()
 
     if pol == "U":
         binnum = int(np.sqrt(iterations))
@@ -389,8 +389,8 @@ def hjornet(burnin,pol):
                 ax.axvline(val[xi],color=col[xi])
                 ax.axhline(val[yi],color=col[yi])
             
-        plt.show()
-        # plt.savefig('corner_plot_Q.png',dpi=300,bbox_inches='tight')
+        # plt.show()
+        plt.savefig('corner_plot_Q.png',dpi=300,bbox_inches='tight')
 
     if pol == "U":
         samples = np.vstack(data_Q).T
@@ -416,8 +416,8 @@ def hjornet(burnin,pol):
                 ax.axhline(val[yi],color=col[yi])
             
 
-        plt.show()
-        # plt.savefig('corner_plot_U.png',dpi=300,bbox_inches='tight')
+        # plt.show()
+        plt.savefig('corner_plot_U.png',dpi=300,bbox_inches='tight')
 
 def beta_chisq(pol):
     binnum = int(np.sqrt(iterations))
@@ -588,20 +588,88 @@ def return_std_map(list,outfile):
 
 def make_mean_maps():
 
-    res_Q = [[0] * num_bands] * iterations
+    res_Q = []
+    res_U = []
 
-    print(len(res_Q))
-    print(len(res_Q[0]))
-
-    for file in files:
+    for j in range(len(files)):
+        file = files[j]
         for i in range(len(labels)):
             if file.startswith(labels[i]+'_residual_Q'):
                 if file.endswith('.fits'):
                     res_Q.append(file)
+    for j in range(len(files)):
+        file = files[j]
+        for i in range(len(labels)):
+            if file.startswith(labels[i]+'_residual_Q'):
+                if file.endswith('.fits'):
+                    res_U.append(file)
 
-    print(res_Q[:5])
+    for i in range(num_bands):
+        maps = []
+        for res in res_Q:   
+            if labels[i] in res:
+                maps.append(res)
+        return_mean_map(maps,labels[i]+'_residual_Q_mean.fits')
+        maps = []
+        for res in res_U:   
+            if labels[i] in res:
+                maps.append(res)
+        return_mean_map(maps,labels[i]+'_residual_U_mean.fits')
 
-USAGE = f"Usage: python3 {sys.argv[0]} [paramfile] [option]\n Option list: \n -Ad \n -As \n -As_beta \n -beta \n -beta_chi \n -chisq \n -corner \n -correlate \n -trace_all"
+    components = ['chisq_Q', 'chisq_U', 'bp_030_synch_amplitude_Q', 'bp_030_synch_amplitude_U', 'synch_beta_Q']
+    comps = ['chisq_Q', 'chisq_U', 'synch_Q_030', 'synch_U_030', 'synch_beta']
+
+    for i in range(len(components)):
+        maps = []
+        for file in files:
+            if file.startswith(components[i]) and file.endswith('.fits'):
+                maps.append(file)
+        return_mean_map(maps,comps[i]+'_mean.fits')        
+        if comps[i] == 'synch_Q':
+            return_std_map(maps,comps[i]+'_bp30_std.fits')
+        if comps[i] == 'synch_U':
+            return_std_map(maps,comps[i]+'_bp30_std.fits')
+        if comps[i] == 'synch_beta':
+            return_std_map(maps,comps[i]+'_std.fits')
+
+def make_synch_diff_maps():
+    scale_to_30 = (30./28.4)**(-3.1)
+    scale_to_spass = (2.305/28.4)**(-3.1)
+
+    joint_synch_Q = hp.read_map('../'+dir+'/synch_Q_030_mean.fits')
+    joint_synch_U = hp.read_map('../'+dir+'/synch_U_030_mean.fits')
+
+    joint_Q_30    = scale_to_30*joint_synch_Q
+    joint_U_30    = scale_to_30*joint_synch_U
+    joint_Q_spass = scale_to_spass*joint_synch_Q
+    joint_U_spass = scale_to_spass*joint_synch_U
+
+    bp_030_Q      = hp.read_map('../data/BP_synch_Q_n0064.fits')
+    bp_030_U      = hp.read_map('../data/BP_synch_U_n0064.fits')
+
+    npipe_30_Q    = hp.read_map('../data/npipe6v20_comm_synch_n0064_60arc_Q_rc1.fits')
+    npipe_30_U    = hp.read_map('../data/npipe6v20_comm_synch_n0064_60arc_U_rc1.fits')
+
+    spass_Q       = hp.read_map('../data/spass_rmrot_n0064_ring_masked.fits',field=1)
+    spass_U       = hp.read_map('../data/spass_rmrot_n0064_ring_masked.fits',field=2)
+
+    bp_min_joint_Q    = bp_030_Q - joint_Q_30
+    bp_min_joint_U    = bp_030_U - joint_U_30
+
+    np_min_joint_Q    = npipe_30_Q - joint_Q_30
+    np_min_joint_U    = npipe_30_U - joint_U_30
+
+    spass_min_joint_Q = spass_Q - joint_Q_spass
+    spass_min_joint_U = spass_U - joint_U_spass
+
+    hp.write_map('../'+dir+'/npipe_minus_joint_Q_60arcmin_n0064.fits',np_min_joint_Q)
+    hp.write_map('../'+dir+'/npipe_minus_joint_U_60arcmin_n0064.fits',np_min_joint_U)
+    hp.write_map('../'+dir+'/BP_minus_joint_Q_60arcmin_n0064.fits',bp_min_joint_Q)
+    hp.write_map('../'+dir+'/BP_minus_joint_U_60arcmin_n0064.fits',bp_min_joint_U)
+    hp.write_map('../'+dir+'/spass_minus_joint_Q_60arcmin_n0064.fits',spass_min_joint_Q)
+    hp.write_map('../'+dir+'/spass_minus_joint_U_60arcmin_n0064.fits',spass_min_joint_U)
+
+USAGE = f"Usage: python3 {sys.argv[0]} [paramfile] [option]\n Option list: \n -Ad \n -As \n -As_beta \n -beta \n -beta_chi \n -chisq \n -corner \n -correlate \n -mean_maps \n -synch_diff \n -trace_all"
 
 def plot() -> None:
     command = sys.argv[2:]
@@ -641,8 +709,9 @@ def plot() -> None:
             burn = int(input(f"Burn-in value? (Total of {iterations} iterations): "))
             correlate_dust_amps(burn)
         if (i == '-mean_maps'):
-            print("MAKE MEAN MAPS")
             make_mean_maps()
+        if (i == '-synch_diff'):
+            make_synch_diff_maps()
         else:
             SystemExit(USAGE)
 
