@@ -562,7 +562,7 @@ contains
         real(dp), dimension(0:npix-1,nmaps)                    :: indx
         real(dp), dimension(0:npix-1,nmaps)                    :: mask
         real(dp), dimension(0:npix-1)                          :: indx_sample
-        real(dp), allocatable, dimension(:,:,:)                :: data_low, fg_map_low, rms_low
+        real(dp), allocatable, dimension(:,:,:)                :: data_low, fg_map_low, cov_low
         real(dp), allocatable, dimension(:,:)                  :: indx_low, mask_low
         real(dp), allocatable, dimension(:)                    :: indx_sample_low
         real(dp), allocatable, dimension(:,:,:)                :: fg_map_high
@@ -571,17 +571,17 @@ contains
         real(dp)                                               :: a, b, c, num, sam, t, p, sol
         real(dp)                                               :: time1, time2
 
+        logical                                                :: pix_samp
+
         real(dp)                                               :: naccept   
         logical                                                :: exist
 
         real(dp), allocatable, dimension(:,:)                  :: map, map2
         character(len=128) ::title
- 
 
         !------------------------------------------------------------------------
         ! Spectral index sampler, using the Metropolis approach.
         !------------------------------------------------------------------------
-
         map2fit = duta
         cov     = dat%rms_map*dat%rms_map
         mask    = dat%masks
@@ -594,203 +594,287 @@ contains
         else if (trim(self%fg_label(ind)) == 'dust') then 
             indx     = comp%beta_d
         end if
-        
-        if (rank == master) then
-            if (mod(iter,self%iter_out) .EQ. 0) then
-                write(*,fmt='(a,i4)') 'Sampling ' // trim(self%fg_label(ind)) // ' beta at nside', nside2
-            end if
-        end if
 
-        time1 = mpi_wtime()
-
-        !------------------------------------------------------------------------
-        ! Check to see if the data nside is the same as the sampling nside
-        ! If not equal, downgrade the data before sampling
-        !
-        ! VITAL: Make dummy varables for each map before ud_grading
-        !
-        !------------------------------------------------------------------------
-        nside1 = npix2nside(npix)
-        if (nside1 == nside2) then
-            npix2 = npix
+        if (index(self%fg_ind_region(ind,1),'pix') /= 0) then
+           write(*,*) 'single pixel region sampling'
+           pix_samp = .true.
+        else if (index(self%fg_ind_region(ind,1),'full') /= 0) then
+           write(*,*) 'Sampling fullsky'
+           pix_samp = .false.
         else
-            npix2 = nside2npix(nside2)
+           write(*,*) 'ERROR: Sampling region for component '//trim(self%fg_label(ind))//' not recognized.'
+           write(*,*) '   Check COMP_BETA_REGION parameter in parameter file.'
+           stop
         end if
-        allocate(data_low(0:npix2-1,nmaps,nbands),fg_map_low(0:npix2-1,nmaps,nbands))
-        allocate(indx_low(0:npix2-1,nmaps),rms_low(0:npix2-1,nmaps,nbands))
-        allocate(indx_sample_low(0:npix2-1))
-        allocate(mask_low(0:npix2-1,nmaps))
+
         allocate(fg_map_high(0:npix-1,nmaps,nbands))
-
-        do i = 0, npix-1
-           if (mask(i,self%pol_type(1)) == 0.d0) then
-              mask(i,:) = missval
-           end if
-        end do
-
         fg_map_high(:,:,:) = dat%fg_map(:,:,:,1)
 
-        if (nside1 /= nside2) then 
-            if (ordering == 1) then
-               call udgrade_ring(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
-               call udgrade_ring(indx,nside1,indx_low,nside2)
-               do j = 1, nbands
-                  call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                  call udgrade_ring(fg_map_high(:,:,j),nside1,fg_map_low(:,:,j),nside2)
-                  call udgrade_ring(cov(:,:,j),nside1,rms_low(:,:,j),nside2)
-                  ! title = trim(self%outdir) // trim(self%dat_label(j)) // '_synch_amplitude_Q_n0004.fits'
-                  ! map(:,1)   = fg_map_low(:,2,j)
-                  ! do i = 0, npix2-1
-                  !    if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
-                  !       map(i,1) = missval
-                  !    end if
-                  ! end do
-                  ! call write_result_map(trim(title), nside2, ordering, header, map)
-                  ! title = trim(self%outdir) // trim(self%dat_label(j)) // '_synch_amplitude_Q_n0064.fits'
-                  ! map2(:,1)   = dat%fg_map(:,2,j,1)
-                  ! do i = 0, npix-1
-                  !    if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-                  !       map2(i,1) = missval
-                  !    end if
-                  ! end do
-                  ! call write_result_map(trim(title), nside1, ordering, header, map2)
-               end do
-            else
-               call udgrade_nest(indx,nside1,indx_low,nside2)
-               call udgrade_nest(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
-               do j = 1, nbands
-                  call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                  call udgrade_nest(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
-                  call udgrade_nest(dat%rms_map(:,:,j),nside1,rms_low(:,:,j),nside2)
-               end do
-            end if
-            rms_low = sqrt(rms_low / (npix/npix2))
-            do i = 0, npix2-1
-               if (mask_low(i,1) .lt. 0.50) then
-                  mask_low(i,:) = 0.d0
-               else
-                  mask_low(i,:) = 1.d0
-               end if
-            end do
-        else 
-            do j = 1, nbands
-                data_low(:,:,j)   = duta(:,:,j)
-                fg_map_low(:,:,j) = dat%fg_map(:,:,j,1)
-                rms_low(:,:,j)    = dat%rms_map(:,:,j)
-            end do
-            indx_low = indx
-            mask_low = mask
-        end if
 
-        x(1) = 1.d0           
-        !------------------------------------------------------------------------
-        ! Metropolis algorithm:
-        ! Sampling portion. Determine the log-likelihood, and accept based off of
-        ! the improvement in the fit.
-        !------------------------------------------------------------------------
-        if (map_n == -1) then
-           indx_sample_low = indx_low(:,self%pol_type(1))
-           do i = 0, npix2-1
-              a         = 0.d0
-              sol       = indx_low(i,self%pol_type(1))
-              sam       = sol
-              if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
-                 cycle
+        ! Per pixel sampler
+        if (pix_samp) then
+           if (rank == master) then
+              if (mod(iter,self%iter_out) .EQ. 0) then
+                 write(*,fmt='(a,i4)') 'Sampling ' // trim(self%fg_label(ind)) // ' beta at nside', nside2
               end if
+           end if
 
-              ! Chi-square from the most recent Gibbs chain update
+           time1 = mpi_wtime()
+
+           !------------------------------------------------------------------------
+           ! Check to see if the data nside is the same as the sampling nside
+           ! If not equal, downgrade the data before sampling
+           !
+           ! VITAL: Make dummy varables for each map before ud_grading
+           !
+           !------------------------------------------------------------------------
+           nside1 = npix2nside(npix)
+           if (nside1 == nside2) then
+              npix2 = npix
+           else
+              npix2 = nside2npix(nside2)
+           end if
+           allocate(data_low(0:npix2-1,nmaps,nbands),fg_map_low(0:npix2-1,nmaps,nbands))
+           allocate(indx_low(0:npix2-1,nmaps),cov_low(0:npix2-1,nmaps,nbands))
+           allocate(indx_sample_low(0:npix2-1))
+           allocate(mask_low(0:npix2-1,nmaps))
+           
+           do i = 0, npix-1
+              if (mask(i,self%pol_type(1)) == 0.d0) then
+                 mask(i,:) = missval
+              end if
+           end do
+                      
+           if (nside1 /= nside2) then 
+              if (ordering == 1) then
+                 call udgrade_ring(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
+                 call udgrade_ring(indx,nside1,indx_low,nside2)
+                 do j = 1, nbands
+                    call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
+                    call udgrade_ring(fg_map_high(:,:,j),nside1,fg_map_low(:,:,j),nside2)
+                    call udgrade_ring(cov(:,:,j),nside1,cov_low(:,:,j),nside2)
+                 end do
+              else
+                 call udgrade_nest(indx,nside1,indx_low,nside2)
+                 call udgrade_nest(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
+                 do j = 1, nbands
+                    call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
+                    call udgrade_nest(dat%fg_map(:,:,j,1),nside1,fg_map_low(:,:,j),nside2)
+                    call udgrade_nest(cov(:,:,j),nside1,cov_low(:,:,j),nside2)
+                 end do
+              end if
+              cov_low = sqrt(cov_low / (npix/npix2))
+              do i = 0, npix2-1
+                 if (mask_low(i,1) .lt. 0.50) then
+                    mask_low(i,:) = 0.d0
+                 else
+                    mask_low(i,:) = 1.d0
+                 end if
+              end do
+           else 
               do j = 1, nbands
-                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                    a = a + (((fg_map_low(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-                         - data_low(i,k,j))**2.d0)/rms_low(i,k,j)**2.d0
+                 data_low(:,:,j)   = map2fit(:,:,j)
+                 fg_map_low(:,:,j) = dat%fg_map(:,:,j,1)
+                 cov_low(:,:,j)    = cov(:,:,j)
+              end do
+              indx_low = indx
+              mask_low = mask
+           end if
+           
+           x(1) = 1.d0           
+           !------------------------------------------------------------------------
+           ! Metropolis algorithm:
+           ! Sampling portion. Determine the log-likelihood, and accept based off of
+           ! the improvement in the fit.
+           !------------------------------------------------------------------------
+
+           ! Sample for Q and U jointly
+           if (map_n == -1) then
+              indx_sample_low = indx_low(:,self%pol_type(1))
+              do i = 0, npix2-1
+                 a         = 0.d0
+                 sol       = indx_low(i,self%pol_type(1))
+                 sam       = sol
+                 if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
+                    cycle
+                 end if
+                 
+                 ! Chi-square from the most recent Gibbs chain update
+                 do j = 1, nbands
+                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                       a = a + (((fg_map_low(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                            - data_low(i,k,j))**2.d0)/cov_low(i,k,j)
+                    end do
+                 end do
+                 c = a
+                 
+                 do l = 1, self%nsample
+                    
+                    ! Sampling from the prior
+                    if (self%fg_spec_like(ind,1)) then
+                       t      = rand_normal(sol, self%fg_gauss(ind,1,2))
+                    else if (.not. self%fg_spec_like(ind,1)) then
+                       t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                    end if
+                    
+                    ! If sampled value is outside of uniform bounds, cycle
+                    if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
+                    
+                    b         = 0.d0
+                    
+                    ! Calculate new chi-square
+                    do j = 1, nbands
+                       do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                          tmp(j) = fg_map_low(i,k,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)
+                          b      = b + ((tmp(j)-data_low(i,k,j))**2.d0)/cov_low(i,k,j)
+                       end do
+                    end do
+                    
+                    ! If chi-squre is less than previous sample, automatically accept change
+                    if (b < c .and. t .lt. self%fg_uni(ind,1,2) .and. t .gt. self%fg_uni(ind,1,1)) then
+                       sam = t
+                       c   = b
+                    ! Otherwase draw a random number from 0 to 1 to see if we accept this change
+                    else
+                       x(2) = exp(0.5d0*(c-b))
+                       p = minval(x)
+                       call RANDOM_NUMBER(num)
+                       if (num < p .and. t .lt. self%fg_uni(ind,1,2) .and. t .gt. self%fg_uni(ind,1,1)) then
+                          sam = t
+                          c   = b
+                       end if
+                    end if
+                    if (sam .gt. self%fg_uni(ind,1,2)) then
+                       write(*,*) 'Sample outside of index bounds -- error!'
+                       stop
+                    end if
+                    sol = sam
+                    indx_sample_low(i) = sol
                  end do
               end do
-              c = a
+           ! Sample for a single poltype
+           else
+              do i = 0, npix2-1
+                 a         = 0.d0
+                 sol       = indx_low(i,map_n)
+                 sam       = sol
+                 
+                 if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
+                    cycle
+                 end if
+                 
+                 ! Chi-square from the most recent Gibbs chain update
+                 do j = 1, nbands
+                    a = a + (((fg_map_low(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+                         - data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
+                 end do
+                 c = a
+                 
+                 do l = 1, self%nsample
+                    
+                    ! Sampling from the prior
+                    if (self%fg_spec_like(ind,1)) then
+                       t      = rand_normal(sol, self%fg_gauss(ind,1,2))
+                    else if (.not. self%fg_spec_like(ind,1)) then
+                       t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                    end if
+                    b         = 0.d0
 
+                    ! If sampled value is outside of uniform bounds, cycle                    
+                    if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
+                    
+                    ! Calculate new chi-square
+                    do j = 1, nbands
+                       tmp(j) = fg_map_low(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)
+                       b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
+                    end do
+                    b = b
+                    
+                    ! If chi-squre is less than previous sample, automatically accept change
+                    if (b < c) then
+                       sam = t
+                       c   = b
+                    ! Otherwase draw a random number from 0 to 1 to see if we accept this change
+                    else
+                       x(2) = exp(0.5d0*(c-b))
+                       p = minval(x)
+                       call RANDOM_NUMBER(num)
+                       if (num < p) then
+                          sam = t
+                          c   = b
+                       end if
+                    end if
+                 end do
+                 sol = sam
+                 indx_sample_low(i) = sol
+              end do
+           end if
+           
+           if (nside1 /= nside2) then
+              if (ordering == 1) then
+                 call udgrade_ring(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
+              else
+                 call udgrade_nest(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
+              end if
+           else
+              indx_sample = indx_sample_low
+           end if
+
+        ! Full sky sampler
+        else
+
+           time1 = mpi_wtime()
+
+           ! Sample for Q and U jointly
+           if (map_n == -1) then
+              indx_sample = indx(:,self%pol_type(1))
+              a         = 0.d0
+              do i = 0, npix-1
+                 sol       = indx(i,self%pol_type(1))
+                 sam       = sol
+                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
+                    cycle
+                 end if
+                 
+                 ! Chi-square from the most recent Gibbs chain update
+                 do j = 1, nbands
+                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                       a = a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                    end do
+                 end do
+                 c = a
+              end do
               do l = 1, self%nsample
-
+                    
                  ! Sampling from the prior
                  if (self%fg_spec_like(ind,1)) then
                     t      = rand_normal(sol, self%fg_gauss(ind,1,2))
                  else if (.not. self%fg_spec_like(ind,1)) then
                     t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
                  end if
-
-                 ! Check if sample is outside the bounds
-                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
-                    cycle
-                 end if
-                 if (sam .gt. self%fg_uni(ind,1,2) .or. sam .lt. self%fg_uni(ind,1,1)) then
-                    cycle
-                 end if
-
                  b         = 0.d0
-                 
-                 do j = 1, nbands
-                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                       tmp(j) = fg_map_low(i,k,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)
-                       b      = b + ((tmp(j)-data_low(i,k,j))**2.d0)/rms_low(i,k,j)**2.d0
+
+                 ! If sampled value is outside of uniform bounds, cycle
+                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
+
+                 ! Calculate new chi-square
+                 do i = 0, npix-1
+                    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                    do j = 1, nbands
+                       do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                       b = b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
+                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                       end do
                     end do
                  end do
-
-                 if (b < c .and. t .lt. self%fg_uni(ind,1,2) .and. t .gt. self%fg_uni(ind,1,1)) then
-                    sam = t
-                    c   = b
-                 else
-                    x(2) = exp(0.5d0*(c-b))
-                    p = minval(x)
-                    call RANDOM_NUMBER(num)
-                    if (num < p .and. t .lt. self%fg_uni(ind,1,2) .and. t .gt. self%fg_uni(ind,1,1)) then
-                       sam = t
-                       c   = b
-                    end if
-                 end if
-                 if (sam .gt. self%fg_uni(ind,1,2)) then
-                    write(*,*) 'Sample outside of index bounds -- error!'
-                    stop
-                 end if
-                 sol = sam
-                 indx_sample_low(i) = sol
-              end do              
-           end do
-        else
-           do i = 0, npix2-1
-              a         = 0.d0
-              sol       = indx_low(i,map_n)
-              sam       = sol
-              
-              if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
-                 cycle
-              end if
-
-              ! Chi-square from the most recent Gibbs chain update
-              do j = 1, nbands
-                 a = a + (((fg_map_low(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
-                      - data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
-              end do
-              c = a
-              
-              do l = 1, self%nsample
-                 
-                 ! Sampling from the prior
-                 if (self%fg_spec_like(ind,1)) then
-                    t      = rand_normal(sol, self%fg_gauss(ind,1,2))
-                  else if (.not. self%fg_spec_like(ind,1)) then
-                    t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-                 end if
-                 b         = 0.d0
-                 
-                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
-                 
-                 do j = 1, nbands
-                    tmp(j) = fg_map_low(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)
-                    b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/rms_low(i,map_n,j)**2.d0
-                 end do
                  b = b
-                 
-                 if (b < c) then ! .and. t .lt. self%fg_uni(ind,1,2) .and. t .gt. self%fg_uni(ind,1,1)
+                    
+                 ! If chi-squre is less than previous sample, automatically accept change
+                 if (b < c) then 
                     sam = t
                     c   = b
+                    ! Otherwase draw a random number from 0 to 1 to see if we accept this change
                  else
                     x(2) = exp(0.5d0*(c-b))
                     p = minval(x)
@@ -802,19 +886,67 @@ contains
                  end if
               end do
               sol = sam
-              indx_sample_low(i) = sol
-           end do
-        end if
+              indx_sample(:) = sol
+           ! Sample for a single poltype
+           else
+              indx_sample = indx(:,map_n)
+              do i = 0, npix-1
+                 a         = 0.d0
+                 sol       = indx(i,map_n)
+                 sam       = sol
+                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
+                    cycle
+                 end if
+                 
+                 ! Chi-square from the most recent Gibbs chain update
+                 do j = 1, nbands
+                       a = a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+                            - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
+                 end do
+                 c = a
+              end do
+              do l = 1, self%nsample
+                    
+                 ! Sampling from the prior
+                 if (self%fg_spec_like(ind,1)) then
+                    t      = rand_normal(sol, self%fg_gauss(ind,1,2))
+                 else if (.not. self%fg_spec_like(ind,1)) then
+                    t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                 end if
+                 b         = 0.d0
 
-        if (nside1 /= nside2) then
-            if (ordering == 1) then
-                call udgrade_ring(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
-            else
-                call udgrade_nest(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
-            end if
-        else
-            indx_sample = indx_sample_low
-        end if             
+                 ! If sampled value is outside of uniform bounds, cycle
+                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
+
+                 ! Calculate new chi-square
+                 do i = 0, npix-1
+                    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                    do j = 1, nbands
+                       b = b + (((fg_map_high(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
+                            - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
+                    end do
+                 end do
+                 b = b
+                    
+                 ! If chi-squre is less than previous sample, automatically accept change
+                 if (b < c) then 
+                    sam = t
+                    c   = b
+                    ! Otherwase draw a random number from 0 to 1 to see if we accept this change
+                 else
+                    x(2) = exp(0.5d0*(c-b))
+                    p = minval(x)
+                    call RANDOM_NUMBER(num)
+                    if (num < p) then
+                       sam = t
+                       c   = b
+                    end if
+                 end if
+              end do
+              sol = sam
+              indx_sample(:) = sol
+           end if
+        end if
 
         if (map_n == -1) then
            do k = self%pol_type(1), self%pol_type(size(self%pol_type))
@@ -826,9 +958,9 @@ contains
            end do
         else
            if (trim(self%fg_label(ind)) == 'synch') then 
-              comp%beta_s(:,k) = indx_sample(:)
+              comp%beta_s(:,map_n) = indx_sample(:)
            else if (trim(self%fg_label(ind)) == 'dust') then 
-              comp%beta_d(:,k) = indx_sample(:)
+              comp%beta_d(:,map_n) = indx_sample(:)
            end if
         end if
 
@@ -842,11 +974,6 @@ contains
 
         write(*,*) ''
 
-        deallocate(data_low)
-        deallocate(fg_map_low)
-        deallocate(indx_low)
-        deallocate(rms_low)
-        deallocate(indx_sample_low)
     end subroutine sample_index
 
     ! This architecture of this function has not been verified yet

@@ -42,10 +42,10 @@ module dang_param_mod
         logical(lgt),       allocatable, dimension(:)   :: fit_offs      ! Do we fit the offset for this band?
         
         ! Component parameters
-        integer(i4b)      :: ncomp                                          ! # of foregrounds
-        integer(i4b)      :: ntemp                                          ! # of templates 
-        integer(i4b)      :: njoint                                         ! # of components to jointly sample 
-        character(len=64) :: dust_corr_type                                 ! Dust correction type (uniform/planck)
+        integer(i4b)                                      :: ncomp          ! # of foregrounds
+        integer(i4b)                                      :: ntemp          ! # of templates 
+        integer(i4b)                                      :: njoint         ! # of components to jointly sample 
+        character(len=64)                                 :: dust_corr_type ! Dust correction type (uniform/planck)
         character(len=64),  allocatable, dimension(:)     :: joint_comps    ! List of components in joint sampling group
         character(len=512), allocatable, dimension(:)     :: temp_file      ! Template Filename
         character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
@@ -59,8 +59,9 @@ module dang_param_mod
         logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_like   ! Logical - sample fg spec param from likelihood?
         logical(lgt)                                      :: joint_sample   ! Logical - jointly sample fg amplitudes
         integer(i4b),       allocatable, dimension(:)     :: joint_poltype  ! Points to which Stokes are jointly sampled
-        character(len=512), allocatable, dimension(:)     :: joint_comp     ! Fg label (for outputs)
+        character(len=512), allocatable, dimension(:)     :: joint_comp     ! Joint sampler components
         character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
+        character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral index sampler (pixel/fullsky)
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
         character(len=512), allocatable, dimension(:,:)   :: fg_spec_map    ! Fg spectral parameter input map
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
@@ -68,7 +69,7 @@ module dang_param_mod
         integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
-        
+
         real(dp),           allocatable, dimension(:,:)   :: mbb_gauss      ! MBB Gaussian sampling params for thermal dust subtraction
 
         real(dp)                                          :: thresh         ! Threshold for the HI fitting (sample pixels under thresh)
@@ -493,6 +494,8 @@ contains
            allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
            allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
            allocate(par%fg_spec_map(n,2))
+           allocate(par%fg_ind_region(n,2))
+
            
            allocate(par%temp_file(n2))
            allocate(par%temp_label(n2))
@@ -547,6 +550,8 @@ contains
                       par_lgt=par%fg_spec_like(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
                       par_string=par%fg_spec_map(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_REGION'//itext, len_itext=len_itext,&
+                      par_string=par%fg_ind_region(i,1))
               else if (trim(par%fg_type(i)) == 'mbb') then
                  call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                       par_dp=par%fg_gauss(i,1,1))

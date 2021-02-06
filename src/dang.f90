@@ -353,7 +353,7 @@ contains
           end do
           call sample_index(par,dang_data,comp,synchonly,par%fg_samp_nside(1,1),1,-1)
           do i = 0, npix-1
-             comp%beta_s(i,:) = comp%beta_s(i,:)!*dang_data%masks(i,1)
+             comp%beta_s(i,:) = comp%beta_s(i,:)
           end do
           do i = 0, npix-1
              do j = 1, nbands
