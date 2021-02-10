@@ -571,13 +571,17 @@ contains
         real(dp)                                               :: a, b, c, num, sam, t, p, sol
         real(dp)                                               :: time1, time2
 
+        real(dp)                                               :: like_old, like_new
+
         logical                                                :: pix_samp
 
-        real(dp)                                               :: naccept   
+        real(dp)                                               :: naccept, paccept   
         logical                                                :: exist
 
         real(dp), allocatable, dimension(:,:)                  :: map, map2
         character(len=128) ::title
+
+        naccept = 0.0
 
         !------------------------------------------------------------------------
         ! Spectral index sampler, using the Metropolis approach.
@@ -829,6 +833,8 @@ contains
            if (map_n == -1) then
               indx_sample = indx(:,self%pol_type(1))
               a         = 0.d0
+              !$OMP PARALLEL PRIVATE(i,j)
+              !$OMP DO SCHEDULE(static)
               do i = 0, npix-1
                  sol       = indx(i,self%pol_type(1))
                  sam       = sol
@@ -843,22 +849,34 @@ contains
                             - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                     end do
                  end do
-                 c = a
               end do
-              do l = 1, self%nsample
-                    
+              !$OMP END DO
+              !$OMP END PARALLEL
+              c = a/(npix*(nbands-npar))
+ 
+              like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+
+!              do l = 1, self%nsample
+              l = 1
+              do while (paccept .gt. 0.6d0 .or. paccept .lt. 0.4d0 .and. l .lt. self%nsample .and. l .lt. 25)
+
                  ! Sampling from the prior
                  if (self%fg_spec_like(ind,1)) then
                     t      = rand_normal(sol, self%fg_gauss(ind,1,2))
                  else if (.not. self%fg_spec_like(ind,1)) then
-                    t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                    ! t      = self%fg_gauss(ind,1,1) + rand_normal(0.d0, self%fg_gauss(ind,1,2))!*0.1
+                    t      = sol + rand_normal(0.d0, self%fg_gauss(ind,1,2))!*0.1
                  end if
                  b         = 0.d0
 
                  ! If sampled value is outside of uniform bounds, cycle
-                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
-
+                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
+                    write(*,*) 'outside prior bounds'
+                    cycle
+                 end if
                  ! Calculate new chi-square
+                 !$OMP PARALLEL PRIVATE(i,j)
+                 !$OMP DO SCHEDULE(static)
                  do i = 0, npix-1
                     if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                     do j = 1, nbands
@@ -868,22 +886,66 @@ contains
                        end do
                     end do
                  end do
-                 b = b
-                    
+                 !$OMP END DO
+                 !$OMP END PARALLEL
+
+                 b = b/(npix*(nbands-npar))
+
+                 like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+
+                 ! write(*,*) like_old, c,eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)), sam
+                 ! write(*,*) like_new, b,eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)), t
+                 ! stop
+                                        
                  ! If chi-squre is less than previous sample, automatically accept change
-                 if (b < c) then 
+                 if (like_old < like_new) then 
                     sam = t
-                    c   = b
+                    like_old = like_new
+                    naccept = naccept + 1.0
                     ! Otherwase draw a random number from 0 to 1 to see if we accept this change
                  else
-                    x(2) = exp(0.5d0*(c-b))
+                    x(2) = like_new/like_old!exp(0.5d0*(c-b))
                     p = minval(x)
                     call RANDOM_NUMBER(num)
                     if (num < p) then
                        sam = t
-                       c   = b
+                       like_old = like_new!   = b
+                       naccept = naccept + 1.0
                     end if
                  end if
+
+                 paccept = naccept/l
+                 write(*,fmt='(f8.4,f8.4,f8.4,i6,f8.4,f8.4,f8.4,f8.4)') t,paccept,naccept,l,like_old, like_new, x(2), num
+                 ! Adjust the step-size based on acceptance probability and document
+                 if (paccept .lt. 0.6d0 .and. paccept .gt. 0.4d0) then
+                    title = trim(self%outdir) // 'synch_beta_paccept.dat'
+                    inquire(file=title,exist=exist)
+                    if (exist) then
+                       open(12,file=title, status="old",position="append", action="write")
+                    else
+                       open(12,file=title, status="new", action="write")
+                       write(12,*)  
+                    endif
+                    write(12,*) paccept, l
+                    close(12)
+                    write(*,*) l
+                    exit
+                 end if
+
+                 l = l + 1
+                 ! if (l == self%nsample) then
+                 !    title = trim(self%outdir) // 'synch_beta_paccept.dat'
+                 !    inquire(file=title,exist=exist)
+                 !    if (exist) then
+                 !       open(12,file=title, status="old",position="append", action="write")
+                 !    else
+                 !       open(12,file=title, status="new", action="write")
+                 !       write(12,*)  
+                 !    endif
+                 !    write(12,*) paccept, l
+                 !    close(12)
+                 !    exit
+                 ! end if
               end do
               sol = sam
               indx_sample(:) = sol

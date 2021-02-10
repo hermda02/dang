@@ -16,12 +16,13 @@ module utility_mod
     real(dp)           :: nullval
     real(dp)           :: missval = -1.6375d30
     integer(i4b)       :: ierr, rank, numprocs
-    integer(i4b)       :: nbands, npix, nmaps, nside, nfgs
+    integer(i4b)       :: nbands, npix, nmaps, nside, nfgs, npar
     integer(i4b)       :: iter, niter, ordering, nlheader
     integer(i4b)       :: proc_per_band
     integer(i4b)       :: master      = 0 
     integer(i4b)       :: from_master = 1
     integer(i4b)       :: from_worker = 2
+    integer(i4b)       :: nump ! Number of unmasked pixels
     logical(lgt)       :: anynull
     integer(i4b) status(mpi_status_size)
     character(len=80), dimension(180) :: header
@@ -83,18 +84,28 @@ contains
      
    end subroutine tolower
 
-    function rand_normal(mean,stdev) result(c)
-         double precision :: mean,stdev,c,temp(2),theta,r
-         if (stdev <= 0.0d0) then
-            write(*,*) "Standard Deviation must be positive."
-         else
-            call RANDOM_NUMBER(temp)
-            r=(-2.0d0*log(temp(1)))**0.5
-            theta = 2.0d0*PI*temp(2)
-            c= mean+stdev*r*sin(theta)
-      end if
-    end function
+   function rand_normal(mean,stdev) result(c)
+     double precision :: mean,stdev,c,temp(2),theta,r
+     if (stdev <= 0.0d0) then
+        write(*,*) "Standard Deviation must be positive."
+     else
+        call RANDOM_NUMBER(temp)
+        r=(-2.0d0*log(temp(1)))**0.5
+        theta = 2.0d0*PI*temp(2)
+        c= mean+stdev*r*sin(theta)
+     end if
+   end function rand_normal
+   
+   function eval_normal_prior(prop,mean,std) result(p)
+     real(dp) :: prop, mean, std, p, var, num ,denom
 
+     var   = std**2.d0
+     num   = exp(-(prop-mean)**2/(2*var))
+     denom = std*sqrt(2.d0*PI)
+
+     p = num/denom
+
+   end function eval_normal_prior
 
    function getlun()
      implicit none

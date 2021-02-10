@@ -80,6 +80,8 @@ program dang
   npix              = dang_data%npix
   nbands            = par%numband
   nfgs              = par%ncomp+par%ntemp
+  npar              = 3
+  nump              = 0
   nlheader          = size(header)
   nmaps             = nmaps
   iterations        = par%nsample              ! # of iterations in the samplers
@@ -132,7 +134,11 @@ program dang
      call read_bintab(par%mask_file,dang_data%masks,npix,1,nullval,anynull,header=header)
      do i = 0, npix-1
         do j = 1, nmaps
-           if (dang_data%masks(i,j) == 0.d0) dang_data%masks(i,j) = missval
+           if (dang_data%masks(i,j) == 0.d0 .or. dang_data%masks(i,j) == missval) then
+              dang_data%masks(i,j) = missval
+           else 
+              nump = nump + 1
+           end if
         end do
      end do
      write(*,*) ''
@@ -717,7 +723,6 @@ contains
     integer(i4b)                                                :: i,j,w
     
     if (trim(mode) == 'comp_sep') then
-       
        chisq = 0.d0
        do i = 0, npix-1
           if (dang_data%masks(i,1) == missval .or. dang_data%masks(i,1) == 0.d0) cycle
@@ -730,7 +735,7 @@ contains
              chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)
           end do
        end do
-       chisq = chisq/(npix+nbands+nfgs)
+       chisq = chisq/(nump*(nbands-npar))
        
     else if (trim(mode) == 'hi_fit') then
        chisq = 0.d0
