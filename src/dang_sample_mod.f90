@@ -571,7 +571,7 @@ contains
         real(dp)                                               :: a, b, c, num, sam, t, p, sol
         real(dp)                                               :: time1, time2
 
-        real(dp)                                               :: like_old, like_new
+        real(dp)                                               :: like_old, like_new, ratio
 
         logical                                                :: pix_samp
 
@@ -711,6 +711,10 @@ contains
                     end do
                  end do
                  c = a
+
+                 c = a/(nbands-npar)
+ 
+                 like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
                  
                  do l = 1, self%nsample
                     
@@ -725,7 +729,7 @@ contains
                     if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
                     
                     b         = 0.d0
-                    
+
                     ! Calculate new chi-square
                     do j = 1, nbands
                        do k = self%pol_type(1), self%pol_type(size(self%pol_type))
@@ -733,24 +737,17 @@ contains
                           b      = b + ((tmp(j)-data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                        end do
                     end do
-                    
-                    ! If chi-squre is less than previous sample, automatically accept change
-                    if (b < c .and. t .lt. self%fg_uni(ind,1,2) .and. t .gt. self%fg_uni(ind,1,1)) then
+
+                    b = b/(npix*(nbands-npar))
+
+                    like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                
+                    ratio = like_new/like_old
+                    call RANDOM_NUMBER(num)
+                    if (ratio > num) then
                        sam = t
-                       c   = b
-                    ! Otherwase draw a random number from 0 to 1 to see if we accept this change
-                    else
-                       x(2) = exp(0.5d0*(c-b))
-                       p = minval(x)
-                       call RANDOM_NUMBER(num)
-                       if (num < p .and. t .lt. self%fg_uni(ind,1,2) .and. t .gt. self%fg_uni(ind,1,1)) then
-                          sam = t
-                          c   = b
-                       end if
-                    end if
-                    if (sam .gt. self%fg_uni(ind,1,2)) then
-                       write(*,*) 'Sample outside of index bounds -- error!'
-                       stop
+                       like_old = like_new
+                       naccept = naccept + 1.0
                     end if
                     sol = sam
                     indx_sample_low(i) = sol
@@ -854,27 +851,24 @@ contains
               !$OMP END PARALLEL
               c = a/(npix*(nbands-npar))
  
-              like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-
+              if (self%fg_spec_like(ind,1)) then
+                 like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+              else if (.not. self%fg_spec_like(ind,1)) then
+                 like_old = exp(-0.5d0*c)
+              end if
 !              do l = 1, self%nsample
               l = 1
-              do while (paccept .gt. 0.6d0 .or. paccept .lt. 0.4d0 .and. l .lt. self%nsample .and. l .lt. 25)
-
-                 ! Sampling from the prior
-                 if (self%fg_spec_like(ind,1)) then
-                    t      = rand_normal(sol, self%fg_gauss(ind,1,2))
-                 else if (.not. self%fg_spec_like(ind,1)) then
-                    ! t      = self%fg_gauss(ind,1,1) + rand_normal(0.d0, self%fg_gauss(ind,1,2))!*0.1
-                    t      = sol + rand_normal(0.d0, self%fg_gauss(ind,1,2))!*0.1
-                 end if
-                 b         = 0.d0
-
+              do while (paccept .gt. 0.6d0 .or. paccept .lt. 0.4d0)
+                 if (l .gt. self%nsample) exit
+                 t      = sol + rand_normal(0.d0, self%fg_gauss(ind,1,2))!*0.5
+                
                  ! If sampled value is outside of uniform bounds, cycle
                  if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
                     write(*,*) 'outside prior bounds'
                     cycle
                  end if
                  ! Calculate new chi-square
+                 b         = 0.d0
                  !$OMP PARALLEL PRIVATE(i,j)
                  !$OMP DO SCHEDULE(static)
                  do i = 0, npix-1
@@ -891,31 +885,22 @@ contains
 
                  b = b/(npix*(nbands-npar))
 
-                 like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-
-                 ! write(*,*) like_old, c,eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)), sam
-                 ! write(*,*) like_new, b,eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)), t
-                 ! stop
-                                        
-                 ! If chi-squre is less than previous sample, automatically accept change
-                 if (like_old < like_new) then 
-                    sam = t
-                    like_old = like_new
-                    naccept = naccept + 1.0
-                    ! Otherwase draw a random number from 0 to 1 to see if we accept this change
-                 else
-                    x(2) = like_new/like_old!exp(0.5d0*(c-b))
-                    p = minval(x)
-                    call RANDOM_NUMBER(num)
-                    if (num < p) then
-                       sam = t
-                       like_old = like_new!   = b
-                       naccept = naccept + 1.0
-                    end if
+                 if (self%fg_spec_like(ind,1)) then
+                    like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                 else if (.not. self%fg_spec_like(ind,1)) then
+                    like_new = exp(-0.5d0*b)
                  end if
-
+                 
+                 ratio = like_new/like_old
+                 call RANDOM_NUMBER(num)
+                 if (ratio > num) then
+                    sam      = t
+                    like_old = like_new
+                    naccept  = naccept + 1.0
+                 end if
+                 
                  paccept = naccept/l
-                 write(*,fmt='(f8.4,f8.4,f8.4,i6,f8.4,f8.4,f8.4,f8.4)') t,paccept,naccept,l,like_old, like_new, x(2), num
+                 write(*,fmt='(f8.4,f8.4,f8.4,i6,f8.4,f8.4,f8.4,f8.4)') t,paccept,naccept,l,like_old, like_new, ratio, num
                  ! Adjust the step-size based on acceptance probability and document
                  if (paccept .lt. 0.6d0 .and. paccept .gt. 0.4d0) then
                     title = trim(self%outdir) // 'synch_beta_paccept.dat'
