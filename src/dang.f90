@@ -323,6 +323,18 @@ contains
                 end do
              end if
           end do
+          do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+             call compute_chisq(k,chisq,par%mode)
+             if (rank == master) then
+                if (mod(iter, 1) == 0 .or. iter == 1) then
+                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
+                        iter, " - chisq: " , chisq, " - A_s: ",&
+                        dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
+                        mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)
+                   write(*,fmt='(a)') '---------------------------------------------'
+                end if
+             end if
+          end do
        end if
          
        ! -------------------------------------------------------------------------------------------------------------------
@@ -364,6 +376,18 @@ contains
                    dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
                 end do
              end do
+          end do
+          do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+             call compute_chisq(k,chisq,par%mode)
+             if (rank == master) then
+                if (mod(iter, 1) == 0 .or. iter == 1) then
+                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
+                        iter, " - chisq: " , chisq, " - A_s: ",&
+                        dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
+                        mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)
+                   write(*,fmt='(a)') '---------------------------------------------'
+                end if
+             end if
           end do
        end if
        
