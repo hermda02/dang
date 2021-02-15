@@ -404,8 +404,11 @@ contains
       do j = 1, n2
          eta(j) = rand_normal(0.d0,1.d0)
       end do
-      b2 = b + compute_sample_vec(param, datas, compos, n, n2, eta, 5, 2)
-      
+      if (trim(param%ml_mode) == 'sample') then
+         b2 = b + compute_sample_vec(param, datas, compos, n, n2, eta, 5, 2)
+      else if (trim(param%ml_mode) == 'optimize') then
+         b2 = b
+      end if
       
       if (present(nnz_a)) then
          r = b2 - Ax_CSR(rp,ci,v,x)
@@ -493,7 +496,11 @@ contains
       do i = 1, n
          eta(i) = rand_normal(0.d0,1.d0)
       end do
-      b2 = b + compute_sample_vec(param, datas, compos, n2, n, eta, param%numband, 2)
+      if (trim(param%ml_mode) == 'sample') then
+         b2 = b + compute_sample_vec(param, datas, compos, n, n2, eta, 5, 2)
+      else if (trim(param%ml_mode) == 'optimize') then
+         b2 = b
+      end if
       r  = b2 - return_Ax(param, datas, compos, x, param%numband, 2)
       d  = r
       delta_new = sum(r*r)
@@ -502,14 +509,6 @@ contains
       do while( (i .lt. i_max) .and. (delta_new .gt. converge))
          t3 = mpi_wtime()
          q = return_Ax(param, datas, compos, d, param%numband, 2)
-         !do i = 1, datas%npix
-         !   if (datas%masks(i-1,1) == 0.d0) then
-         !      write(*,*) datas%masks(i-1,1), q(i), r(i), i
-         !   end if
-         !end do
-         !write(*,*) 'sample cg vec'
-         !stop
-
          alpha = delta_new/(sum(d*q))
          x = x + alpha*d
          if (mod(i,50) == 0) then

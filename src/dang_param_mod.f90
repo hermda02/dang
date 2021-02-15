@@ -18,6 +18,7 @@ module dang_param_mod
         logical(lgt)                                  :: output_unc  ! Do we output uncertainty of template fit?
         character(len=512)                            :: outdir      ! Output directory
         character(len=512)                            :: bp_chains   ! bp chains
+        character(len=16)                             :: ml_mode     ! 'sample' or 'optimize'
         character(len=16)                             :: solver      ! Linear system solver type
         character(len=16)                             :: mode        ! 'dang' mode ('comp_sep', 'HI_fit')
         character(len=5)                              :: tqu         ! Which pol_type to sample
@@ -360,6 +361,7 @@ contains
         call get_parameter_hashtable(htbl, 'OUTPUT_COMPS', par_lgt=par%output_fg)
         call get_parameter_hashtable(htbl, 'SOLVER_TYPE', par_string=par%solver)
         call get_parameter_hashtable(htbl, 'SOLVER_MODE', par_string=par%mode)
+        call get_parameter_hashtable(htbl, 'ML_MODE', par_string=par%ml_mode)
         call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
         call get_parameter_hashtable(htbl, 'CG_ITER_MAX', par_int=par%cg_iter)
         call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH', par_dp=par%cg_converge)

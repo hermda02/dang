@@ -970,13 +970,21 @@ contains
                  like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
                  diff = like_new - like_old
                  ratio = exp(diff)
-
-                 call RANDOM_NUMBER(num)
-                 if (ratio > num) then
-                    sam      = t
-                    c        = b
-                    like_old = like_new
-                    naccept  = naccept + 1.0
+                 if (trim(self%ml_mode) == 'optimize') then
+                    if (ratio > 1.d0) then
+                       sam      = t
+                       c        = b
+                       like_old = like_new
+                       naccept  = naccept + 1.0
+                    end if
+                 else if (trim(self%ml_mode) == 'sample') then
+                    call RANDOM_NUMBER(num)
+                    if (ratio > num) then
+                       sam      = t
+                       c        = b
+                       like_old = like_new
+                       naccept  = naccept + 1.0
+                    end if
                  end if
 
                  paccept = naccept/l
