@@ -280,14 +280,14 @@ contains
              end if
              
              ! Extrapolating A_dust to bands
-             !if (ANY(par%joint_comp=='dust')) then
-             !   write(*,*) 'Extrapolating A_dust to bands'
-             !   do i = 0, npix-1
-             !      do j = 1, nbands
-             !         dang_data%fg_map(i,k,j,3) = dang_data%fg_map(i,k,par%fg_ref_loc(2),3)*compute_spectrum(par,comp,2,par%dat_nu(j),i,k)
-             !      end do
-             !   end do
-             !end if
+             if (ANY(par%joint_comp=='dust')) then
+               write(*,*) 'Extrapolating A_dust to bands'
+               do i = 0, npix-1
+                  do j = 1, nbands
+                     dang_data%fg_map(i,k,j,3) = dang_data%fg_map(i,k,par%fg_ref_loc(2),3)*compute_spectrum(par,comp,2,par%dat_nu(j),i,k)
+                  end do
+               end do
+             end if
              
              ! Applying dust templates to make dust maps
              if (ANY(par%joint_comp=='template01')) then

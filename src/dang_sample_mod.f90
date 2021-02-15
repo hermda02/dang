@@ -575,6 +575,8 @@ contains
         logical                                                :: pix_samp
         logical                                                :: exist
 
+        real(dp), allocatable, dimension(:)                    :: beta_grid, like_grid
+
         character(len=128) ::title
 
         naccept = 0.0
@@ -848,11 +850,60 @@ contains
 
            time1 = mpi_wtime()
 
+           if (.true.) then
+
+              allocate(beta_grid(1000))
+              allocate(like_grid(1000))
+              
+              do l = 1, 1000
+                 beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/1000
+                 
+                 a         = 0.d0
+                 !$OMP PARALLEL PRIVATE(i,j,k,local_a)
+                 local_a   = 0.d0
+                 !$OMP DO SCHEDULE(static)
+                 do i = 0, npix-1
+                    sol       = beta_grid(l)
+                    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
+                       cycle
+                    end if
+                    
+                    ! Chi-square from the most recent Gibbs chain update
+                    do j = 1, nbands
+                       do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                          local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                               - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                       end do
+                    end do
+                 end do
+                 !$OMP END DO
+                 !$OMP CRITICAL
+                 a = a + local_a
+                 !$OMP END CRITICAL
+                 !$OMP END PARALLEL
+           
+                 title = trim(self%outdir) // 'beta_grid_likelihood.dat'
+                 inquire(file=title,exist=exist)
+                 if (exist) then
+                    open(12,file=title, status="old",position="append", action="write")
+                 else
+                    open(12,file=title, status="new", action="write")
+                    write(12,*)  
+                 endif
+                 write(12,*) beta_grid(l), -0.5d0*a
+                 close(12)
+
+              end do
+              stop
+           end if
+
+
            ! Sample for Q and U jointly
            if (map_n == -1) then
               indx_sample = indx(:,self%pol_type(1))
               a         = 0.d0
               !$OMP PARALLEL PRIVATE(i,j,k,local_a)
+              local_a   = 0.d0
               !$OMP DO SCHEDULE(static)
               do i = 0, npix-1
                  sol       = indx(i,self%pol_type(1))
@@ -878,7 +929,7 @@ contains
 
               like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
 
-              s = 1.d0
+              s = 0.5d0
               do l = 1, self%nsample
                  if (mod(l,50) == 0) then
                     if (paccept > 0.6d0) then
@@ -899,12 +950,13 @@ contains
                  ! Calculate new chi-square
                  b         = 0.d0
                  !$OMP PARALLEL PRIVATE(i,j,k,local_b)
+                 local_b   = 0.d0
                  !$OMP DO SCHEDULE(static)
                  do i = 0, npix-1
                     if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                     do j = 1, nbands
                        do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                          b = b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
+                          local_b = local_b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
                                - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                        end do
                     end do
@@ -914,7 +966,6 @@ contains
                  b = b + local_b
                  !$OMP END CRITICAL
                  !$OMP END PARALLEL
-                 b = b!/nump
 
                  like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
                  diff = like_new - like_old
