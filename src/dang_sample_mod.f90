@@ -571,12 +571,9 @@ contains
         real(dp)                                               :: a, b, c, num, sam, t, p, sol
         real(dp)                                               :: time1, time2, diff
         real(dp)                                               :: like_old, like_new, ratio, s
-        real(dp)                                               :: naccept, paccept   
+        real(dp)                                               :: naccept, paccept, local_a, local_b
         logical                                                :: pix_samp
         logical                                                :: exist
-
-        real(dp), allocatable, dimension(:)                    :: beta_grid
-        real(dp), allocatable, dimension(:)                    :: like_grid
 
         character(len=128) ::title
 
@@ -851,52 +848,11 @@ contains
 
            time1 = mpi_wtime()
 
-           ! allocate(beta_grid(1000))
-           ! allocate(like_grid(1000))
-
-           ! do l = 1, 1000
-           !    a = 0.d0
-           !    beta_grid(l) = -2.9 + (-2.8+2.9)*(l-1)/1000
-           !    !$OMP PARALLEL PRIVATE(i,j)
-           !    !$OMP DO SCHEDULE(static)
-           !    do i = 0, npix-1
-           !       sol       = indx(i,self%pol_type(1))
-           !       sam       = sol
-           !       if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
-           !          cycle
-           !       end if
-                 
-           !       ! Chi-square from the most recent Gibbs chain update
-           !       do j = 1, nbands
-           !          do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-           !             a = a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-           !                  - map2fit(i,k,j))**2.d0)/cov(i,k,j)
-           !          end do
-           !       end do
-           !    end do
-           !    !$OMP END DO
-           !    !$OMP END PARALLEL
-           !    like_grid(l) = a
-           !    title = trim(self%outdir) // 'beta_grid_likelihood.dat'
-           !    inquire(file=title,exist=exist)
-           !    if (exist) then
-           !       open(12,file=title, status="old",position="append", action="write")
-           !    else
-           !       open(12,file=title, status="new", action="write")
-           !       write(12,*)  
-           !    endif
-           !    write(12,*) beta_grid(l),like_grid(l)
-           !    close(12)
-           ! end do
-           ! stop
-
-
-
            ! Sample for Q and U jointly
            if (map_n == -1) then
               indx_sample = indx(:,self%pol_type(1))
               a         = 0.d0
-              !$OMP PARALLEL PRIVATE(i,j)
+              !$OMP PARALLEL PRIVATE(i,j,k,local_a)
               !$OMP DO SCHEDULE(static)
               do i = 0, npix-1
                  sol       = indx(i,self%pol_type(1))
@@ -908,22 +864,19 @@ contains
                  ! Chi-square from the most recent Gibbs chain update
                  do j = 1, nbands
                     do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                       a = a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                       local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
                             - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                     end do
                  end do
               end do
               !$OMP END DO
+              !$OMP CRITICAL
+              a = a + local_a
+              !$OMP END CRITICAL
               !$OMP END PARALLEL
-              c = a!/nump
+              c = a
 
-              ! like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
-
-              if (self%fg_spec_like(ind,1)) then
-                 like_old = exp(-0.5d0*c)
-              else if (.not. self%fg_spec_like(ind,1)) then
-                 like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-              end if
+              like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
 
               s = 1.d0
               do l = 1, self%nsample
@@ -936,7 +889,7 @@ contains
                        s = s/2.0
                     end if
                  end if
-                 t      = sol + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
+                 t      = sam + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
                 
                  ! If sampled value is outside of uniform bounds, cycle
                  if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
@@ -945,7 +898,7 @@ contains
                  end if
                  ! Calculate new chi-square
                  b         = 0.d0
-                 !$OMP PARALLEL PRIVATE(i,j)
+                 !$OMP PARALLEL PRIVATE(i,j,k,local_b)
                  !$OMP DO SCHEDULE(static)
                  do i = 0, npix-1
                     if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
@@ -957,20 +910,15 @@ contains
                     end do
                  end do
                  !$OMP END DO
+                 !$OMP CRITICAL
+                 b = b + local_b
+                 !$OMP END CRITICAL
                  !$OMP END PARALLEL
                  b = b!/nump
 
-                 ! like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
-                 ! diff = like_new - like_old
-                 ! ratio = exp(diff)
-                 ! write(*,fmt='(f8.4,4(e12.4))') t, like_new,like_old,diff,ratio
-                 if (self%fg_spec_like(ind,1)) then
-                    like_new = exp(-0.5d0*b)
-                 else if (.not. self%fg_spec_like(ind,1)) then
-                    like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-                 end if
-                 
-                 ratio = like_new/like_old
+                 like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                 diff = like_new - like_old
+                 ratio = exp(diff)
 
                  call RANDOM_NUMBER(num)
                  if (ratio > num) then
