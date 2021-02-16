@@ -11,6 +11,7 @@ import os
 import re
 
 def read_params(filename):
+    global mu, sd
     labels = []
     freq   = []
     with open(filename,'r') as infile:
@@ -19,7 +20,13 @@ def read_params(filename):
                 numbands = int(line.split('=')[1])
             if line.startswith('NUMGIBBS'):
                 numgibbs = int(line.split('=')[1][:5])
-                
+    with open(filename,'r') as infile:
+        for line in infile:
+            if line.startswith('COMP_PRIOR_GAUSS_BETA'):
+                if "MEAN" in line:
+                    mu = float(str.strip(line.split('=')[1]))
+                if "STD" in line:
+                    sd = float(str.strip(line.split('=')[1]))
     blabs = []
     bfreq = []
     for band in range(numbands):
@@ -48,6 +55,7 @@ def _init_():
         labels     = [name.replace("'","") for name in names]
         num_bands  = len(freq)
         iterations = num_samp
+        print(mu,sd)
         print(labels)
         print(freq)
     except Exception as e:
@@ -58,7 +66,7 @@ def _init_():
 def load_data():
     global diag, parameters, chiQ, chiU
     global param_labels, param_Q, param_U
-    global asQ, adQ, bsQ, asU, asU, bsU, x
+    global asQ, adQ, bsQ, adU, asU, bsU, x
     global iterations, ranges_Q, ranges_U
     global data_Q, data_U
     diag = []
@@ -185,7 +193,7 @@ def trace_all(pol):
         axes[3][1].hist(chiQ,bins=binnum)
         axes[3][1].set_ylabel('Count',size=15)
         axes[3][1].set_xlabel(r'$\chi^2$',size=10)
-        plt.savefig('all_trace_Q',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/all_trace_Q',dpi=150,bbox_inches='tight')
         plt.close()
         # plt.show()
 
@@ -224,7 +232,7 @@ def trace_all(pol):
         axes[3][1].hist(chiU,bins=binnum)
         axes[3][1].set_ylabel('Count',size=15)
         axes[3][1].set_xlabel(r'$\chi^2$',size=10)
-        plt.savefig('all_trace_U',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/all_trace_U',dpi=150,bbox_inches='tight')
         plt.close()
 
 def a_d_trace(pol):
@@ -238,7 +246,7 @@ def a_d_trace(pol):
         axes[1].hist(adQ,bins=binnum)
         axes[1].set_xlabel(r'$A_d$',size=10)
         axes[1].set_ylabel('Count',size=15)
-        plt.savefig('Ad_trace_Q',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/Ad_trace_Q',dpi=150,bbox_inches='tight')
         plt.close()
     if pol == "U":
         fig,axes = plt.subplots(1,2,figsize=(8,4))
@@ -249,7 +257,7 @@ def a_d_trace(pol):
         axes[1].hist(adQ,bins=binnum)
         axes[1].set_xlabel(r'$A_d$',size=10)
         axes[1].set_ylabel('Count',size=15)
-        plt.savefig('Ad_trace_Q',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/Ad_trace_Q',dpi=150,bbox_inches='tight')
         plt.close()
 
 def a_s_trace(pol):
@@ -268,7 +276,7 @@ def a_s_trace(pol):
         axes[1].set_xlabel(r'$A_s$',size=10)
         axes[1].set_ylabel('Count',size=15)
         # axes[1].axvline(x=A_s_mean,c='k')
-        plt.savefig('a_s_trace_hist_Q',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/a_s_trace_hist_Q',dpi=150,bbox_inches='tight')
         #plt.show()
         plt.close()
 
@@ -286,11 +294,12 @@ def a_s_trace(pol):
         axes[1].set_xlabel(r'$A_s$',size=10)
         axes[1].set_ylabel('Count',size=15)
         # axes[1].axvline(x=A_s_mean,c='k')
-        plt.savefig('a_s_trace_hist_U',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/a_s_trace_hist_U',dpi=150,bbox_inches='tight')
         #plt.show()
         plt.close()
 
 def b_s_trace(pol):
+    y = np.linspace(mu-3*sd,mu+3*sd,1000)
     if pol == "Q":
         binnum = int(np.sqrt(iterations))
     
@@ -301,11 +310,12 @@ def b_s_trace(pol):
         axes[0].set_xlabel('Gibbs Iteration',size=10)
         axes[0].set_ylabel(r'$\beta_s$',size=15)
         # axes[0].axhline(y=b_s_mean,c='k')
-        axes[1].hist(bsQ,bins=binnum)
+        axes[1].hist(bsQ,bins=binnum,density=True)
         axes[1].set_xlabel(r'$\beta_s$',size=10)
         axes[1].set_ylabel('Count',size=15)
+        axes[1].plot(y,stats.norm.pdf(y,mu,sd))
         # axes[1].axvline(x=b_s_mean,c='k')
-        plt.savefig('beta_s_trace_hist_Q',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/beta_s_trace_hist_Q',dpi=150,bbox_inches='tight')
         #plt.show()
         plt.close()
 
@@ -322,8 +332,9 @@ def b_s_trace(pol):
         axes[1].hist(bsU,bins=binnum)
         axes[1].set_xlabel(r'$\beta_s$',size=10)
         axes[1].set_ylabel('Count',size=15)
+        axes[1].plot(y,stats.norm.pdf(y,mu,sd))
         # axes[1].axvline(x=b_s_mean,c='k')
-        plt.savefig('beta_s_trace_hist_Q',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/beta_s_trace_hist_Q',dpi=150,bbox_inches='tight')
         #plt.show()
         plt.close()
         
@@ -342,7 +353,7 @@ def chisq_trace(pol):
         axes[1].hist(chiQ,bins=binnum)
         axes[1].set_ylabel('Count',size=15)
         axes[1].set_xlabel(r'$\chi^2$',size=10)
-        plt.savefig('chisquare_Q',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/chisquare_Q',dpi=150,bbox_inches='tight')
         plt.close()
         # plt.show()
 
@@ -359,7 +370,7 @@ def chisq_trace(pol):
         axes[1].hist(chiU,bins=binnum)
         axes[1].set_ylabel('Count',size=15)
         axes[1].set_xlabel(r'$\chi^2$',size=10)
-        plt.savefig('chisquare_U',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/chisquare_U',dpi=150,bbox_inches='tight')
         plt.close()
         # plt.show()
 
@@ -373,7 +384,7 @@ def hjornet(burnin,pol):
         num     = np.shape(samples)[0]
         val     = np.mean(samples,axis=0)
         std     = np.std(samples,axis=0)
-        figure  = corner.corner(samples, labels=parameters,range=ranges_Q) # bins=20, 
+        figure  = corner.corner(samples, labels=param_Q,range=ranges_Q) # bins=20, 
         axes    = np.array(figure.axes).reshape((ndim, ndim))
         col     = ['r','g','b']
         
@@ -390,7 +401,7 @@ def hjornet(burnin,pol):
                 ax.axhline(val[yi],color=col[yi])
             
         # plt.show()
-        plt.savefig('corner_plot_Q.png',dpi=300,bbox_inches='tight')
+        plt.savefig('../'+dir+'/corner_plot_Q.png',dpi=300,bbox_inches='tight')
 
     if pol == "U":
         samples = np.vstack(data_Q).T
@@ -415,9 +426,7 @@ def hjornet(burnin,pol):
                 ax.axvline(val[xi],color=col[xi])
                 ax.axhline(val[yi],color=col[yi])
             
-
-        # plt.show()
-        plt.savefig('corner_plot_U.png',dpi=300,bbox_inches='tight')
+        plt.savefig('../'+dir+'/corner_plot_U.png',dpi=300,bbox_inches='tight')
 
 def beta_chisq(pol):
     binnum = int(np.sqrt(iterations))
@@ -459,7 +468,7 @@ def beta_chisq(pol):
         cbar = fig.colorbar(im1,cax=cbar_ax)
         cbar.set_label('Pixel Count',size=18)
 
-        plt.savefig('beta_chisq_Q',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/beta_chisq_Q',dpi=150,bbox_inches='tight')
         plt.close()
 
     if pol == "U":
@@ -469,7 +478,7 @@ def beta_chisq(pol):
         axes.plot(chiU,bsU)
         axes.set_ylabel(r'$\beta_s$',size=15)
         axes.set_xlabel(r'$\chi^2$',size=15)
-        plt.savefig('beta_chisq_U',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/beta_chisq_U',dpi=150,bbox_inches='tight')
         plt.close()
         
 def a_b_s_histo2d(pol):
@@ -500,7 +509,7 @@ def a_b_s_histo2d(pol):
         cbar_ax.tick_params(labelsize=20)
         cbar = fig.colorbar(im1,cax=cbar_ax)
         cbar.set_label('Pixel Count',size=18)
-        plt.savefig('beta_s_A_s_2dhist_Q',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/beta_s_A_s_2dhist_Q',dpi=150,bbox_inches='tight')
         #plt.show()
         plt.close()
 
@@ -531,7 +540,7 @@ def a_b_s_histo2d(pol):
         cbar_ax.tick_params(labelsize=20)
         cbar = fig.colorbar(im1,cax=cbar_ax)
         cbar.set_label('Pixel Count',size=18)
-        plt.savefig('beta_s_A_s_2dhist_U',dpi=150,bbox_inches='tight')
+        plt.savefig('../'+dir+'/beta_s_A_s_2dhist_U',dpi=150,bbox_inches='tight')
         #plt.show()
         plt.close()
 
