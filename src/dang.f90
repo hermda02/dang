@@ -80,6 +80,8 @@ program dang
   npix              = dang_data%npix
   nbands            = par%numband
   nfgs              = par%ncomp+par%ntemp
+  npar              = 3
+  nump              = 0
   nlheader          = size(header)
   nmaps             = nmaps
   iterations        = par%nsample              ! # of iterations in the samplers
@@ -132,7 +134,11 @@ program dang
      call read_bintab(par%mask_file,dang_data%masks,npix,1,nullval,anynull,header=header)
      do i = 0, npix-1
         do j = 1, nmaps
-           if (dang_data%masks(i,j) == 0.d0) dang_data%masks(i,j) = missval
+           if (dang_data%masks(i,j) == 0.d0 .or. dang_data%masks(i,j) == missval) then
+              dang_data%masks(i,j) = missval
+           else 
+              nump = nump + 1
+           end if
         end do
      end do
      write(*,*) ''
@@ -317,6 +323,18 @@ contains
                 end do
              end if
           end do
+          do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+             call compute_chisq(k,chisq,par%mode)
+             if (rank == master) then
+                if (mod(iter, 1) == 0 .or. iter == 1) then
+                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
+                        iter, " - chisq: " , chisq, " - A_s: ",&
+                        dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
+                        mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)
+                   write(*,fmt='(a)') '---------------------------------------------'
+                end if
+             end if
+          end do
        end if
          
        ! -------------------------------------------------------------------------------------------------------------------
@@ -353,14 +371,23 @@ contains
           end do
           call sample_index(par,dang_data,comp,synchonly,par%fg_samp_nside(1,1),1,-1)
           do i = 0, npix-1
-             comp%beta_s(i,:) = comp%beta_s(i,:)
-          end do
-          do i = 0, npix-1
              do j = 1, nbands
                 do k = par%pol_type(1), par%pol_type(size(par%pol_type))
                    dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
                 end do
              end do
+          end do
+          do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+             call compute_chisq(k,chisq,par%mode)
+             if (rank == master) then
+                if (mod(iter, 1) == 0 .or. iter == 1) then
+                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
+                        iter, " - chisq: " , chisq, " - A_s: ",&
+                        dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
+                        mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)
+                   write(*,fmt='(a)') '---------------------------------------------'
+                end if
+             end if
           end do
        end if
        
@@ -717,7 +744,6 @@ contains
     integer(i4b)                                                :: i,j,w
     
     if (trim(mode) == 'comp_sep') then
-       
        chisq = 0.d0
        do i = 0, npix-1
           if (dang_data%masks(i,1) == missval .or. dang_data%masks(i,1) == 0.d0) cycle
@@ -730,7 +756,7 @@ contains
              chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)
           end do
        end do
-       chisq = chisq/(npix+nbands+nfgs)
+       chisq = chisq/(nump*(nbands-npar))
        
     else if (trim(mode) == 'hi_fit') then
        chisq = 0.d0

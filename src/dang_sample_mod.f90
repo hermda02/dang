@@ -569,19 +569,20 @@ contains
         real(dp), dimension(nbands)                            :: signal, tmp
         real(dp), dimension(2)                                 :: x
         real(dp)                                               :: a, b, c, num, sam, t, p, sol
-        real(dp)                                               :: time1, time2
-
+        real(dp)                                               :: time1, time2, diff
+        real(dp)                                               :: like_old, like_new, ratio, s
+        real(dp)                                               :: naccept, paccept, local_a, local_b
         logical                                                :: pix_samp
-
-        real(dp)                                               :: naccept   
         logical                                                :: exist
 
-        real(dp), allocatable, dimension(:,:)                  :: map, map2
         character(len=128) ::title
+
+        naccept = 0.0
 
         !------------------------------------------------------------------------
         ! Spectral index sampler, using the Metropolis approach.
         !------------------------------------------------------------------------
+        ! map2fit is the data-(other foregrounds) map which we are fitting to
         map2fit = duta
         cov     = dat%rms_map*dat%rms_map
         mask    = dat%masks
@@ -609,7 +610,6 @@ contains
 
         allocate(fg_map_high(0:npix-1,nmaps,nbands))
         fg_map_high(:,:,:) = dat%fg_map(:,:,:,1)
-
 
         ! Per pixel sampler
         if (pix_samp) then
@@ -706,22 +706,35 @@ contains
                             - data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                     end do
                  end do
-                 c = a
-                 
+                 c = a/(nbands-npar)
+ 
+                 if (self%fg_spec_like(ind,1)) then
+                    like_old = exp(-0.5d0*c)
+                 else if (.not. self%fg_spec_like(ind,1)) then
+                    like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                 end if
+
+                 s = 1.d0
                  do l = 1, self%nsample
-                    
-                    ! Sampling from the prior
-                    if (self%fg_spec_like(ind,1)) then
-                       t      = rand_normal(sol, self%fg_gauss(ind,1,2))
-                    else if (.not. self%fg_spec_like(ind,1)) then
-                       t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                    ! Every 100 samples check acceptance rate, and adjust scaling factor
+                    if (mod(l,50) == 0) then
+                       if (paccept > 0.6d0) then
+                          ! write(*,*) paccept,l,'s = s*2.0'
+                          s = s*2.0
+                       else if (paccept < 0.4d0) then
+                          ! write(*,*) paccept,l,'s = s/2.0'
+                          s = s/2.0
+                       end if
                     end if
+                    t      = sol + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
+                    b      = 0.d0
                     
                     ! If sampled value is outside of uniform bounds, cycle
-                    if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
-                    
-                    b         = 0.d0
-                    
+                    if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
+                       paccept = naccept/l
+                       cycle
+                    end if
+
                     ! Calculate new chi-square
                     do j = 1, nbands
                        do k = self%pol_type(1), self%pol_type(size(self%pol_type))
@@ -729,24 +742,21 @@ contains
                           b      = b + ((tmp(j)-data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                        end do
                     end do
-                    
-                    ! If chi-squre is less than previous sample, automatically accept change
-                    if (b < c .and. t .lt. self%fg_uni(ind,1,2) .and. t .gt. self%fg_uni(ind,1,1)) then
-                       sam = t
-                       c   = b
-                    ! Otherwase draw a random number from 0 to 1 to see if we accept this change
-                    else
-                       x(2) = exp(0.5d0*(c-b))
-                       p = minval(x)
-                       call RANDOM_NUMBER(num)
-                       if (num < p .and. t .lt. self%fg_uni(ind,1,2) .and. t .gt. self%fg_uni(ind,1,1)) then
-                          sam = t
-                          c   = b
-                       end if
+
+                    b = b/(nbands-npar)
+
+                    if (self%fg_spec_like(ind,1)) then
+                       like_new = exp(-0.5d0*b)
+                    else if (.not. self%fg_spec_like(ind,1)) then
+                       like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
                     end if
-                    if (sam .gt. self%fg_uni(ind,1,2)) then
-                       write(*,*) 'Sample outside of index bounds -- error!'
-                       stop
+                    
+                    ratio = like_new/like_old
+                    call RANDOM_NUMBER(num)
+                    if (ratio > num) then
+                       sam      = t
+                       like_old = like_new
+                       naccept  = naccept + 1.0
                     end if
                     sol = sam
                     indx_sample_low(i) = sol
@@ -768,41 +778,54 @@ contains
                     a = a + (((fg_map_low(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
                          - data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
                  end do
-                 c = a
+                 c = a!/(nbands-npar)
+ 
+                 if (self%fg_spec_like(ind,1)) then
+                    like_old = exp(-0.5d0*c)
+                 else if (.not. self%fg_spec_like(ind,1)) then
+                    like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                 end if
                  
+                 s = 1.d0
                  do l = 1, self%nsample
-                    
-                    ! Sampling from the prior
-                    if (self%fg_spec_like(ind,1)) then
-                       t      = rand_normal(sol, self%fg_gauss(ind,1,2))
-                    else if (.not. self%fg_spec_like(ind,1)) then
-                       t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                    ! Every 100 samples check acceptance rate, and adjust scaling factor
+                    if (mod(l,50) == 0) then
+                       if (paccept > 0.6d0) then
+                          write(*,*) paccept,l,'s = s*2.0'
+                          s = s*2.0
+                       else if (paccept < 0.4d0) then
+                          write(*,*) paccept,l,'s = s/2.0'
+                          s = s/2.0
+                       end if
                     end if
-                    b         = 0.d0
+                    t      = sol + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
+                    b      = 0.d0
 
                     ! If sampled value is outside of uniform bounds, cycle                    
-                    if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
+                    if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
+                       paccept = naccept/l
+                       cycle
+                    end if
                     
                     ! Calculate new chi-square
                     do j = 1, nbands
                        tmp(j) = fg_map_low(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)
                        b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
                     end do
-                    b = b
+                    ! b = b/(nbands-npar)
+
+                    if (self%fg_spec_like(ind,1)) then
+                       like_new = exp(-0.5d0*b)
+                    else if (.not. self%fg_spec_like(ind,1)) then
+                       like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                    end if
                     
-                    ! If chi-squre is less than previous sample, automatically accept change
-                    if (b < c) then
-                       sam = t
-                       c   = b
-                    ! Otherwase draw a random number from 0 to 1 to see if we accept this change
-                    else
-                       x(2) = exp(0.5d0*(c-b))
-                       p = minval(x)
-                       call RANDOM_NUMBER(num)
-                       if (num < p) then
-                          sam = t
-                          c   = b
-                       end if
+                    ratio = like_new/like_old
+                    call RANDOM_NUMBER(num)
+                    if (ratio > num) then
+                       sam      = t
+                       like_old = like_new
+                       naccept  = naccept + 1.0
                     end if
                  end do
                  sol = sam
@@ -829,6 +852,8 @@ contains
            if (map_n == -1) then
               indx_sample = indx(:,self%pol_type(1))
               a         = 0.d0
+              !$OMP PARALLEL PRIVATE(i,j,k,local_a)
+              !$OMP DO SCHEDULE(static)
               do i = 0, npix-1
                  sol       = indx(i,self%pol_type(1))
                  sam       = sol
@@ -839,60 +864,94 @@ contains
                  ! Chi-square from the most recent Gibbs chain update
                  do j = 1, nbands
                     do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                       a = a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                       local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
                             - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                     end do
                  end do
-                 c = a
               end do
+              !$OMP END DO
+              !$OMP CRITICAL
+              a = a + local_a
+              !$OMP END CRITICAL
+              !$OMP END PARALLEL
+              c = a
+
+              like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+
+              s = 1.d0
               do l = 1, self%nsample
-                    
-                 ! Sampling from the prior
-                 if (self%fg_spec_like(ind,1)) then
-                    t      = rand_normal(sol, self%fg_gauss(ind,1,2))
-                 else if (.not. self%fg_spec_like(ind,1)) then
-                    t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                 if (mod(l,50) == 0) then
+                    if (paccept > 0.6d0) then
+                       write(*,*) paccept,l,'s = s*2.0'
+                       s = s*2.0
+                    else if (paccept < 0.4d0) then
+                       write(*,*) paccept,l,'s = s/2.0'
+                       s = s/2.0
+                    end if
                  end if
-                 b         = 0.d0
-
+                 t      = sam + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
+                
                  ! If sampled value is outside of uniform bounds, cycle
-                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
-
+                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
+                    paccept = naccept/l
+                    cycle
+                 end if
                  ! Calculate new chi-square
+                 b         = 0.d0
+                 !$OMP PARALLEL PRIVATE(i,j,k,local_b)
+                 !$OMP DO SCHEDULE(static)
                  do i = 0, npix-1
                     if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                     do j = 1, nbands
                        do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                       b = b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
-                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                          b = b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
+                               - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                        end do
                     end do
                  end do
-                 b = b
-                    
-                 ! If chi-squre is less than previous sample, automatically accept change
-                 if (b < c) then 
-                    sam = t
-                    c   = b
-                    ! Otherwase draw a random number from 0 to 1 to see if we accept this change
-                 else
-                    x(2) = exp(0.5d0*(c-b))
-                    p = minval(x)
-                    call RANDOM_NUMBER(num)
-                    if (num < p) then
-                       sam = t
-                       c   = b
-                    end if
+                 !$OMP END DO
+                 !$OMP CRITICAL
+                 b = b + local_b
+                 !$OMP END CRITICAL
+                 !$OMP END PARALLEL
+                 b = b!/nump
+
+                 like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                 diff = like_new - like_old
+                 ratio = exp(diff)
+
+                 call RANDOM_NUMBER(num)
+                 if (ratio > num) then
+                    sam      = t
+                    c        = b
+                    like_old = like_new
+                    naccept  = naccept + 1.0
                  end if
+
+                 paccept = naccept/l
+                 ! Adjust the step-size based on acceptance probability and document
               end do
+              title = trim(self%outdir) // 'synch_beta_paccept.dat'
+              inquire(file=title,exist=exist)
+              if (exist) then
+                 open(12,file=title, status="old",position="append", action="write")
+              else
+                 open(12,file=title, status="new", action="write")
+                 write(12,*)  
+              endif
+              write(12,*) paccept, s
+              close(12)
               sol = sam
               indx_sample(:) = sol
-           ! Sample for a single poltype
+
+           ! Sample for a single poltype - fullsky
            else
-              indx_sample = indx(:,map_n)
+              indx_sample = indx(:,self%pol_type(1))
+              a         = 0.d0
+              !$OMP PARALLEL PRIVATE(i,j)
+              !$OMP DO SCHEDULE(static)
               do i = 0, npix-1
-                 a         = 0.d0
-                 sol       = indx(i,map_n)
+                 sol       = indx(i,self%pol_type(1))
                  sam       = sol
                  if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
                     cycle
@@ -900,48 +959,80 @@ contains
                  
                  ! Chi-square from the most recent Gibbs chain update
                  do j = 1, nbands
-                       a = a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
-                            - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
+                    a = a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+                         - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
                  end do
-                 c = a
               end do
+              !$OMP END DO
+              !$OMP END PARALLEL
+              ! c = a/(npix*(nbands-npar))
+              ! c = a/npix
+              c = a
+ 
+              ! if (self%fg_spec_like(ind,1)) then
+              !    like_old = exp(-0.5d0*c)
+              ! else if (.not. self%fg_spec_like(ind,1)) then
+              !    like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+              ! end if
+
+              like_old = c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+
+              s = 1.d0
               do l = 1, self%nsample
-                    
-                 ! Sampling from the prior
-                 if (self%fg_spec_like(ind,1)) then
-                    t      = rand_normal(sol, self%fg_gauss(ind,1,2))
-                 else if (.not. self%fg_spec_like(ind,1)) then
-                    t      = rand_normal(self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                 if (mod(l,50) == 0) then
+                    if (paccept > 0.6d0) then
+                       write(*,*) paccept,l,'s = s*2.0'
+                       s = s*2.0
+                    else if (paccept < 0.4d0) then
+                       write(*,*) paccept,l,'s = s/2.0'
+                       s = s/2.0
+                    end if
                  end if
-                 b         = 0.d0
+                 t      = sol + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
 
                  ! If sampled value is outside of uniform bounds, cycle
-                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) cycle
-
+                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
+                    paccept = naccept/l
+                    cycle
+                 end if
                  ! Calculate new chi-square
+                 b         = 0.d0
+                 !$OMP PARALLEL PRIVATE(i,j)
+                 !$OMP DO SCHEDULE(static)
                  do i = 0, npix-1
                     if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                     do j = 1, nbands
-                       b = b + (((fg_map_high(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
-                            - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
+                       b = b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
+                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                     end do
                  end do
-                 b = b
-                    
-                 ! If chi-squre is less than previous sample, automatically accept change
-                 if (b < c) then 
-                    sam = t
-                    c   = b
-                    ! Otherwase draw a random number from 0 to 1 to see if we accept this change
-                 else
-                    x(2) = exp(0.5d0*(c-b))
-                    p = minval(x)
-                    call RANDOM_NUMBER(num)
-                    if (num < p) then
-                       sam = t
-                       c   = b
-                    end if
+                 !$OMP END DO
+                 !$OMP END PARALLEL
+
+                 ! b = b/(npix*(nbands-npar))
+                 b = b!/npix
+
+                 ! if (self%fg_spec_like(ind,1)) then
+                 !    like_new = exp(-0.5d0*b)
+                 ! else if (.not. self%fg_spec_like(ind,1)) then
+                 !    like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
+                 ! end if
+
+                 like_new = b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+
+                 write(*,*) c, b
+                 
+                 ratio = like_new/like_old
+                 call RANDOM_NUMBER(num)
+                 if (ratio > num) then
+                    sam      = t
+                    c        = b
+                    like_old = like_new
+                    naccept  = naccept + 1.0
                  end if
+                 
+                 paccept = naccept/l
+                 ! Adjust the step-size based on acceptance probability and document
               end do
               sol = sam
               indx_sample(:) = sol
