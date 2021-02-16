@@ -26,7 +26,7 @@ contains
     allocate(self%beta_s(0:npix-1,nmaps))
     write(*,*) 'Allocated synch maps'
     if (trim(param%fg_spec_map(1,1)) == 'none') then 
-       self%beta_s     = param%fg_gauss(1,1,1) ! Synchrotron beta initial guess
+       self%beta_s     = param%fg_init(1,1) ! Synchrotron beta initial guess
     else
        !call read_bintab(trim(param%fg_spec_map(1,1)),self%beta_s,npix,3,nullval,anynull,header=header)
     end if

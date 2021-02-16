@@ -18,7 +18,7 @@ module dang_sample_mod
 
 contains
 
-    subroutine sample_joint_amp(self, dat, compo, map_n, method, poltype)
+    subroutine sample_joint_amp(self, dat, compo, map_n, method)
         !------------------------------------------------------------------------
         ! Solving the matrix equation Ab = c                                    |
         !                                                                       |
@@ -39,7 +39,6 @@ contains
         type(component)                            :: compo
         integer(i4b),              intent(in)      :: map_n
         character(len=*),          intent(in)      :: method
-        character(len=*), dimension(:), intent(in) :: poltype
         real(dp), allocatable, dimension(:,:)      :: A, val
         real(dp), allocatable, dimension(:)        :: b, c
         character(len=256)                         :: title
@@ -70,9 +69,11 @@ contains
 
         do i = 1, size(self%joint_comp)
            if (self%joint_comp(i) == 'synch') then
-              do l = 1, size(poltype)
-                 y = y + dat%npix
-              end do
+              if (self%joint_pol) then
+                 y = y + 2*x
+              else
+                 y = y + x
+              end if
            else if (self%joint_comp(i) == 'dust') then
               y = y + dat%npix
            else if (self%joint_comp(i) == 'template01') then
@@ -98,7 +99,7 @@ contains
         w = 0 
         do m = 1, size(self%joint_comp)
             if (self%joint_comp(m) == 'synch') then
-               if (size(poltype) == 1) then
+               if (.not. self%joint_pol) then
                   do j=1, z
                      do i=1, x
                         if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
@@ -110,7 +111,7 @@ contains
                      end do
                   end do
                   w = w + x
-               else if (size(poltype) == 2) then
+               else if (self%joint_pol) then
                   do j=1, z
                      do i=1, x
                         if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
@@ -138,7 +139,7 @@ contains
         do m = 1, size(self%joint_comp)
            if (self%joint_comp(m) == 'template01') then
            ! Template 1
-              if (size(poltype) == 1) then
+              if (.not. self%joint_pol) then
                  l = 1
                  do j = 1, z
                     if (self%temp_corr(1,j)) then
@@ -151,7 +152,7 @@ contains
                     end if
                  end do
                  w = w + self%temp_nfit(1)
-              else if (size(poltype) == 2) then
+              else if (self%joint_pol) then
               ! If sampling Q and U jointly
                  l = 1
                  do j = 1, z
@@ -171,7 +172,7 @@ contains
 
            else if (self%joint_comp(m) == 'template02') then
               ! Template 2
-              if (size(poltype) == 1) then
+              if (.not. self%joint_pol) then
                  l = 1
                  do j = 1, z
                     if (self%temp_corr(2,j)) then
@@ -184,7 +185,7 @@ contains
                     end if
                  end do
                  w = w + self%temp_nfit(2)
-              else if (size(poltype) == 2) then
+              else if (self%joint_pol) then
               ! If sampling Q and U jointly
                  l = 1
                  do j = 1, z
@@ -204,7 +205,7 @@ contains
 
            else if (self%joint_comp(m) == 'template03') then
               ! Template 3
-              if (size(poltype) == 1) then
+              if (.not. self%joint_pol) then
                  l = 1
                  do j = 1, z
                     if (self%temp_corr(3,j)) then
@@ -217,7 +218,7 @@ contains
                     end if
                  end do
                  w = w + self%temp_nfit(3)
-              else if (size(poltype) == 2) then
+              else if (self%joint_pol) then
               ! If sampling Q and U jointly
                  l = 1
                  do j = 1, z
@@ -237,7 +238,7 @@ contains
 
            else if (self%joint_comp(m) == 'template04') then
               ! Template 4
-              if (size(poltype) == 1) then
+              if (.not. self%joint_pol) then
                  l = 1
                  do j = 1, z
                     if (self%temp_corr(4,j)) then
@@ -250,7 +251,7 @@ contains
                     end if
                  end do
                  w = w + self%temp_nfit(4)
-              else if (size(poltype) == 2) then
+              else if (self%joint_pol) then
               ! If sampling Q and U jointly
                  l = 1
                  do j = 1, z
@@ -288,7 +289,7 @@ contains
            !call compute_cg_vec(b,c,y,self,dat,compo)
            ! Sample
            !call sample_cg(A,b,c,2*npix,nnz_a,self%cg_iter,self%cg_converge,self,dat,compo)
-           call sample_cg_vec(b,c,y,self,dat,compo)
+           call sample_cg_vec(b,c,self,dat,compo)
         else if (trim(method) == 'lu') then
            write(*,*) 'Currently deprecated.'
            stop
@@ -300,7 +301,7 @@ contains
         end if
 
         ! Output amplitudes to the appropriate variables
-        if (size(poltype) == 1) then
+        if (.not. self%joint_pol) then
            w = 0
            do m = 1, size(self%joint_comp)
               if (self%joint_comp(m) == 'synch') then
@@ -341,7 +342,7 @@ contains
                  end do
               end if
            end do
-        else if (size(poltype) == 2) then
+        else if (self%joint_pol) then
            w = 0
            do m = 1, size(self%joint_comp)
               if (self%joint_comp(m) == 'synch') then
@@ -545,7 +546,11 @@ contains
             end do
             norm(i)            = norm(i)
             amp                = sum1/sum2
-            sample_spec_amp(i) = amp + rand_normal(0.d0,1.d0)/sqrt(norm(i))
+            if (trim(self%ml_mode) == 'sample') then
+               sample_spec_amp(i) = amp + rand_normal(0.d0,1.d0)/sqrt(norm(i))
+            else if (trim(self%ml_mode) == 'optimize') then
+               sample_spec_amp(i) = amp
+            end if
         end do
     end function sample_spec_amp
 

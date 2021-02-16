@@ -111,11 +111,7 @@ program dang
   if (trim(par%mode) == 'comp_sep') then
      ! Joint Sampler Info
      !----------------------------------------------------------------------------------------------------------
-     allocate(joint_poltype(2))
      solver = par%solver
-     
-     joint_poltype(1) = 'Q'
-     joint_poltype(2) = 'U'
      call init_fg_map(dang_data,npix,nmaps,nbands,nfgs)
      call init_data_maps(dang_data,npix,nmaps,nbands)
      call init_mask_maps(dang_data,npix,nmaps)
@@ -170,6 +166,27 @@ program dang
      
      dang_data%fg_map    = 0.0
      dang_data%temp_amps = 0.0
+
+     ! dang_data%temp_amps(1,:,1) = 0.41957897
+     ! dang_data%temp_amps(2,:,1) = 0.17704154
+     ! dang_data%temp_amps(3,:,1) = 0.09161571
+     ! dang_data%temp_amps(4,:,1) = 0.12402716
+     ! dang_data%temp_amps(5,:,1) = 0.20367266
+
+     ! dang_data%temp_amps(1,:,1) = 0.196d-2
+     ! dang_data%temp_amps(2,:,1) = 0.475d-2 
+     ! dang_data%temp_amps(3,:,1) = 0.000d0 
+     ! dang_data%temp_amps(4,:,1) = 0.283d-2
+     ! dang_data%temp_amps(5,:,1) = -0.104d-01
+     ! dang_data%temp_amps(6,:,1) = 0.000d0
+     ! dang_data%temp_amps(7,:,1) = 0.110d-1
+     do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+        do i = 0, npix-1
+           do j = 1, nbands
+              dang_data%fg_map(i,k,j,2) = dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
+           end do
+        end do
+     end do
 
      call comp_sep
   
@@ -245,29 +262,10 @@ contains
              end if
           end do
           write(*,*) ''
-       end if
-       
-       ! ! ------------ BP SWAP CHUNK ------------------------------------------------------------------
-       ! if (par%bp_swap) then
-       !    call swap_bp_maps(dang_data,par)
-       !    write(*,*) ''
-       !    call convert_maps_bp(par)
-       !    write(*,*) ''
-       !    ! Check to see if any swapped maps need to be dust corrected
-       !    do j = 1, nbands
-       !       if ( par%bp_map(j)) then
-       !          if (par%dust_corr(j)) then
-       !             call dust_correct_band(dang_data,par,comp,j)
-       !          end if
-       !       end if
-       !    end do
-       !    write(*,*) ''
-       ! end if
-       ! -------------------------------------------------------------------------------------------------------------------
-       
+       end if       
        ! -------------------------------------------------------------------------------------------------------------------
        if (par%joint_sample) then
-          call sample_joint_amp(par,dang_data,comp,2,trim(solver),joint_poltype)
+          call sample_joint_amp(par,dang_data,comp,2,trim(solver))
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
              
              ! Extrapolating A_synch to bands
@@ -341,8 +339,11 @@ contains
        ! For sampling foreground amplitudes individually
        ! -------------------------------------------------------------------------------------------------------------------
        if (par%fg_samp_amp(1)) then
+          do i = 1, par%ntemp
+             synchonly(:,:,:) = dang_data%sig_map(:,:,:)-dang_data%fg_map(:,:,:,i+1)
+          end do
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-             dang_data%fg_map(:,k,par%fg_ref_loc(1),1) =  sample_spec_amp(par,dang_data%sig_map,comp,dang_data%rms_map,1,k)
+             dang_data%fg_map(:,k,par%fg_ref_loc(1),1) =  sample_spec_amp(par,synchonly,comp,dang_data%rms_map,1,k)
              do i = 0, npix-1
                 do j = 1, nbands
                    dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
