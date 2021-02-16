@@ -59,13 +59,14 @@ module dang_param_mod
         logical(lgt),       allocatable, dimension(:)     :: fg_samp_amp    ! Logical - sample fg amplitude
         logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_like   ! Logical - sample fg spec param from likelihood?
         logical(lgt)                                      :: joint_sample   ! Logical - jointly sample fg amplitudes
-        integer(i4b),       allocatable, dimension(:)     :: joint_poltype  ! Points to which Stokes are jointly sampled
+        logical(lgt)                                      :: joint_pol      ! Points to which Stokes are jointly sampled
         character(len=512), allocatable, dimension(:)     :: joint_comp     ! Joint sampler components
         character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
         character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral index sampler (pixel/fullsky)
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
         character(len=512), allocatable, dimension(:,:)   :: fg_spec_map    ! Fg spectral parameter input map
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
+        real(dp),           allocatable, dimension(:,:)   :: fg_init        ! Initialized parameter value (fullsky)
         integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
         integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
@@ -243,15 +244,15 @@ contains
         logical(lgt),         optional :: par_present
         character(len=*),     optional :: desc
 
-        ! logical(lgt)               :: found
+        logical(lgt)               :: found
 
         ! found = .false.
         ! call get_parameter_arg(parname, par_int, par_char, par_string, par_sp, par_dp, par_lgt, found, desc)
         ! if(found) then
-        !     if(present(par_present)) par_present = .true.
+        !    if(present(par_present)) par_present = .true.
         ! else
         call get_parameter_from_hash(htbl, parname, len_itext, par_int, &
-            & par_char, par_string, par_sp, par_dp, par_lgt, par_present, desc)
+             & par_char, par_string, par_sp, par_dp, par_lgt, par_present, desc)
         ! end if
     end subroutine get_parameter_hashtable
 
@@ -319,7 +320,6 @@ contains
         else
             write(*,*) "get_parameter: Reached unreachable point!"
         end if
-
         
         deallocate(val)
         return
@@ -476,6 +476,7 @@ contains
            call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
            call get_parameter_hashtable(htbl, 'NUMJOINT', par_int=par%njoint)
            call get_parameter_hashtable(htbl, 'JOINT_SAMPLE', par_lgt=par%joint_sample)
+           call get_parameter_hashtable(htbl, 'JOINT_POL', par_lgt=par%joint_pol)
            call get_parameter_hashtable(htbl, 'DUST_CORR_TYPE', par_string=par%dust_corr_type)
 
            allocate(par%mbb_gauss(2,2))
@@ -497,7 +498,7 @@ contains
            allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
            allocate(par%fg_spec_map(n,2))
            allocate(par%fg_ind_region(n,2))
-
+           allocate(par%fg_init(n,2))
            
            allocate(par%temp_file(n2))
            allocate(par%temp_label(n2))
@@ -521,12 +522,12 @@ contains
                  end if
               end do
            end do
-           
+
            do i = 1, n3
               call int2string(i, itext)
               call get_parameter_hashtable(htbl, 'JOINT_SAMPLE_COMP'//itext, len_itext=len_itext, par_string=par%joint_comp(i))
            end do
-           
+
            do i = 1, n
               call int2string(i, itext)
               call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
@@ -534,7 +535,7 @@ contains
               call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
               call get_parameter_hashtable(htbl, 'COMP_INCLUDE'//itext, len_itext=len_itext, par_lgt=par%fg_inc(i))
               call get_parameter_hashtable(htbl, 'COMP_SAMPLE_AMP'//itext, len_itext=len_itext, par_lgt=par%fg_samp_amp(i))
-              
+
               if (trim(par%fg_type(i)) == 'power-law') then
                  call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                       par_dp=par%fg_gauss(i,1,1))
@@ -544,6 +545,7 @@ contains
                       par_dp=par%fg_uni(i,1,1))
                  call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
                       par_dp=par%fg_uni(i,1,2))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA'//itext, len_itext=len_itext, par_dp=par%fg_init(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
                       par_int=par%fg_samp_nside(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
