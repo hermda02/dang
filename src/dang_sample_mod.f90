@@ -39,21 +39,13 @@ contains
         type(component)                            :: compo
         integer(i4b),              intent(in)      :: map_n
         character(len=*),          intent(in)      :: method
-        real(dp), allocatable, dimension(:,:)      :: A, val
+        real(dp), allocatable, dimension(:,:,:)    :: map2fit
         real(dp), allocatable, dimension(:)        :: b, c
         character(len=256)                         :: title
         integer(i4b)                               :: x, y, z, w, l, m, n
         integer(i4b)                               :: nfit1, nfit2, nfit3, nfit4
         integer(i4b)                               :: info
-
-
-        real(dp), allocatable, dimension(:)        :: damps
-        real(dp), allocatable, dimension(:,:)      :: synch
-        real(dp)                                   :: q, t6, t7
-
-        real(dp), allocatable, dimension(:,:,:)    :: covar, T_nu, T_nu_T, A_2, A_1
-        real(dp), allocatable, dimension(:,:)      :: A_3
-
+        real(dp)                                   :: t6, t7
 
         if (rank == master) then
            !write(*,fmt='(a)') 'Starting joint sampling for synch and dust_template.'
@@ -67,26 +59,30 @@ contains
         y = 0
         z = self%numband
 
-        do i = 1, size(self%joint_comp)
-           if (self%joint_comp(i) == 'synch') then
+        allocate(map2fit(0:npix-1,nmaps,nbands))
+
+        map2fit = dat%sig_map
+
+        do n = 1, self%ncomp
+           if (ANY(self%joint_comp == trim(self%fg_label(n)))) then
               if (self%joint_pol) then
                  y = y + 2*x
               else
                  y = y + x
               end if
-           else if (self%joint_comp(i) == 'dust') then
-              y = y + dat%npix
-           else if (self%joint_comp(i) == 'template01') then
-              y = y + self%temp_nfit(1)
-           else if (self%joint_comp(i) == 'template02') then
-              y = y + self%temp_nfit(2)
-           else if (self%joint_comp(i) == 'template03') then
-              y = y + self%temp_nfit(3)
-           else if (self%joint_comp(i) == 'template04') then
-              y = y + self%temp_nfit(4)
+           else
+              write(*,*) "remove for foreground ", trim(self%fg_label(n))
+              map2fit(:,:,:) = map2fit(:,:,:) - dat%fg_map(:,:,:,n)
            end if
         end do
-
+        do n = 1, self%ntemp
+           if (ANY(self%joint_comp == trim(self%temp_label(n)))) then
+              y = y + self%temp_nfit(n)
+           else
+              write(*,*) "remove for template ", trim(self%temp_label(n))
+              map2fit(:,:,:) = map2fit(:,:,:) - dat%fg_map(:,:,:,self%ncomp+n)
+           end if
+        end do
         allocate(b(y),c(y))
 
         ! Initialize arrays
@@ -98,179 +94,72 @@ contains
         ! RHS
         w = 0 
         do m = 1, size(self%joint_comp)
-            if (self%joint_comp(m) == 'synch') then
-               if (.not. self%joint_pol) then
-                  do j=1, z
-                     do i=1, x
-                        if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
-                           c(i) = 0.d0
-                           cycle
-                        else
-                           c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n)
-                        end if
-                     end do
-                  end do
-                  w = w + x
-               else if (self%joint_pol) then
-                  do j=1, z
-                     do i=1, x
-                        if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
-                           c(i)   = 0.d0
-                           c(x+i) = 0.d0
-                           cycle
-                        else                           
-                           c(i)   = c(i)   + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n)
-                           c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n+1)
-                        end if
-                     end do
-                  end do
-                  w = w + 2*x
-               end if
-            else if (self%joint_comp(m) == 'dust') then
-               do j=1, z
-                  do i=1, x
-                     if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) c(i) = 0.d0
-                     c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*compute_spectrum(self,compo,2,self%dat_nu(j),i-1,map_n)
-                  end do
-               end do
-               w = w + x
-            end if
+           do n = 1, self%ncomp
+              if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
+                 if (.not. self%joint_pol) then
+                    do j = 1, z
+                       do i = 1, x
+                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
+                             c(i) = 0.d0
+                             cycle
+                          else
+                             c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
+                          end if
+                       end do
+                    end do
+                    w = w + x
+                 else if (self%joint_pol) then
+                    do j = 1, z
+                       do i = 1, x
+                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
+                             c(i)   = 0.d0
+                             c(x+i) = 0.d0
+                             cycle
+                          else                           
+                             c(i)   = c(i)   + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
+                             c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*map2fit(i-1,map_n+1,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1)
+                          end if
+                       end do
+                    end do
+                    w = w + 2*x
+                 end if
+              end if
+           end do
+           do n = 1, self%ntemp
+              if (trim(self%joint_comp(m)) == trim(self%temp_label(n))) then
+                 if (.not. self%joint_pol) then
+                    l = 1
+                    do j = 1, z
+                       if (self%temp_corr(n,j)) then
+                          do i = 1, x
+                             if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
+                             c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*&
+                                  dat%temps(i-1,map_n,n)
+                          end do
+                          l = l + 1
+                       end if
+                    end do
+                    w = w + self%temp_nfit(n)
+                 else if (self%joint_pol) then
+                    ! If sampling Q and U jointly
+                    l = 1
+                    do j = 1, z
+                       if (self%temp_corr(n,j)) then
+                          do i = 1, x
+                             if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
+                             c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*&
+                                  dat%temps(i-1,map_n,n)
+                             c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*map2fit(i-1,map_n+1,j)*&
+                                  dat%temps(i-1,map_n+1,n)
+                          end do
+                          l = l + 1
+                       end if
+                    end do
+                    w = w + self%temp_nfit(n)
+                 end if
+              end if
+           end do
         end do
-        do m = 1, size(self%joint_comp)
-           if (self%joint_comp(m) == 'template01') then
-           ! Template 1
-              if (.not. self%joint_pol) then
-                 l = 1
-                 do j = 1, z
-                    if (self%temp_corr(1,j)) then
-                       do i = 1, x
-                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
-                               dat%temps(i-1,map_n,1)
-                       end do
-                       l = l + 1
-                    end if
-                 end do
-                 w = w + self%temp_nfit(1)
-              else if (self%joint_pol) then
-              ! If sampling Q and U jointly
-                 l = 1
-                 do j = 1, z
-                    if (self%temp_corr(1,j)) then
-                       do i = 1, x
-                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
-                               dat%temps(i-1,map_n,1)
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
-                               dat%temps(i-1,map_n+1,1)
-                       end do
-                       l = l + 1
-                    end if
-                 end do
-                 w = w + self%temp_nfit(1)
-              end if
-
-           else if (self%joint_comp(m) == 'template02') then
-              ! Template 2
-              if (.not. self%joint_pol) then
-                 l = 1
-                 do j = 1, z
-                    if (self%temp_corr(2,j)) then
-                       do i = 1, x
-                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
-                               dat%temps(i-1,map_n,2)
-                       end do
-                       l = l + 1
-                    end if
-                 end do
-                 w = w + self%temp_nfit(2)
-              else if (self%joint_pol) then
-              ! If sampling Q and U jointly
-                 l = 1
-                 do j = 1, z
-                    if (self%temp_corr(2,j)) then
-                       do i = 1, x
-                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
-                               dat%temps(i-1,map_n,2)
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
-                               dat%temps(i-1,map_n+1,2)
-                       end do
-                       l = l + 1
-                    end if
-                 end do
-                 w = w + self%temp_nfit(2)
-              end if
-
-           else if (self%joint_comp(m) == 'template03') then
-              ! Template 3
-              if (.not. self%joint_pol) then
-                 l = 1
-                 do j = 1, z
-                    if (self%temp_corr(3,j)) then
-                       do i = 1, x
-                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
-                               dat%temps(i-1,map_n,3)
-                       end do
-                       l = l + 1
-                    end if
-                 end do
-                 w = w + self%temp_nfit(3)
-              else if (self%joint_pol) then
-              ! If sampling Q and U jointly
-                 l = 1
-                 do j = 1, z
-                    if (self%temp_corr(3,j)) then
-                       do i = 1, x
-                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
-                               dat%temps(i-1,map_n,3)
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
-                               dat%temps(i-1,map_n+1,3)
-                       end do
-                       l = l + 1
-                    end if
-                 end do
-                 w = w + self%temp_nfit(3)
-              end if
-
-           else if (self%joint_comp(m) == 'template04') then
-              ! Template 4
-              if (.not. self%joint_pol) then
-                 l = 1
-                 do j = 1, z
-                    if (self%temp_corr(4,j)) then
-                       do i = 1, x
-                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
-                               dat%temps(i-1,map_n,4)
-                       end do
-                       l = l + 1
-                    end if
-                 end do
-                 w = w + self%temp_nfit(4)
-              else if (self%joint_pol) then
-              ! If sampling Q and U jointly
-                 l = 1
-                 do j = 1, z
-                    if (self%temp_corr(4,j)) then
-                       do i = 1, x
-                          if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*dat%sig_map(i-1,map_n,j)*&
-                               dat%temps(i-1,map_n,4)
-                          c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*dat%sig_map(i-1,map_n+1,j)*&
-                               dat%temps(i-1,map_n+1,4)
-                       end do
-                       l = l + 1
-                    end if
-                 end do
-                 w = w + self%temp_nfit(4)
-              end if
-           end if
-        end do
-
         ! Computation
         if (trim(method) == 'cholesky') then
            write(*,*) 'Currently deprecated.'
@@ -304,149 +193,70 @@ contains
         if (.not. self%joint_pol) then
            w = 0
            do m = 1, size(self%joint_comp)
-              if (self%joint_comp(m) == 'synch') then
-                 do i = 1, x
-                    dat%fg_map(i-1,map_n,self%fg_ref_loc(1),1) = b(w+i)
-                 end do
-                 w = w + x
-              else if (self%joint_comp(m) == 'dust') then
-                 do i = 1, x
-                    dat%fg_map(i-1,map_n,self%fg_ref_loc(2),3) = b(w+i)
-                 end do
-                 w = w + x
-              end if
-           end do
-           do m = 1, size(self%joint_comp)
-              if (self%joint_comp(m) == 'template01') then
-                 l = 1
-                 do while (l .lt. self%temp_nfit(1))
-                    do j= 1, z
-                       if (self%temp_corr(1,j)) then
-                          dat%temp_amps(j,map_n,1) = b(w+l)
-                          l = l + 1
-                       else
-                          dat%temp_amps(j,map_n,1) = 0.d0
-                       end if
+              do n = 1, self%ncomp
+                 if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
+                    do i = 1, x
+                       dat%fg_map(i-1,map_n,self%fg_ref_loc(n),n) = b(w+i)
                     end do
-                 end do
-                 w = w + l -1
-              else if (self%joint_comp(m) == 'template02') then
-                 l = 1
-                 do while (l .lt. self%temp_nfit(2))
-                    do j= 1, z
-                       if (self%temp_corr(2,j)) then
-                          dat%temp_amps(j,map_n,2) = b(w+l)
-                          l = l + 1
-                       end if
+                    w = w + x
+                 end if
+              end do
+              do n = 1, self%ntemp
+                 if (trim(self%joint_comp(m)) == trim(self%temp_label(n))) then
+                    l = 1
+                    do while (l .lt. self%temp_nfit(n))
+                       do j= 1, z
+                          if (self%temp_corr(n,j)) then
+                             dat%temp_amps(j,map_n,n) = b(w+l)
+                             l = l + 1
+                          else
+                             dat%temp_amps(j,map_n,n) = 0.d0
+                          end if
+                       end do
                     end do
-                 end do
-              end if
+                    w = w + l -1
+                 end if
+              end do
            end do
         else if (self%joint_pol) then
            w = 0
            do m = 1, size(self%joint_comp)
-              if (self%joint_comp(m) == 'synch') then
-                 do i = 1, x
-                    dat%fg_map(i-1,map_n,self%fg_ref_loc(1),1) = b(w+i)
-                 end do
-                 w = w + x
-                 do i = 1, x
-                    dat%fg_map(i-1,map_n+1,self%fg_ref_loc(1),1) = b(w+i)
-                 end do
-                 w = w + x
-              else if (self%joint_comp(m) == 'dust') then
-                 do i = 1, x
-                    dat%fg_map(i-1,map_n,self%fg_ref_loc(2),3) = b(w+i)
-                 end do
-                 w = w + x
-              end if
-           end do
-           do m = 1, size(self%joint_comp)
-              if (self%joint_comp(m) == 'template01') then
-                 l = 1
-                 do while (l .lt. self%temp_nfit(1))
-                    do j= 1, z
-                       if (self%temp_corr(1,j)) then
-                          dat%temp_amps(j,map_n,1)   = b(w+l)
-                          dat%temp_amps(j,map_n+1,1) = b(w+l)
-                          l = l + 1
-                       end if
+              do n = 1, self%ncomp
+                 if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
+                    do i = 1, x
+                       dat%fg_map(i-1,map_n,self%fg_ref_loc(n),n) = b(w+i)
                     end do
-                 end do
-                 if (self%temp_nfit(1) == 1) then
-                    do j= 1, z
-                       if (self%temp_corr(1,j)) then
-                          dat%temp_amps(j,map_n,1)   = b(w+l)
-                          dat%temp_amps(j,map_n+1,1) = b(w+l)
-                          l = l + 1
-                       end if
+                    w = w + x
+                    do i = 1, x
+                       dat%fg_map(i-1,map_n+1,self%fg_ref_loc(n),n) = b(w+i)
                     end do
+                    w = w + x
                  end if
-                 w = w + l - 1
-              else if (self%joint_comp(m) == 'template02') then
-                 l = 1
-                 do while (l .lt. self%temp_nfit(2))
-                    do j= 1, z
-                       if (self%temp_corr(2,j)) then
-                          dat%temp_amps(j,map_n,2)   = b(w+l)
-                          dat%temp_amps(j,map_n+1,2) = b(w+l)
-                          l = l + 1
-                       end if
+              end do
+              do n = 1, self%ntemp
+                 if (trim(self%joint_comp(m)) == trim(self%temp_label(n))) then
+                    l = 1
+                    do while (l .lt. self%temp_nfit(n))
+                       do j = 1, z
+                          if (self%temp_corr(n,j)) then
+                             dat%temp_amps(j,map_n,n)   = b(w+l)
+                             dat%temp_amps(j,map_n+1,n) = b(w+l)
+                             l = l + 1
+                          end if
+                       end do
                     end do
-                 end do
-                 if (self%temp_nfit(2) == 1) then
-                    do j= 1, z
-                       if (self%temp_corr(2,j)) then
-                          dat%temp_amps(j,map_n,2)   = b(w+l)
-                          dat%temp_amps(j,map_n+1,2) = b(w+l)
-                          l = l + 1
-                       end if
-                    end do
+                    if (self%temp_nfit(n) == 1) then
+                       do j = 1, z
+                          if (self%temp_corr(n,j)) then
+                             dat%temp_amps(j,map_n,n)   = b(w+l)
+                             dat%temp_amps(j,map_n+1,n) = b(w+l)
+                             l = l + 1
+                          end if
+                       end do
+                    end if
+                    w = w + l - 1
                  end if
-                 w = w + l - 1
-              else if (self%joint_comp(m) == 'template03') then
-                 l = 1
-                 do while (l .lt. self%temp_nfit(3))
-                    do j= 1, z
-                       if (self%temp_corr(3,j)) then
-                          dat%temp_amps(j,map_n,3)   = b(w+l)
-                          dat%temp_amps(j,map_n+1,3) = b(w+l)
-                          l = l + 1
-                       end if
-                    end do
-                 end do
-                 if (self%temp_nfit(3) == 1) then
-                    do j= 1, z
-                       if (self%temp_corr(3,j)) then
-                          dat%temp_amps(j,map_n,3)   = b(w+l)
-                          dat%temp_amps(j,map_n+1,3) = b(w+l)
-                          l = l + 1
-                       end if
-                    end do
-                 end if
-                 w = w + l - 1
-              else if (self%joint_comp(m) == 'template04') then
-                 l = 1
-                 do while (l .lt. self%temp_nfit(4))
-                    do j= 1, z
-                       if (self%temp_corr(4,j)) then
-                          dat%temp_amps(j,map_n,4)   = b(w+l)
-                          dat%temp_amps(j,map_n+1,4) = b(w+l)
-                          l = l + 1
-                       end if
-                    end do
-                 end do
-                 if (self%temp_nfit(4) == 1) then
-                    do j= 1, z
-                       if (self%temp_corr(4,j)) then
-                          dat%temp_amps(j,map_n,4)   = b(w+l)
-                          dat%temp_amps(j,map_n+1,4) = b(w+l)
-                          l = l + 1
-                       end if
-                    end do
-                 end if
-                 w = w + l - 1
-              end if
+              end do
            end do
         end if
 
@@ -699,6 +509,8 @@ contains
            if (map_n == -1) then
               indx_sample_low = indx_low(:,self%pol_type(1))
               do i = 0, npix2-1
+                 naccept   = 0.d0
+                 paccept   = 0.d0
                  a         = 0.d0
                  sol       = indx_low(i,self%pol_type(1))
                  sam       = sol
@@ -707,34 +519,35 @@ contains
                  end if
                  
                  ! Chi-square from the most recent Gibbs chain update
+                 !$OMP PARALLEL PRIVATE(j,k,local_a)
+                 local_a = 0.d0
+                 !$OMP DO SCHEDULE(static)
                  do j = 1, nbands
                     do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                       a = a + (((fg_map_low(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                       local_a = local_a + (((fg_map_low(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
                             - data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                     end do
                  end do
-                 c = a/(nbands-npar)
+                 !$OMP END DO
+                 !$OMP CRITICAL
+                 a = a + local_a
+                 !$OMP END CRITICAL
+                 !$OMP END PARALLEL
+                 c = a
  
-                 if (self%fg_spec_like(ind,1)) then
-                    like_old = exp(-0.5d0*c)
-                 else if (.not. self%fg_spec_like(ind,1)) then
-                    like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-                 end if
+                 like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
 
                  s = 1.d0
                  do l = 1, self%nsample
                     ! Every 100 samples check acceptance rate, and adjust scaling factor
                     if (mod(l,50) == 0) then
                        if (paccept > 0.6d0) then
-                          ! write(*,*) paccept,l,'s = s*2.0'
                           s = s*2.0
                        else if (paccept < 0.4d0) then
-                          ! write(*,*) paccept,l,'s = s/2.0'
                           s = s/2.0
                        end if
                     end if
-                    t      = sol + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
-                    b      = 0.d0
+                    t      = sam + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
                     
                     ! If sampled value is outside of uniform bounds, cycle
                     if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
@@ -742,29 +555,48 @@ contains
                        cycle
                     end if
 
+                    b         = 0.d0
+                    !$OMP PARALLEL PRIVATE(j,k,local_b)
+                    local_b   = 0.d0
+
                     ! Calculate new chi-square
+                    !$OMP DO SCHEDULE(static)
                     do j = 1, nbands
                        do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                          tmp(j) = fg_map_low(i,k,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)
-                          b      = b + ((tmp(j)-data_low(i,k,j))**2.d0)/cov_low(i,k,j)
+                          local_b = local_b + ((fg_map_low(i,k,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t) &
+                               -data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                        end do
                     end do
-
-                    b = b/(nbands-npar)
-
-                    if (self%fg_spec_like(ind,1)) then
-                       like_new = exp(-0.5d0*b)
-                    else if (.not. self%fg_spec_like(ind,1)) then
-                       like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-                    end if
+                    !$OMP END DO
+                    !$OMP CRITICAL
+                    b = b + local_b
+                    !$OMP END CRITICAL
+                    !$OMP END PARALLEL
                     
-                    ratio = like_new/like_old
-                    call RANDOM_NUMBER(num)
-                    if (ratio > num) then
-                       sam      = t
-                       like_old = like_new
-                       naccept  = naccept + 1.0
+                    like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                    diff = like_new - like_old
+                    ratio = exp(diff)
+                    ! write(*,*) sam, t, ratio
+                    ! write(*,*) like_old, like_new
+                    ! stop
+                    if (trim(self%ml_mode) == 'optimize') then
+                       if (ratio > 1.d0) then
+                          sam      = t
+                          c        = b
+                          like_old = like_new
+                          naccept  = naccept + 1.0
+                       end if
+                    else if (trim(self%ml_mode) == 'sample') then
+                       call RANDOM_NUMBER(num)
+                       if (ratio > num) then
+                          sam      = t
+                          c        = b
+                          like_old = like_new
+                          naccept  = naccept + 1.0
+                       end if
                     end if
+
+                    paccept = naccept/l
                     sol = sam
                     indx_sample_low(i) = sol
                  end do
@@ -855,7 +687,7 @@ contains
 
            time1 = mpi_wtime()
 
-           if (.true.) then
+           if (.false.) then
 
               allocate(beta_grid(1000))
               allocate(like_grid(1000))

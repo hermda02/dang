@@ -66,23 +66,4 @@ contains
 
   end subroutine init_data_maps
 
-  subroutine init_template(self,npix,nmaps,ntemp)
-    implicit none
-    type(data)               :: self
-    integer(i4b), intent(in) :: npix, nmaps, ntemp
-
-    allocate(self%temps(0:npix-1,nmaps,ntemp))
-
-  end subroutine init_template
-
-  subroutine init_temp_amps(self,nbands,nmaps,ntemp)
-    implicit none
-    type(data)               :: self
-    integer(i4b), intent(in) :: nbands, nmaps, ntemp
-
-    allocate(self%temp_amps(nbands,nmaps,ntemp))
-
-  end subroutine init_temp_amps
-
-
 end module dang_data_mod

@@ -64,7 +64,7 @@ module dang_param_mod
         character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
         character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral index sampler (pixel/fullsky)
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
-        character(len=512), allocatable, dimension(:,:)   :: fg_spec_map    ! Fg spectral parameter input map
+        character(len=512), allocatable, dimension(:,:)   :: fg_spec_file    ! Fg spectral parameter input map
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
         real(dp),           allocatable, dimension(:,:)   :: fg_init        ! Initialized parameter value (fullsky)
         integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
@@ -485,7 +485,6 @@ contains
            call get_parameter_hashtable(htbl, 'MBB_TD_STD',par_dp=par%mbb_gauss(1,2))
            call get_parameter_hashtable(htbl, 'MBB_BETA_MEAN',par_dp=par%mbb_gauss(2,1))
            call get_parameter_hashtable(htbl, 'MBB_BETA_STD',par_dp=par%mbb_gauss(2,2))
-
            
            n  = par%ncomp
            n2 = par%ntemp
@@ -496,17 +495,16 @@ contains
            allocate(par%fg_spec_like(n,2))
            allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
            allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
-           allocate(par%fg_spec_map(n,2))
+           allocate(par%fg_spec_file(n,2))
            allocate(par%fg_ind_region(n,2))
            allocate(par%fg_init(n,2))
-           
-           allocate(par%temp_file(n2))
-           allocate(par%temp_label(n2))
-           allocate(par%temp_nfit(n2))
-           allocate(par%temp_corr(n2,par%numband))
-           
            par%temp_nfit = 0
-           
+
+           allocate(par%temp_file(n2))
+           allocate(par%temp_nfit(n2))
+           allocate(par%temp_label(n2))
+           allocate(par%temp_corr(n2,par%numband))
+                      
            allocate(par%joint_comp(n3))
 
            do i = 1, n2
@@ -532,7 +530,9 @@ contains
               call int2string(i, itext)
               call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
               call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i))
-              call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
+              if (trim(par%fg_type(i)) /= 'template') then
+                 call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
+              end if
               call get_parameter_hashtable(htbl, 'COMP_INCLUDE'//itext, len_itext=len_itext, par_lgt=par%fg_inc(i))
               call get_parameter_hashtable(htbl, 'COMP_SAMPLE_AMP'//itext, len_itext=len_itext, par_lgt=par%fg_samp_amp(i))
 
@@ -553,7 +553,7 @@ contains
                  call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
                       par_lgt=par%fg_spec_like(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
-                      par_string=par%fg_spec_map(i,1))
+                      par_string=par%fg_spec_file(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_REGION'//itext, len_itext=len_itext,&
                       par_string=par%fg_ind_region(i,1))
               else if (trim(par%fg_type(i)) == 'mbb') then
@@ -574,7 +574,7 @@ contains
                  call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_HIGH'//itext, len_itext=len_itext,&
                       par_dp=par%fg_uni(i,2,2))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
-                      par_string=par%fg_spec_map(i,1))
+                      par_string=par%fg_spec_file(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
                       par_int=par%fg_samp_nside(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
@@ -588,10 +588,14 @@ contains
                  call get_parameter_hashtable(htbl, 'COMP_T_LIKELIHOOD'//itext, len_itext=len_itext,&
                       par_lgt=par%fg_spec_like(i,2))
                  call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
-                      par_string=par%fg_spec_map(i,2))
+                      par_string=par%fg_spec_file(i,2))
               end if
-              par%fg_ref_loc(i) = minloc(abs(par%dat_nu-par%fg_nu_ref(i)),1)
+              if (trim(par%fg_type(i)) /= 'template') then
+                 par%fg_ref_loc(i) = minloc(abs(par%dat_nu-par%fg_nu_ref(i)),1)
+              end if
            end do
+
+
 
         else if (trim(par%mode) == 'hi_fit') then
            call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)

@@ -25,10 +25,10 @@ contains
     
     allocate(self%beta_s(0:npix-1,nmaps))
     write(*,*) 'Allocated synch maps'
-    if (trim(param%fg_spec_map(1,1)) == 'none') then 
+    if (trim(param%fg_spec_file(1,1)) == 'none') then 
        self%beta_s     = param%fg_init(1,1) ! Synchrotron beta initial guess
     else
-       !call read_bintab(trim(param%fg_spec_map(1,1)),self%beta_s,npix,3,nullval,anynull,header=header)
+       !call read_bintab(trim(param%fg_spec_file(1,1)),self%beta_s,npix,3,nullval,anynull,header=header)
     end if
     
   end subroutine init_synch
@@ -47,6 +47,24 @@ contains
     self%T_d        = 19.6d0
     
   end subroutine init_dust
+
+  subroutine init_template(self,npix,nmaps,ntemp)
+    implicit none
+    type(data)               :: self
+    integer(i4b), intent(in) :: npix, nmaps, ntemp
+
+    allocate(self%temps(0:npix-1,nmaps,ntemp))
+
+  end subroutine init_template
+
+  subroutine init_temp_amps(self,nbands,nmaps,ntemp)
+    implicit none
+    type(data)               :: self
+    integer(i4b), intent(in) :: nbands, nmaps, ntemp
+
+    allocate(self%temp_amps(nbands,nmaps,ntemp))
+
+  end subroutine init_temp_amps
 
   subroutine init_hi_fit(self, param, npix)
     implicit none
@@ -79,33 +97,33 @@ contains
     planck  = ((2.d0*h*fre**3.d0)/(c**2.d0))*(1.d0/(exp((h*fre)/(k_B*T))-1))
   end function planck
   
-  function compute_spectrum(self, comp, ind, freq, pix, mapn, param)
+  function compute_spectrum(param, self, ind, freq, pix, mapn, spec)
     ! always computed in RJ units
     
     implicit none
-    class(params)                  :: self
-    type(component)                :: comp
+    class(params)                  :: param
+    type(component)                :: self
     real(dp),           intent(in) :: freq
     integer(i4b),       intent(in) :: ind
     integer(i4b),       intent(in) :: pix
     integer(i4b),       intent(in) :: mapn
-    real(dp), optional             :: param
+    real(dp), optional             :: spec
     real(dp)                       :: z, compute_spectrum
     
-    !if (trim(self%fg_label(ind)) == 'power-law') then
+    !if (trim(param%fg_label(ind)) == 'power-law') then
     if (ind == 1) then
-      if (present(param)) then
-          compute_spectrum = (freq/self%fg_nu_ref(ind))**param
+      if (present(spec)) then
+          compute_spectrum = (freq/param%fg_nu_ref(ind))**spec
        else 
-          compute_spectrum = (freq/self%fg_nu_ref(ind))**comp%beta_s(pix,mapn)
+          compute_spectrum = (freq/param%fg_nu_ref(ind))**self%beta_s(pix,mapn)
        end if
-    !else if (trim(self%fg_label(ind)) == 'mbb') then
+    !else if (trim(param%fg_label(ind)) == 'mbb') then
     else if (ind == 2) then
-       z = h / (k_B*comp%T_d(pix,mapn))
-!       compute_spectrum = (exp(z*self%fg_nu_ref(ind)*1d9)-1.d0) / &
-!            (exp(z*freq*1d9)-1.d0) * (freq/self%fg_nu_ref(ind))**(comp%beta_d(pix,mapn)+1.d0)!*rj_cmb
+       z = h / (k_B*self%T_d(pix,mapn))
+!       compute_spectrum = (exp(z*param%fg_nu_ref(ind)*1d9)-1.d0) / &
+!            (exp(z*freq*1d9)-1.d0) * (freq/param%fg_nu_ref(ind))**(self%beta_d(pix,mapn)+1.d0)!*rj_cmb
        compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
-            (exp(z*freq*1d9)-1.d0) * (freq/353.d0)**(comp%beta_d(pix,mapn)+1.d0)
+            (exp(z*freq*1d9)-1.d0) * (freq/353.d0)**(self%beta_d(pix,mapn)+1.d0)
     end if
   end function compute_spectrum
 

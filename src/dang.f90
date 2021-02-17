@@ -85,13 +85,7 @@ program dang
   nlheader          = size(header)
   nmaps             = nmaps
   iterations        = par%nsample              ! # of iterations in the samplers
-  ! if (par%bp_swap) then
-  !    niter          = (par%bp_max - par%bp_burnin)*par%num_chains
-  !    bp_iter        = par%bp_burnin
-  !    chain_num      = 1
-  ! else
   niter             = par%ngibbs               ! # of MC-MC iterations
-  ! end if
   output_iter       = par%iter_out             ! Output maps every <- # of iterations
   output_fg         = par%output_fg            ! Option for outputting foregrounds for all bands
   direct            = par%outdir               ! Output directory name
@@ -170,8 +164,8 @@ program dang
      ! dang_data%temp_amps(1,:,1) = 0.41957897
      ! dang_data%temp_amps(2,:,1) = 0.17704154
      ! dang_data%temp_amps(3,:,1) = 0.09161571
-     ! dang_data%temp_amps(4,:,1) = 0.12402716
-     ! dang_data%temp_amps(5,:,1) = 0.20367266
+     dang_data%temp_amps(4,:,1) = 0.12402716
+     dang_data%temp_amps(5,:,1) = 0.20367266
 
      ! dang_data%temp_amps(1,:,1) = 0.196d-2
      ! dang_data%temp_amps(2,:,1) = 0.475d-2 
@@ -183,7 +177,7 @@ program dang
      do k = par%pol_type(1), par%pol_type(size(par%pol_type))
         do i = 0, npix-1
            do j = 1, nbands
-              dang_data%fg_map(i,k,j,2) = dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
+              dang_data%fg_map(i,k,j,par%ncomp+1) = dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
            end do
         end do
      end do
@@ -288,7 +282,7 @@ contains
              end if
              
              ! Applying dust templates to make dust maps
-             if (ANY(par%joint_comp=='template01')) then
+             if (ANY(par%joint_comp=='dust_353')) then
                 !write(*,*) 'Extrapolating temps to bands'
                 do i = 0, npix-1
                    do j = 1, nbands
@@ -792,11 +786,13 @@ contains
              y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
              cmb_to_rj   = (y**2.d0*exp(y))/(exp(y)-1)**2.d0
              dang_data%sig_map(:,:,j) = cmb_to_rj*dang_data%sig_map(:,:,j)
+             dang_data%rms_map(:,:,j) = cmb_to_rj*dang_data%rms_map(:,:,j)
           else if (trim(self%dat_unit(j)) == 'MJy/sr') then
              y           = h*(self%dat_nu(j)*1.0d9) / (k_B*T_CMB)
              mjy_to_rj   = 1.0/(1e14*(2.0*h*(self%dat_nu(j)*1.0d9)**3.d0/&
                   &(c**2.d0*(exp(y)-1)))*(exp(y)/(exp(y)-1.d0))*(h*(self%dat_nu(j)*1.0d9))/(k_B*T_CMB**2.d0))
              dang_data%sig_map(:,:,j) = mjy_to_rj*dang_data%sig_map(:,:,j)
+             dang_data%rms_map(:,:,j) = mjy_to_rj*dang_data%rms_map(:,:,j)
           else
              write(*,*) 'Not a unit, dumbass!'
              stop
