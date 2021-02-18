@@ -968,6 +968,7 @@ contains
                do n = 1, self%ncomp
                   if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
                      v_temp2(i)   = vech(i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n)
+                     ! If sampling Q and U jointly
                      if (self%joint_pol) v_temp2(x+i) = vech(x+i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n+1)
                   end if
                end do
@@ -975,11 +976,13 @@ contains
                   if (trim(self%joint_comp(m)) == trim(self%temp_label(n))) then
                      if (self%temp_corr(1,j)) then
                         v_temp2(i)   = v_temp2(i)   + vech(len+l)*dat%temps(i-1,map_n,n)
+                        ! If sampling Q and U jointly
                         if (self%joint_pol) v_temp2(x+i) = v_temp2(x+i) + vech(len+l)*dat%temps(i-1,map_n+1,n)
                      end if
                   end if
                end do
             end do
+            ! Then multiply by N_nu^-1
             v_temp2(i)   = v_temp2(i)/(dat%rms_map(i-1,map_n,j))**2.d0
             if (self%joint_pol) v_temp2(x+i) = v_temp2(x+i)/(dat%rms_map(i-1,map_n+1,j))**2.d0
             v_temp(i)    = v_temp(i)   + v_temp2(i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n)
@@ -994,6 +997,7 @@ contains
                      do k = 1, x
                         if (dat%masks(k-1,1) == 0.d0 .or. dat%masks(k-1,1) == missval) cycle
                         v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n,n)*v_temp2(k)
+                        ! If sampling Q and U jointly
                         if (self%joint_pol) v_temp(len+l) = v_temp(len+l) + dat%temps(k-1,map_n+1,n)*v_temp2(k+x)
                      end do
                      l = l+1
