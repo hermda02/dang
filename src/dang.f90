@@ -160,13 +160,21 @@ program dang
      
      dang_data%fg_map    = 0.0
      dang_data%temp_amps = 0.0
-
+     
+     ! ! 1.00 sim
      ! dang_data%temp_amps(1,:,1) = 0.41957897
      ! dang_data%temp_amps(2,:,1) = 0.17704154
      ! dang_data%temp_amps(3,:,1) = 0.09161571
-     dang_data%temp_amps(4,:,1) = 0.12402716
-     dang_data%temp_amps(5,:,1) = 0.20367266
+     ! dang_data%temp_amps(4,:,1) = 0.12402716
+     ! dang_data%temp_amps(5,:,1) = 0.20367266
 
+     ! ! 0.50 sim
+     ! dang_data%temp_amps(1,:,1) = 0.21938180
+     ! dang_data%temp_amps(2,:,1) = 0.10613910
+     ! dang_data%temp_amps(3,:,1) = 0.07796524
+     dang_data%temp_amps(4,:,1) = 0.12328481
+     dang_data%temp_amps(5,:,1) = 0.20363687
+ 
      ! dang_data%temp_amps(1,:,1) = 0.196d-2
      ! dang_data%temp_amps(2,:,1) = 0.475d-2 
      ! dang_data%temp_amps(3,:,1) = 0.000d0 

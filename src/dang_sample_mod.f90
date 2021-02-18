@@ -219,11 +219,12 @@ contains
               end do
            end do
         else if (self%joint_pol) then
+           write(*,*) 'output amplitudes'
            w = 0
            do m = 1, size(self%joint_comp)
               do n = 1, self%ncomp
                  if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
-                    do i = 1, x
+                     do i = 1, x
                        dat%fg_map(i-1,map_n,self%fg_ref_loc(n),n) = b(w+i)
                     end do
                     w = w + x
@@ -242,6 +243,9 @@ contains
                              dat%temp_amps(j,map_n,n)   = b(w+l)
                              dat%temp_amps(j,map_n+1,n) = b(w+l)
                              l = l + 1
+                          ! else
+                          !    dat%temp_amps(j,map_n,n)   = 0.d0
+                          !    dat%temp_amps(j,map_n+1,n)   = 0.d0
                           end if
                        end do
                     end do
@@ -817,6 +821,7 @@ contains
                  else if (trim(self%ml_mode) == 'sample') then
                     call RANDOM_NUMBER(num)
                     if (ratio > num) then
+                       ! write(*,fmt='(a,f8.4,E12.4,E12.4,E12.4,f8.4)') 'Accepted ', t, like_old, like_new, diff, ratio 
                        sam      = t
                        c        = b
                        like_old = like_new
