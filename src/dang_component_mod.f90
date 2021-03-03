@@ -133,8 +133,11 @@ contains
     type(params)                :: param
     type(component)             :: comp
     integer(i4b), intent(in)    :: band
-
+    real(dp), allocatable, dimension(:,:,:) :: thermal_map
     integer(i4b)                :: i, j, k
+    character(len=256)          :: title
+
+    allocate(thermal_map(0:npix-1,nmaps,nbands))
 
     if (trim(param%dust_corr_type) == 'uniform') then
        comp%T_d    = param%mbb_gauss(1,1)
@@ -156,9 +159,12 @@ contains
     write(*,'(a,a)') 'Dust correcting band ', trim(param%dat_label(band))
     do k = param%pol_type(1), param%pol_type(size(param%pol_type))
        do i = 0, npix-1
-          dat%sig_map(i,k,band) = dat%sig_map(i,k,band) - dat%temps(i,k,1)*compute_spectrum(param,comp,2,param%dat_nu(band),i,k)
+          thermal_map(i,k,band) = dat%temps(i,k,1)*compute_spectrum(param,comp,2,param%dat_nu(band),i,k)
+          dat%sig_map(i,k,band) = dat%sig_map(i,k,band) - thermal_map(i,k,band)
        end do
     end do
+    title = trim(param%outdir)//trim(param%dat_label(band))//'_thermal_map.fits'
+    call write_result_map(trim(title), nside, ordering, header, thermal_map(:,:,band))
   end subroutine dust_correct_band
   
 end module dang_component_mod

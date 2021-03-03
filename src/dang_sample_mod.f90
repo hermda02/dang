@@ -160,6 +160,9 @@ contains
               end if
            end do
         end do
+
+        ! ^^ Above has been double-checked. RHS is correctly calculated.
+
         ! Computation
         if (trim(method) == 'cholesky') then
            write(*,*) 'Currently deprecated.'
@@ -188,6 +191,9 @@ contains
            !call forward_sub(mat_l,d,c)
            !call backward_sub(mat_u,b,d)
         end if
+
+        ! Solver returns a vector - first filled with component amplitudes, then template amplitudes
+        ! So unpack in order
 
         ! Output amplitudes to the appropriate variables
         if (.not. self%joint_pol) then
@@ -224,7 +230,7 @@ contains
            do m = 1, size(self%joint_comp)
               do n = 1, self%ncomp
                  if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
-                     do i = 1, x
+                    do i = 1, x
                        dat%fg_map(i-1,map_n,self%fg_ref_loc(n),n) = b(w+i)
                     end do
                     w = w + x
@@ -263,6 +269,8 @@ contains
               end do
            end do
         end if
+
+        ! Also checked and looks good ^^
 
         if (rank == master) then
            t3 = mpi_wtime()
@@ -398,6 +406,9 @@ contains
 
         character(len=128) ::title
 
+        real(dp), allocatable, dimension(:,:)                  :: chisq_map
+        character(len=3)  :: l_str
+
         naccept = 0.0
 
         !------------------------------------------------------------------------
@@ -430,7 +441,8 @@ contains
         end if
 
         allocate(fg_map_high(0:npix-1,nmaps,nbands))
-        fg_map_high(:,:,:) = dat%fg_map(:,:,:,1)
+        allocate(chisq_map(0:npix-1,nmaps))
+        fg_map_high(:,:,:) = dat%fg_map(:,:,:,ind)
 
         ! Per pixel sampler
         if (pix_samp) then
@@ -580,9 +592,6 @@ contains
                     like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
                     diff = like_new - like_old
                     ratio = exp(diff)
-                    ! write(*,*) sam, t, ratio
-                    ! write(*,*) like_old, like_new
-                    ! stop
                     if (trim(self%ml_mode) == 'optimize') then
                        if (ratio > 1.d0) then
                           sam      = t
@@ -693,26 +702,29 @@ contains
 
            if (.false.) then
 
-              allocate(beta_grid(1000))
-              allocate(like_grid(1000))
+              allocate(beta_grid(100))
+              allocate(like_grid(100))
               
-              do l = 1, 1000
-                 beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/1000
-                 
+              do l = 1, 100
+                 beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/100
+                 write(*,*) l, beta_grid(l)
+                 sol       = beta_grid(l)
+                 chisq_map   = 0.d0
+                 !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
                  a         = 0.d0
-                 !$OMP PARALLEL PRIVATE(i,j,k,local_a)
                  local_a   = 0.d0
                  !$OMP DO SCHEDULE(static)
                  do i = 0, npix-1
-                    sol       = beta_grid(l)
                     if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
                        cycle
                     end if
                     
                     ! Chi-square from the most recent Gibbs chain update
-                    do j = 1, nbands
-                       do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                          local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                       do j = 1, nbands
+                          local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                               - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                          chisq_map(i,k) = chisq_map(i,k) + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
                                - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                        end do
                     end do
@@ -733,30 +745,33 @@ contains
                  endif
                  write(12,*) beta_grid(l), -0.5d0*a
                  close(12)
-
+                 write(l_str, '(i0.3)') l
+                 call write_result_map(trim(self%outdir)//'chisq_sampler_'//trim(l_str)//'.fits', nside, ordering, header, chisq_map)
               end do
               stop
            end if
 
-
            ! Sample for Q and U jointly
            if (map_n == -1) then
+              chisq_map   = 0.d0
               indx_sample = indx(:,self%pol_type(1))
+              sol       = indx(0,self%pol_type(1))
+              sam       = sol
+              !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
               a         = 0.d0
-              !$OMP PARALLEL PRIVATE(i,j,k,local_a)
               local_a   = 0.d0
               !$OMP DO SCHEDULE(static)
               do i = 0, npix-1
-                 sol       = indx(i,self%pol_type(1))
-                 sam       = sol
                  if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
                     cycle
                  end if
                  
                  ! Chi-square from the most recent Gibbs chain update
-                 do j = 1, nbands
-                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                    do j = 1, nbands
                        local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                       chisq_map(i,k) = chisq_map(i,k) + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
                             - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                     end do
                  end do
@@ -768,6 +783,10 @@ contains
               !$OMP END PARALLEL
               c = a
 
+              ! write(*,*) c, sum(chisq_map)
+
+              ! call write_result_map(trim(self%outdir)//'chisq_sampler.fits', nside, ordering, header, chisq_map)
+              ! stop
               like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
 
               s = 0.5d0

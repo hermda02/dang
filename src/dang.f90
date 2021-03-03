@@ -31,7 +31,7 @@ program dang
   ! frequency bands used here.                                                                          |
   !-----------------------------------------------------------------------------------------------------|  
   
-  integer(i4b)       :: i, j, k, l, m
+  integer(i4b)       :: i, j, k, l, m, n
   integer(i4b)       :: iterations, n2fit, chain_num
   integer(i4b)       :: output_iter, bp_iter
   logical(lgt)       :: test, output_fg
@@ -172,8 +172,8 @@ program dang
      ! dang_data%temp_amps(1,:,1) = 0.21938180
      ! dang_data%temp_amps(2,:,1) = 0.10613910
      ! dang_data%temp_amps(3,:,1) = 0.07796524
-     dang_data%temp_amps(4,:,1) = 0.12328481
-     dang_data%temp_amps(5,:,1) = 0.20363687
+     dang_data%temp_amps(4,:,1) = 7.42349435d-4
+     dang_data%temp_amps(5,:,1) = 3.57833056d-4
  
      ! dang_data%temp_amps(1,:,1) = 0.196d-2
      ! dang_data%temp_amps(2,:,1) = 0.475d-2 
@@ -185,7 +185,10 @@ program dang
      do k = par%pol_type(1), par%pol_type(size(par%pol_type))
         do i = 0, npix-1
            do j = 1, nbands
-              dang_data%fg_map(i,k,j,par%ncomp+1) = dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
+              if (.not. par%temp_corr(1,j)) then
+                 dang_data%fg_map(i,k,j,par%ncomp+1) = dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
+                 dang_data%sig_map(i,k,j) = dang_data%sig_map(i,k,j) - dang_data%fg_map(i,k,j,par%ncomp+1)
+              end if
            end do
         end do
      end do
@@ -243,13 +246,6 @@ contains
 
        ! ------------ BP SWAP CHUNK ----------------------------------------------------------------$
        if (par%bp_swap) then
-          ! if (bp_iter > par%bp_max) then
-          !    write(*,*) ''
-          !    write(*,fmt='(a)') 'Switching to chain '// trim(par%bp_chain_list(chain_num+1))
-          !    write(*,*) ''
-          !    chain_num = chain_num + 1
-          !    bp_iter   = par%bp_burnin
-          ! end if
           call swap_bp_maps(dang_data,par)!,bp_iter),par%bp_chain_list(chain_num))
           write(*,*) ''
           bp_iter = bp_iter + 1
@@ -270,58 +266,30 @@ contains
           call sample_joint_amp(par,dang_data,comp,2,trim(solver))
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
              
-             ! Extrapolating A_synch to bands
-             if (ANY(par%joint_comp=='synch')) then
-                do i = 0, npix-1
-                   do j = 1, nbands
-                      dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
-                   end do
+             do m = 1, size(par%joint_comp)
+                do n = 1, par%ncomp
+                   if (trim(par%joint_comp(m)) == trim(par%fg_label(n))) then
+                      write(*,*) 'Extrapolating '//trim(par%fg_label(n)) // ' to all bands in '// trim(tqu(k)) //'.'
+                      do i = 0, npix-1
+                         do j = 1, nbands
+                            dang_data%fg_map(i,k,j,n) = dang_data%fg_map(i,k,par%fg_ref_loc(n),n)*compute_spectrum(par,comp,n,par%dat_nu(j),i,k)
+                         end do
+                      end do
+                   end if
                 end do
-             end if
-             
-             ! Extrapolating A_dust to bands
-             if (ANY(par%joint_comp=='dust')) then
-               write(*,*) 'Extrapolating A_dust to bands'
-               do i = 0, npix-1
-                  do j = 1, nbands
-                     dang_data%fg_map(i,k,j,3) = dang_data%fg_map(i,k,par%fg_ref_loc(2),3)*compute_spectrum(par,comp,2,par%dat_nu(j),i,k)
-                  end do
-               end do
-             end if
-             
-             ! Applying dust templates to make dust maps
-             if (ANY(par%joint_comp=='dust_353')) then
-                !write(*,*) 'Extrapolating temps to bands'
-                do i = 0, npix-1
-                   do j = 1, nbands
-                      dang_data%fg_map(i,k,j,2) = dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
-                   end do
+                do n = 1, par%ntemp
+                   if (trim(par%joint_comp(m)) == trim(par%temp_label(n))) then
+                      write(*,*) 'Extrapolating '//trim(par%temp_label(n)) // ' to all bands '// trim(tqu(k)) //'.'
+                      do i = 0, npix-1
+                         do j = 1, nbands
+                            if (par%temp_corr(n,j)) then
+                               dang_data%fg_map(i,k,j,par%ncomp+n) = dang_data%temp_amps(j,k,n)*dang_data%temps(i,k,n)
+                            end if
+                         end do
+                      end do
+                   end if
                 end do
-             end if
-             if (ANY(par%joint_comp=='template02')) then
-                !write(*,*) 'Extrapolating temps to bands'
-                do i = 0, npix-1
-                   do j = 1, nbands
-                      dang_data%fg_map(i,k,j,3) = dang_data%temp_amps(j,k,2)*dang_data%temps(i,k,2)
-                   end do
-                end do
-             end if
-             if (ANY(par%joint_comp=='template03')) then
-                !write(*,*) 'Extrapolating temps to bands'
-                do i = 0, npix-1
-                   do j = 1, nbands
-                      dang_data%fg_map(i,k,j,4) = dang_data%temp_amps(j,k,3)*dang_data%temps(i,k,3)
-                   end do
-                end do
-             end if
-             if (ANY(par%joint_comp=='template04')) then
-                !write(*,*) 'Extrapolating temps to bands'
-                do i = 0, npix-1
-                   do j = 1, nbands
-                      dang_data%fg_map(i,k,j,5) = dang_data%temp_amps(j,k,4)*dang_data%temps(i,k,4)
-                   end do
-                end do
-             end if
+             end do
           end do
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
              call compute_chisq(k,chisq,par%mode)
@@ -413,12 +381,12 @@ contains
                      mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
-             if (mod(iter,output_iter) .EQ. 0) then
-                call write_maps(k,par%mode)
-             end if
              call write_data(par%mode)
           end if
        end do
+       if (mod(iter,output_iter) .EQ. 0) then
+          call write_maps(par%mode)
+       end if
        write(*,*) ''
     end do
     call mpi_finalize(ierr)
@@ -477,7 +445,7 @@ contains
              end if
           end if
           if (mod(iter,output_iter) .EQ. 0) then
-             call write_maps(1,par%mode)
+             call write_maps(par%mode)
           end if
           call write_data(par%mode)
        end if
@@ -485,14 +453,13 @@ contains
     end do
   end subroutine hi_fit
   
-  subroutine write_maps(nm,mode)
+  subroutine write_maps(mode)
     implicit none
     
-    integer(i4b), intent(in)          :: nm
-    character(len=16), intent(in)     :: mode
-    real(dp), dimension(0:npix-1,1)   :: map
-    real(dp)                          :: s, signal
-    integer(i4b)                      :: n
+    character(len=16), intent(in)       :: mode
+    real(dp), dimension(0:npix-1,nmaps) :: map
+    real(dp)                            :: s, signal
+    integer(i4b)                        :: n, mn
     
     write(*,*) 'Output data maps'
     
@@ -501,74 +468,79 @@ contains
        write(iter_str, '(i0.5)') iter
        if (output_fg .eqv. .true.) then
           do j = 1, nbands
-             do i = 1, par%ntemp
-                title = trim(direct) // trim(par%dat_label(j)) //'_'// trim(par%temp_label(i)) //&
-                     '_'// trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
-                map(:,1)   = dang_data%fg_map(:,nm,j,i+1)
-                do n = 0, npix-1
-                   if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-                      map(n,1) = missval
+             do n = 1, par%ntemp
+                title = trim(direct) // trim(par%dat_label(j)) //'_'// trim(par%temp_label(n)) //&
+                     '_' // trim(iter_str) // '.fits'
+                map(:,:)   = dang_data%fg_map(:,:,j,n+par%ncomp)
+                do i = 0, npix-1
+                   if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
+                      map(i,:) = missval
                    end if
                 end do
                 call write_result_map(trim(title), nside, ordering, header, map)
              end do
-             title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
-                  // '_' // trim(iter_str) // '.fits'
-             map(:,1)   = dang_data%fg_map(:,nm,j,1)
-             do n = 0, npix-1
-                if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-                   map(n,1) = missval
+             do n = 1, par%ncomp
+                title = trim(direct) // trim(par%dat_label(j)) //'_'// trim(par%fg_label(n)) //&
+                     '_amplitude_' // trim(iter_str) // '.fits'
+                map(:,:)   = dang_data%fg_map(:,:,j,n)
+                do i = 0, npix-1
+                   if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
+                      map(i,1) = missval
+                   end if
+                end do
+                call write_result_map(trim(title), nside, ordering, header, map)
+             end do
+          end do
+       else 
+          do n = 1, par%ncomp
+             title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(n))) //'_'// trim(par%fg_label(n)) //&
+                  '_amplitude_' // trim(iter_str) // '.fits'
+             map(:,:)   = dang_data%fg_map(:,:,par%fg_ref_loc(n),n)
+             do i = 0, npix-1
+                if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
+                   map(i,1) = missval
                 end if
              end do
              call write_result_map(trim(title), nside, ordering, header, map)
           end do
-       else 
-          title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
-               // '_' // trim(iter_str) // '.fits'
-          map(:,1)   = dang_data%fg_map(:,nm,par%fg_ref_loc(1),1)
-          do n = 0, npix-1
-             if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-                map(n,1) = missval
-             end if
-          end do
-          call write_result_map(trim(title), nside, ordering, header, map)
        end if
        do j = 1, nbands
-          title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
-               // '_' // trim(iter_str) // '.fits'
-          map(:,1)   = dang_data%res_map(:,nm,j)
-          do n = 0, npix-1
-             if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-                map(n,1) = missval
+          title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(iter_str) // '.fits'
+          map(:,:)   = dang_data%res_map(:,:,j)
+          do i = 0, npix-1
+             if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
+                map(i,1) = missval
              end if
           end do
           call write_result_map(trim(title), nside, ordering, header, map)
        end do
-       title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
-       map(:,1)   = comp%beta_s(:,nm)
-       do n = 0, npix-1
-          if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-             map(n,1) = missval
+       title = trim(direct) // 'synch_beta_' // trim(iter_str) // '.fits'
+       map(:,:)   = comp%beta_s(:,:)
+       do i = 0, npix-1
+          if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
+             map(i,1) = missval
           end if
        end do
        call write_result_map(trim(title), nside, ordering, header, map)
-       dang_data%chi_map = 0.d0
-       do i = 0, npix-1
-          do j = 1, nbands
-             s      = 0.d0
-             do l = 1, nfgs
-                signal = dang_data%fg_map(i,nm,j,l)
-                s      = s + signal
+       do mn = 1, nmaps
+          dang_data%chi_map(:,mn) = 0.d0
+          do i = 0, npix-1
+             do j = 1, nbands
+                s      = 0.d0
+                do l = 1, nfgs
+                   signal = dang_data%fg_map(i,mn,j,l)
+                   s      = s + signal
+                end do
+                dang_data%chi_map(i,mn) = dang_data%chi_map(i,mn) + dang_data%masks(i,1)*(dang_data%sig_map(i,mn,j) - s)**2.d0/dang_data%rms_map(i,mn,j)**2.d0
              end do
-             dang_data%chi_map(i,nm) = dang_data%chi_map(i,nm) + dang_data%masks(i,1)*(dang_data%sig_map(i,nm,j) - s)**2.d0/dang_data%rms_map(i,nm,j)**2.d0
           end do
        end do
-       dang_data%chi_map(:,nm) = dang_data%chi_map(:,nm)/(nbands+nfgs)
-       title = trim(direct) // 'chisq_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
-       map(:,1)   = dang_data%chi_map(:,nm)
-       do n = 0, npix-1
-          if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-             map(n,1) = missval
+       dang_data%chi_map(:,:) = dang_data%chi_map(:,:)/(nbands+nfgs)
+       title = trim(direct) // 'chisq_'// trim(iter_str) // '.fits'
+       map(:,:)   = dang_data%chi_map(:,:)
+       do i = 0, npix-1
+          if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
+             map(i,1) = missval
           end if
        end do
        call write_result_map(trim(title), nside, ordering, header, map)
@@ -589,7 +561,7 @@ contains
 
        do j = 1, nbands
           title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(iter_str) // '.fits'
-          map(:,1)   = dang_data%res_map(:,nm,j)
+          map(:,:)   = dang_data%res_map(:,:,j)
           do n = 0, npix-1
              if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
                 map(n,1) = missval
@@ -599,7 +571,7 @@ contains
        end do
 
        title = trim(direct) // 'T_d_'// trim(iter_str) // '.fits'
-       map(:,1)   = comp%T_d(:,nm)
+       map(:,1)   = comp%T_d(:,1)
        do n = 0, npix-1
           if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
              map(n,1) = missval
@@ -610,15 +582,15 @@ contains
        do i = 0, npix-1
           do j = 1, nbands
              s =  comp%HI_amps(j)*comp%HI(i,1)*planck(par%dat_nu(j)*1d9,comp%T_d(i,1))
-             dang_data%chi_map(i,nm) = dang_data%chi_map(i,nm) + dang_data%masks(i,1)*(dang_data%sig_map(i,nm,j) - s)**2.d0/dang_data%rms_map(i,nm,j)**2.d0
+             dang_data%chi_map(i,1) = dang_data%chi_map(i,1) + dang_data%masks(i,1)*(dang_data%sig_map(i,1,j) - s)**2.d0/dang_data%rms_map(i,1,j)**2.d0
           end do
        end do
-       dang_data%chi_map(:,nm) = dang_data%chi_map(:,nm)/(nbands+nfgs)
+       dang_data%chi_map(:,1) = dang_data%chi_map(:,1)/(nbands+nfgs)
        title = trim(direct) // 'chisq_' // trim(iter_str) // '.fits'
-       map(:,1)   = dang_data%chi_map(:,nm)
-       do n = 0, npix-1
-          if (dang_data%masks(n,1) == 0.d0 .or. dang_data%masks(n,1) == missval) then
-             map(n,1) = missval
+       map(:,1)   = dang_data%chi_map(:,1)
+       do i = 0, npix-1
+          if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
+             map(i,1) = missval
           end if
        end do
        call write_bintab(map,npix,1, header, nlheader, trim(title))
