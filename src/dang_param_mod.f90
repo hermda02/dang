@@ -1,6 +1,6 @@
 module dang_param_mod
     use healpix_types
-    use utility_mod
+    use dang_util_mod
     use hashtbl
     implicit none
 
@@ -27,7 +27,8 @@ module dang_param_mod
         character(len=512), allocatable, dimension(:) :: bp_chain_list
                                                   
         ! Data parameters
-        integer(i4b)                                    :: numband       ! Number of bands
+        integer(i4b)                                    :: numband       ! Number of bands total in parameter file
+        integer(i4b)                                    :: numinc        ! Number of bands to include in the fit
         character(len=512)                              :: datadir       ! Directory to look for bandfiles in
         character(len=512)                              :: bp_dir        ! Directory for BP swap maps
         character(len=512)                              :: mask_file     ! Mask filename
@@ -41,6 +42,7 @@ module dang_param_mod
         logical(lgt),       allocatable, dimension(:)   :: bp_map        ! True false (know when to swap)
         logical(lgt),       allocatable, dimension(:)   :: fit_gain      ! Do we fit the gain for this band?
         logical(lgt),       allocatable, dimension(:)   :: fit_offs      ! Do we fit the offset for this band?
+        logical(lgt),       allocatable, dimension(:)   :: band_inc      ! Is this band included?
         
         ! Component parameters
         integer(i4b)                                      :: ncomp          ! # of foregrounds
@@ -423,6 +425,7 @@ contains
         len_itext = len(trim(itext))
 
         call get_parameter_hashtable(htbl, 'NUMBAND',    par_int=par%numband)
+        call get_parameter_hashtable(htbl, 'NUMINCLUDE',    par_int=par%numinc)
         call get_parameter_hashtable(htbl, 'DATA_DIRECTORY', par_string=par%datadir)
         call get_parameter_hashtable(htbl, 'MASKFILE', par_string=par%mask_file)
 
@@ -433,6 +436,7 @@ contains
         allocate(par%dat_unit(n))
         allocate(par%bp_map(n))
         allocate(par%dust_corr(n))
+        allocate(par%band_inc(n))
 
         allocate(par%init_gain(n))
         allocate(par%init_offs(n))
@@ -441,6 +445,7 @@ contains
 
         do i = 1, n
             call int2string(i, itext)
+            call get_parameter_hashtable(htbl, 'INCLUDE_BAND'//itext, len_itext=len_itext, par_lgt=par%band_inc(i))
             call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%dat_label(i))
             call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%dat_mapfile(i))
             call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%dat_noisefile(i))

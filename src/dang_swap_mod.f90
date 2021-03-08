@@ -3,9 +3,9 @@ module dang_swap_mod
     use pix_tools
     use fitstools
     use udgrade_nr
-    use utility_mod
+    use dang_util_mod
     use dang_param_mod
-    use linalg_mod
+    use dang_linalg_mod
     use dang_component_mod
     use dang_data_mod
     implicit none

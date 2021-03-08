@@ -3,9 +3,9 @@ module dang_sample_mod
     use pix_tools
     use fitstools
     use udgrade_nr
-    use utility_mod
+    use dang_util_mod
     use dang_param_mod
-    use linalg_mod
+    use dang_linalg_mod
     use dang_component_mod
     use dang_data_mod
     implicit none
@@ -312,7 +312,7 @@ contains
          !   end if
          !end do
       else if (trim(self%mode) == 'hi_fit') then
-         do j = 1, self%numband
+         do j = 1, self%numinc
             sum1 = 0.d0
             sum2 = 0.d0
             norm = 0.d0
@@ -320,6 +320,7 @@ contains
             if (self%temp_corr(1,j)) then
                do i = 0, npix-1
                   if (comp%HI(i,1) > self%thresh) cycle
+                  if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
                   temp = comp%HI(i,1)*planck(self%dat_nu(j)*1d9,comp%T_d(i,1))
                   sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/cov(i,j)
                   sum2 = sum2 + (temp)**2.d0/cov(i,j)
@@ -348,7 +349,6 @@ contains
         real(dp)                                               :: chi, chi_0, chi_00, p
         real(dp)                                               :: amp, num, t, sam
         real(dp), dimension(2)                                 :: pars
-        real(dp), dimension(nbands)                            :: tmp
         real(dp), dimension(0:npix-1)                          :: norm
         real(dp), dimension(0:npix-1,nbands)                   :: cov, nos
         real(dp), dimension(0:npix-1)                          :: sample_spec_amp
@@ -376,14 +376,14 @@ contains
         end do
     end function sample_spec_amp
 
-    subroutine sample_index(self, dat, comp, duta, nside2, ind, map_n)
+    subroutine sample_index(self, dat, comp, data_in, nside2, ind, map_n)
         implicit none
   
         class(params)                                          :: self
         type(component),                         intent(inout) :: comp
         type(data)                                             :: dat
         integer(i4b),                               intent(in) :: map_n, nside2, ind
-        real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: duta
+        real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data_in
         integer(i4b)                                           :: nside1, npix2
         real(dp), dimension(0:npix-1,nmaps,nbands)             :: map2fit, cov 
         real(dp), dimension(0:npix-1,nmaps)                    :: indx
@@ -393,8 +393,6 @@ contains
         real(dp), allocatable, dimension(:,:)                  :: indx_low, mask_low
         real(dp), allocatable, dimension(:)                    :: indx_sample_low
         real(dp), allocatable, dimension(:,:,:)                :: fg_map_high
-        real(dp), dimension(nbands)                            :: signal, tmp
-        real(dp), dimension(2)                                 :: x
         real(dp)                                               :: a, b, c, num, sam, t, p, sol
         real(dp)                                               :: time1, time2, diff
         real(dp)                                               :: like_old, like_new, ratio, s
@@ -415,7 +413,7 @@ contains
         ! Spectral index sampler, using the Metropolis approach.
         !------------------------------------------------------------------------
         ! map2fit is the data-(other foregrounds) map which we are fitting to
-        map2fit = duta
+        map2fit = data_in
         cov     = dat%rms_map*dat%rms_map
         mask    = dat%masks
 
@@ -444,7 +442,9 @@ contains
         allocate(chisq_map(0:npix-1,nmaps))
         fg_map_high(:,:,:) = dat%fg_map(:,:,:,ind)
 
-        ! Per pixel sampler
+        !-------------------|
+        ! Per pixel sampler |
+        !-------------------|
         if (pix_samp) then
            if (rank == master) then
               if (mod(iter,self%iter_out) .EQ. 0) then
@@ -514,14 +514,15 @@ contains
               mask_low = mask
            end if
            
-           x(1) = 1.d0           
            !------------------------------------------------------------------------
            ! Metropolis algorithm:
            ! Sampling portion. Determine the log-likelihood, and accept based off of
            ! the improvement in the fit.
            !------------------------------------------------------------------------
 
-           ! Sample for Q and U jointly
+           !---------------------------|
+           ! Sample for Q and U jointly|
+           !---------------------------|
            if (map_n == -1) then
               indx_sample_low = indx_low(:,self%pol_type(1))
               do i = 0, npix2-1
@@ -533,8 +534,10 @@ contains
                  if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
                     cycle
                  end if
+
+                 ! First evaluate likelihood from previous sample
+                 !-----------------------------------------------
                  
-                 ! Chi-square from the most recent Gibbs chain update
                  !$OMP PARALLEL PRIVATE(j,k,local_a)
                  local_a = 0.d0
                  !$OMP DO SCHEDULE(static)
@@ -555,7 +558,7 @@ contains
 
                  s = 1.d0
                  do l = 1, self%nsample
-                    ! Every 100 samples check acceptance rate, and adjust scaling factor
+                    ! Every 50 samples check acceptance rate, and adjust scaling factor
                     if (mod(l,50) == 0) then
                        if (paccept > 0.6d0) then
                           s = s*2.0
@@ -571,11 +574,11 @@ contains
                        cycle
                     end if
 
+                    ! Evaluate likelihood given this sample
+                    !--------------------------------------
                     b         = 0.d0
                     !$OMP PARALLEL PRIVATE(j,k,local_b)
                     local_b   = 0.d0
-
-                    ! Calculate new chi-square
                     !$OMP DO SCHEDULE(static)
                     do j = 1, nbands
                        do k = self%pol_type(1), self%pol_type(size(self%pol_type))
@@ -614,77 +617,100 @@ contains
                     indx_sample_low(i) = sol
                  end do
               end do
-           ! Sample for a single poltype
+
+           !----------------------------|
+           ! Sample for a single poltype|
+           !----------------------------|
            else
               do i = 0, npix2-1
+                 naccept   = 0.d0
+                 paccept   = 0.d0
                  a         = 0.d0
-                 sol       = indx_low(i,map_n)
+                 sol       = indx_low(i,self%pol_type(1))
                  sam       = sol
-                 
                  if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
                     cycle
                  end if
+
+                 ! First evaluate likelihood from previous sample
+                 !-----------------------------------------------
                  
-                 ! Chi-square from the most recent Gibbs chain update
+                 !$OMP PARALLEL PRIVATE(j,k,local_a)
+                 local_a = 0.d0
+                 !$OMP DO SCHEDULE(static)
                  do j = 1, nbands
-                    a = a + (((fg_map_low(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+                    local_a = local_a + (((fg_map_low(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
                          - data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
                  end do
-                 c = a!/(nbands-npar)
+                 !$OMP END DO
+                 !$OMP CRITICAL
+                 a = a + local_a
+                 !$OMP END CRITICAL
+                 !$OMP END PARALLEL
+                 c = a
  
-                 if (self%fg_spec_like(ind,1)) then
-                    like_old = exp(-0.5d0*c)
-                 else if (.not. self%fg_spec_like(ind,1)) then
-                    like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-                 end if
-                 
+                 like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+
                  s = 1.d0
                  do l = 1, self%nsample
-                    ! Every 100 samples check acceptance rate, and adjust scaling factor
+                    ! Every 50 samples check acceptance rate, and adjust scaling factor
                     if (mod(l,50) == 0) then
                        if (paccept > 0.6d0) then
-                          write(*,*) paccept,l,'s = s*2.0'
                           s = s*2.0
                        else if (paccept < 0.4d0) then
-                          write(*,*) paccept,l,'s = s/2.0'
                           s = s/2.0
                        end if
                     end if
-                    t      = sol + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
-                    b      = 0.d0
-
-                    ! If sampled value is outside of uniform bounds, cycle                    
+                    t      = sam + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
+                    
+                    ! If sampled value is outside of uniform bounds, cycle
                     if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
                        paccept = naccept/l
                        cycle
                     end if
-                    
-                    ! Calculate new chi-square
-                    do j = 1, nbands
-                       tmp(j) = fg_map_low(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)
-                       b      = b + ((tmp(j)-data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
-                    end do
-                    ! b = b/(nbands-npar)
 
-                    if (self%fg_spec_like(ind,1)) then
-                       like_new = exp(-0.5d0*b)
-                    else if (.not. self%fg_spec_like(ind,1)) then
-                       like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-                    end if
+                    ! Evaluate likelihood given this sample
+                    !--------------------------------------
+                    b         = 0.d0
+                    !$OMP PARALLEL PRIVATE(j,k,local_b)
+                    local_b   = 0.d0
+                    !$OMP DO SCHEDULE(static)
+                    do j = 1, nbands
+                       local_b = local_b + ((fg_map_low(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t) &
+                            -data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
+                    end do
+                    !$OMP END DO
+                    !$OMP CRITICAL
+                    b = b + local_b
+                    !$OMP END CRITICAL
+                    !$OMP END PARALLEL
                     
-                    ratio = like_new/like_old
-                    call RANDOM_NUMBER(num)
-                    if (ratio > num) then
-                       sam      = t
-                       like_old = like_new
-                       naccept  = naccept + 1.0
+                    like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                    diff = like_new - like_old
+                    ratio = exp(diff)
+                    if (trim(self%ml_mode) == 'optimize') then
+                       if (ratio > 1.d0) then
+                          sam      = t
+                          c        = b
+                          like_old = like_new
+                          naccept  = naccept + 1.0
+                       end if
+                    else if (trim(self%ml_mode) == 'sample') then
+                       call RANDOM_NUMBER(num)
+                       if (ratio > num) then
+                          sam      = t
+                          c        = b
+                          like_old = like_new
+                          naccept  = naccept + 1.0
+                       end if
                     end if
+
+                    paccept = naccept/l
+                    sol = sam
+                    indx_sample_low(i) = sol
                  end do
-                 sol = sam
-                 indx_sample_low(i) = sol
               end do
-           end if
-           
+           end if           
            if (nside1 /= nside2) then
               if (ordering == 1) then
                  call udgrade_ring(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
@@ -695,83 +721,81 @@ contains
               indx_sample = indx_sample_low
            end if
 
-        ! Full sky sampler
+        !------------------|
+        ! Full sky sampler |
+        !------------------|
         else
 
-           time1 = mpi_wtime()
+           ! time1 = mpi_wtime()
 
-           if (.false.) then
+           ! if (.true.) then
 
-              allocate(beta_grid(100))
-              allocate(like_grid(100))
+           !    write(*,*) iter
+           !    write(iter_str, '(i0.5)') iter
+
+           !    allocate(beta_grid(100))
+           !    allocate(like_grid(100))
               
-              do l = 1, 100
-                 beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/100
-                 write(*,*) l, beta_grid(l)
-                 sol       = beta_grid(l)
-                 chisq_map   = 0.d0
-                 !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
-                 a         = 0.d0
-                 local_a   = 0.d0
-                 !$OMP DO SCHEDULE(static)
-                 do i = 0, npix-1
-                    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
-                       cycle
-                    end if
+           !    do l = 1, 100
+           !       beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/100
+           !       write(*,*) l, beta_grid(l)
+           !       sol       = beta_grid(l)
+           !       !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
+           !       a         = 0.d0
+           !       local_a   = 0.d0
+           !       !$OMP DO SCHEDULE(static)
+           !       do i = 0, npix-1
+           !          if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
+           !             cycle
+           !          end if
                     
-                    ! Chi-square from the most recent Gibbs chain update
-                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                       do j = 1, nbands
-                          local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-                               - map2fit(i,k,j))**2.d0)/cov(i,k,j)
-                          chisq_map(i,k) = chisq_map(i,k) + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-                               - map2fit(i,k,j))**2.d0)/cov(i,k,j)
-                       end do
-                    end do
-                 end do
-                 !$OMP END DO
-                 !$OMP CRITICAL
-                 a = a + local_a
-                 !$OMP END CRITICAL
-                 !$OMP END PARALLEL
+           !          ! Chi-square from the most recent Gibbs chain update
+           !          do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+           !             do j = 1, nbands
+           !                local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+           !                     - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+           !             end do
+           !          end do
+           !       end do
+           !       !$OMP END DO
+           !       !$OMP CRITICAL
+           !       a = a + local_a
+           !       !$OMP END CRITICAL
+           !       !$OMP END PARALLEL
            
-                 title = trim(self%outdir) // 'beta_grid_likelihood.dat'
-                 inquire(file=title,exist=exist)
-                 if (exist) then
-                    open(12,file=title, status="old",position="append", action="write")
-                 else
-                    open(12,file=title, status="new", action="write")
-                    write(12,*)  
-                 endif
-                 write(12,*) beta_grid(l), -0.5d0*a
-                 close(12)
-                 write(l_str, '(i0.3)') l
-                 call write_result_map(trim(self%outdir)//'chisq_sampler_'//trim(l_str)//'.fits', nside, ordering, header, chisq_map)
-              end do
-              stop
-           end if
+           !       title = trim(self%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
+           !       inquire(file=title,exist=exist)
+           !       if (exist) then
+           !          open(12,file=title, status="old",position="append", action="write")
+           !       else
+           !          open(12,file=title, status="new", action="write")
+           !          write(12,*)  
+           !       endif
+           !       write(12,*) beta_grid(l), -0.5d0*a
+           !       close(12)
+           !    end do
+           ! end if
+           ! indx_sample(:) = -3.1d0
 
-           ! Sample for Q and U jointly
+           !----------------------------|
+           ! Sample for Q and U jointly |
+           !----------------------------|
            if (map_n == -1) then
               chisq_map   = 0.d0
               indx_sample = indx(:,self%pol_type(1))
               sol       = indx(0,self%pol_type(1))
               sam       = sol
+              ! First evaluate likelihood from previous sample
+              !-----------------------------------------------
               !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
               a         = 0.d0
               local_a   = 0.d0
               !$OMP DO SCHEDULE(static)
               do i = 0, npix-1
-                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
-                    cycle
-                 end if
-                 
-                 ! Chi-square from the most recent Gibbs chain update
-                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                    do j = 1, nbands
+                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+                 do j = 1, nbands
+                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
                        local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
-                       chisq_map(i,k) = chisq_map(i,k) + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
                             - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                     end do
                  end do
@@ -783,14 +807,11 @@ contains
               !$OMP END PARALLEL
               c = a
 
-              ! write(*,*) c, sum(chisq_map)
-
-              ! call write_result_map(trim(self%outdir)//'chisq_sampler.fits', nside, ordering, header, chisq_map)
-              ! stop
               like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
 
               s = 0.5d0
               do l = 1, self%nsample
+                 ! Every 50 samples check acceptance rate, and adjust scaling factor
                  if (mod(l,50) == 0) then
                     if (paccept > 0.6d0) then
                        write(*,*) paccept,l,'s = s*2.0'
@@ -807,7 +828,8 @@ contains
                     paccept = naccept/l
                     cycle
                  end if
-                 ! Calculate new chi-square
+                 ! Evaluate likelihood given this sample
+                 !--------------------------------------
                  b         = 0.d0
                  !$OMP PARALLEL PRIVATE(i,j,k,local_b)
                  local_b   = 0.d0
@@ -864,41 +886,40 @@ contains
               sol = sam
               indx_sample(:) = sol
 
+           !--------------------------------------
            ! Sample for a single poltype - fullsky
+           !--------------------------------------
            else
               indx_sample = indx(:,self%pol_type(1))
+              ! First evaluate likelihood from previous sample
+              !-----------------------------------------------
+              !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
               a         = 0.d0
-              !$OMP PARALLEL PRIVATE(i,j)
+              local_a   = 0.d0
               !$OMP DO SCHEDULE(static)
               do i = 0, npix-1
-                 sol       = indx(i,self%pol_type(1))
-                 sam       = sol
                  if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
                     cycle
                  end if
                  
-                 ! Chi-square from the most recent Gibbs chain update
                  do j = 1, nbands
-                    a = a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+                    local_a = local_a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
                          - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
+                 end do
                  end do
               end do
               !$OMP END DO
+              !$OMP CRITICAL
+              a = a + local_a
+              !$OMP END CRITICAL
               !$OMP END PARALLEL
-              ! c = a/(npix*(nbands-npar))
-              ! c = a/npix
               c = a
- 
-              ! if (self%fg_spec_like(ind,1)) then
-              !    like_old = exp(-0.5d0*c)
-              ! else if (.not. self%fg_spec_like(ind,1)) then
-              !    like_old = exp(-0.5d0*c)*eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-              ! end if
 
-              like_old = c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+              like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
 
               s = 1.d0
               do l = 1, self%nsample
+                 ! Every 50 samples check acceptance rate, and adjust scaling factor
                  if (mod(l,50) == 0) then
                     if (paccept > 0.6d0) then
                        write(*,*) paccept,l,'s = s*2.0'
@@ -915,30 +936,27 @@ contains
                     paccept = naccept/l
                     cycle
                  end if
-                 ! Calculate new chi-square
+                 ! Evaluate likelihood given this sample
+                 !--------------------------------------
                  b         = 0.d0
-                 !$OMP PARALLEL PRIVATE(i,j)
+                 !$OMP PARALLEL PRIVATE(i,j,k,local_b)
+                 local_b   = 0.d0
                  !$OMP DO SCHEDULE(static)
                  do i = 0, npix-1
                     if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                     do j = 1, nbands
-                       b = b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
-                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                       local_b = local_b + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
+                            - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
+                       end do
                     end do
                  end do
                  !$OMP END DO
+                 !$OMP CRITICAL
+                 b = b + local_b
+                 !$OMP END CRITICAL
                  !$OMP END PARALLEL
 
-                 ! b = b/(npix*(nbands-npar))
-                 b = b!/npix
-
-                 ! if (self%fg_spec_like(ind,1)) then
-                 !    like_new = exp(-0.5d0*b)
-                 ! else if (.not. self%fg_spec_like(ind,1)) then
-                 !    like_new = exp(-0.5d0*b)*eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2))
-                 ! end if
-
-                 like_new = b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                 like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
 
                  write(*,*) c, b
                  
@@ -1002,10 +1020,12 @@ contains
       real(dp), allocatable, dimension(:,:,:)                :: maps_low, cov_low
       real(dp), allocatable, dimension(:,:)                  :: T_low
       real(dp), allocatable, dimension(:)                    :: sample_T_low
-      real(dp), dimension(nbands)                            :: signal, tmp
-      real(dp), dimension(2)                                 :: x
-      real(dp)                                               :: a, b, c, num, sam, t, p, sol, naccept_t_d
-      
+      real(dp)                                               :: a, b, c, num, sam
+      real(dp)                                               :: t, p, sol
+      real(dp)                                               :: like_old, like_new
+      real(dp)                                               :: diff, ratio
+      real(dp)                                               :: paccept, naccept, s
+
       te      = comp%T_d
       cov     = dat%rms_map*dat%rms_map
 
@@ -1051,47 +1071,63 @@ contains
 
       ! Metropolis algorithm
       
-      x(1) = 1.d0
       do i = 0, npix2-1
+         naccept = 0.d0
+         paccept = 0.d0
+         s       = 0.d0
          if (dat%masks(i,1) == 0.d0  .or. dat%masks(i,1) == missval) then
             sample_T_low(i) = missval
             cycle
          else
             a   = 0.d0
             sol = T_low(i,map_n)
-            
+            sam = sol
             ! Chi-square from the most recent Gibbs chain update
             do j = 1, nbands
                a = a + (((comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,sol)) &
                     - (maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/cov_low(i,map_n,j)
             end do
             c   = a
-            
+
+            like_old = -0.5d0*c + log(eval_normal_prior(sam,self%HI_Td_mean, self%HI_Td_std))
+
             do l = 1, self%nsample
-               ! Begin sampling from the prior
-               t = rand_normal(sol,self%HI_Td_std)
-               !t = rand_normal(self%HI_Td_mean,self%HI_Td_std)
-               b = 0.d0
-               do j = 1, nbands
-                  tmp(j) = comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,t)
-                  b      = b + ((tmp(j)-(maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/cov_low(i,map_n,j)
-               end do
-               b = b
-               
-               if (b < c .and. t .lt. 35.d0 .and. t .gt. 10.d0) then
-                  sam = t
-                  c   = b
-               else
-                  x(2) = exp(0.5d0*(c-b))
-                  p = minval(x)
-                  call RANDOM_NUMBER(num)
-                  if (num < p) then
-                     if (t .lt. 35.d0 .and. t .gt. 10.d0) then
-                        sam = t
-                        c   = b
-                     end if
+               if (mod(l,50) == 0) then
+                  if (paccept > 0.6d0) then
+                     s = s*2.0
+                  else if (paccept < 0.4d0) then
+                     s = s/2.0
                   end if
                end if
+               ! Begin sampling from the prior
+               t = rand_normal(sol,self%HI_Td_std)
+               b = 0.d0
+               do j = 1, nbands
+                  b = b + (((comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,t)) &
+                    - (maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/cov_low(i,map_n,j)
+               end do
+               b = b
+
+               like_new = -0.5d0*b + log(eval_normal_prior(sam,self%HI_Td_mean, self%HI_Td_std))
+               diff = like_new - like_old
+               ratio = exp(diff)
+               if (trim(self%ml_mode) == 'optimize') then
+                  if (ratio > 1.d0) then
+                     sam      = t
+                     c        = b
+                     like_old = like_new
+                     naccept  = naccept + 1.0
+                  end if
+               else if (trim(self%ml_mode) == 'sample') then
+                  call RANDOM_NUMBER(num)
+                  if (ratio > num) then
+                     sam      = t
+                     c        = b
+                     like_old = like_new
+                     naccept  = naccept + 1.0
+                  end if
+               end if   
+               paccept = naccept/l
             end do
             if (sam == 0.d0) then
                write(*,*) 'Error: T_d = 0.d0 accepted!'
@@ -1102,16 +1138,16 @@ contains
             sample_T_low(i) = sol
          end if
       end do
-      if (nside1 /= nside2) then
-         if (ordering == 1) then
-            call udgrade_ring(sample_T_low, nside2, te_sample, nside1)
-            !call convert_nest2ring(nside2, sample_T_low)
-         else
-            call udgrade_nest(sample_T_low, nside2, te_sample, nside1)
-         end if
-      else
-         te_sample =  sample_T_low
-      end if
+      ! if (nside1 /= nside2) then
+      !    if (ordering == 1) then
+      !       call udgrade_ring(sample_T_low, nside2, te_sample, nside1)
+      !       !call convert_nest2ring(nside2, sample_T_low)
+      !    else
+      !       call udgrade_nest(sample_T_low, nside2, te_sample, nside1)
+      !    end if
+      ! else
+      te_sample =  sample_T_low
+      ! end if
       comp%T_d(:,1) = te_sample
       
       deallocate(maps_low)

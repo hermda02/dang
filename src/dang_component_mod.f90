@@ -2,7 +2,7 @@ module dang_component_mod
   use healpix_types
   use pix_tools
   use fitstools
-  use utility_mod
+  use dang_util_mod
   use dang_param_mod
   use dang_data_mod
   implicit none
@@ -48,23 +48,16 @@ contains
     
   end subroutine init_dust
 
-  subroutine init_template(self,npix,nmaps,ntemp)
+  subroutine init_template(self,npix,nmaps,ntemp,nbands)
     implicit none
     type(data)               :: self
-    integer(i4b), intent(in) :: npix, nmaps, ntemp
+    integer(i4b), intent(in) :: npix, nmaps, ntemp, nbands
 
     allocate(self%temps(0:npix-1,nmaps,ntemp))
+    allocate(self%temp_amps(nbands,nmaps,ntemp))
+    allocate(self%temp_norm(nmaps,ntemp))
 
   end subroutine init_template
-
-  subroutine init_temp_amps(self,nbands,nmaps,ntemp)
-    implicit none
-    type(data)               :: self
-    integer(i4b), intent(in) :: nbands, nmaps, ntemp
-
-    allocate(self%temp_amps(nbands,nmaps,ntemp))
-
-  end subroutine init_temp_amps
 
   subroutine init_hi_fit(self, param, npix)
     implicit none
@@ -75,7 +68,7 @@ contains
 
     allocate(self%HI(0:npix-1,1))
     allocate(self%T_d(0:npix-1,nmaps))
-    allocate(self%HI_amps(param%numband))
+    allocate(self%HI_amps(param%numinc))
     write(*,*) 'Allocated HI fitting maps!'
 
     call read_bintab(trim(param%datadir)//trim(param%HI_file),self%HI,npix,1,nullval,anynull,header=head)
