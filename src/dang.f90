@@ -173,9 +173,9 @@ program dang
      ! dang_data%temp_amps(5,:,1) = 0.20367266*dang_data%temp_norm(:,1)
 
      ! ! 0.50 sim
-     dang_data%temp_amps(1,:,1) = 0.20019717*dang_data%temp_norm(:,1)
-     dang_data%temp_amps(2,:,1) = 0.0709024475*dang_data%temp_norm(:,1)
-     dang_data%temp_amps(3,:,1) = 0.0136504706*dang_data%temp_norm(:,1)
+     ! dang_data%temp_amps(1,:,1) = 0.20019717*dang_data%temp_norm(:,1)
+     ! dang_data%temp_amps(2,:,1) = 0.0709024475*dang_data%temp_norm(:,1)
+     ! dang_data%temp_amps(3,:,1) = 0.0136504706*dang_data%temp_norm(:,1)
      dang_data%temp_amps(4,:,1) = 7.42349435d-4*dang_data%temp_norm(:,1)
      dang_data%temp_amps(5,:,1) = 3.57833056d-4*dang_data%temp_norm(:,1)
  
@@ -189,23 +189,8 @@ program dang
 
      ! Extrapolating solved for bands for ze cleaning
      do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-        do i = 0, npix-1
-           do j = 1, nbands
-              if (.not. par%temp_corr(1,j)) then
-                 dang_data%fg_map(i,k,j,par%ncomp+1) = dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
-                 ! dang_data%sig_map(i,k,j) = dang_data%sig_map(i,k,j) - dang_data%fg_map(i,k,j,par%ncomp+1)
-              end if
-           end do
-        end do
+        call extrapolate_template(par,dang_data,comp,1,k)
      end do
-
-     ! write(*,*) dang_data%temp_amps(:,2,1)
-
-     ! write(*,*) '-------------'
-
-     ! write(*,*) dang_data%sig_map(23000,2,1)
-     ! write(*,*) dang_data%temps(23000,2,1)
-     ! write(*,*) dang_data%fg_map(23000,2,1,par%ncomp+1)
 
 
      !----------------------------------------------------------------------------------------------------------
@@ -256,7 +241,6 @@ program dang
         end if
      end do
 
-
      par%fit_offs(:) = .false.
      
      deallocate(map,rms)
@@ -299,28 +283,17 @@ contains
        if (par%joint_sample) then
           call sample_joint_amp(par,dang_data,comp,2,trim(solver))
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-             
              do m = 1, size(par%joint_comp)
+                ! Extrapolate foreround solutions
                 do n = 1, par%ncomp
                    if (trim(par%joint_comp(m)) == trim(par%fg_label(n))) then
-                      write(*,*) 'Extrapolating '//trim(par%fg_label(n)) // ' to all bands in '// trim(tqu(k)) //'.'
-                      do i = 0, npix-1
-                         do j = 1, nbands
-                            dang_data%fg_map(i,k,j,n) = dang_data%fg_map(i,k,par%fg_ref_loc(n),n)*compute_spectrum(par,comp,n,par%dat_nu(j),i,k)
-                         end do
-                      end do
+                      call extrapolate_foreground(par,dang_data,comp,n,k)
                    end if
                 end do
+                ! Extrapolate template solutions
                 do n = 1, par%ntemp
                    if (trim(par%joint_comp(m)) == trim(par%temp_label(n))) then
-                      write(*,*) 'Extrapolating '//trim(par%temp_label(n)) // ' to all bands '// trim(tqu(k)) //'.'
-                      do i = 0, npix-1
-                         do j = 1, nbands
-                            if (par%temp_corr(n,j)) then
-                               dang_data%fg_map(i,k,j,par%ncomp+n) = dang_data%temp_amps(j,k,n)*dang_data%temps(i,k,n)
-                            end if
-                         end do
-                      end do
+                      call extrapolate_template(par,dang_data,comp,n,k)
                    end if
                 end do
              end do
@@ -338,71 +311,63 @@ contains
              end if
           end do
        end if
-         
+
        ! -------------------------------------------------------------------------------------------------------------------
-       ! For sampling foreground amplitudes individually
+       ! Sample amplitudes
        ! -------------------------------------------------------------------------------------------------------------------
-       if (par%fg_samp_amp(1)) then
-          do i = 1, par%ntemp
-             synchonly(:,:,:) = dang_data%sig_map(:,:,:)-dang_data%fg_map(:,:,:,i+1)
-          end do
-          do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-             dang_data%fg_map(:,k,par%fg_ref_loc(1),1) =  sample_spec_amp(par,synchonly,comp,dang_data%rms_map,1,k)
-             do i = 0, npix-1
-                do j = 1, nbands
-                   dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
-                end do
+       do n = 1, par%ncomp
+          if (par%fg_samp_amp(n)) then
+             do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+                dang_data%fg_map(:,k,par%fg_ref_loc(n),n) = sample_spec_amp(par,dang_data,comp,n,k)
+                call extrapolate_foreground(par,dang_data,comp,n,k)
              end do
-          end do
-          do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-             call compute_chisq(k,chisq,par%mode)
-             if (rank == master) then
-                if (mod(iter, 1) == 0 .or. iter == 1) then
-                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, a, 10e10.3)')&
-                        iter, " - chisq: " , chisq, " - A_s: ", dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),& 
-                        " Pol_type = " // trim(tqu(k)), ' - A_d ', dang_data%temp_amps(:,k,1)
-                   write(*,fmt='(a)') '---------------------------------------------'
-                end if
-             end if
-          end do
-       end if
+          end if
+       end do
+       ! do n = 1, par%ntemp
+       !    if (.not. ANY(par%joint_comp == trim(par%temp_label(n)))) then
+       !       if (par%fg_amp_joint(n)) then
+       !          call fit_template()
+       !       end if
+       !    end if
+       !    call extrapolate_template(par,dang_data,comp,n,k)
+       ! end do
+
        ! -------------------------------------------------------------------------------------------------------------------
-       ! Jointly sample synchrotron beta
+       ! Sample spectral parameters
        ! -------------------------------------------------------------------------------------------------------------------
-       if (par%fg_samp_inc(1,1)) then
-          write(*,*) 'Jointly sample synch beta'
-          do i = 1, par%ntemp
-             synchonly(:,:,:) = dang_data%sig_map(:,:,:)-dang_data%fg_map(:,:,:,i+1)
-          end do
-          ! call write_result_map(trim(direct)//'synchonly.fits',nside,ordering,header,synchonly(:,:,par%fg_ref_loc(1)))
-          ! stop
-          call sample_index(par,dang_data,comp,synchonly,par%fg_samp_nside(1,1),1,-1)
-          do i = 0, npix-1
-             do j = 1, nbands
+       do n = 1, par%ncomp
+          if (par%fg_samp_inc(n,1)) then
+             if (par%fg_spec_joint(n,1)) then
+                write(*,*) "Sample "//trim(par%fg_label(n))//" beta jointly."
+                write(*,*) "---------------------------------"
+                call sample_index(par,dang_data,comp,n,-1)
+             else
                 do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-                   dang_data%fg_map(i,k,j,1) = dang_data%fg_map(i,k,par%fg_ref_loc(1),1)*compute_spectrum(par,comp,1,par%dat_nu(j),i,k)
+                write(*,*) "Sample "//trim(par%fg_label(n))//" beta for "//trim(tqu(k))//"."
+                write(*,*) "---------------------------------"
+                   call sample_index(par,dang_data,comp,n,k)
                 end do
-             end do
-          end do
-          do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-             call compute_chisq(k,chisq,par%mode)
-             if (rank == master) then
-                if (mod(iter, 1) == 0 .or. iter == 1) then
-                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
-                        iter, " - chisq: " , chisq, " - A_s: ",&
-                        dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                        mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
-                   write(*,fmt='(a)') '---------------------------------------------'
-                end if
              end if
-          end do
-       end if
-       
+             do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+                call extrapolate_foreground(par,dang_data,comp,n,k)
+             end do
+             do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+                call compute_chisq(k,chisq,par%mode)
+                if (rank == master) then
+                   if (mod(iter, 1) == 0 .or. iter == 1) then
+                      write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
+                           iter, " - chisq: " , chisq, " - A_s: ",&
+                           dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
+                           mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
+                      write(*,fmt='(a)') '---------------------------------------------'
+                   end if
+                end if
+             end do
+          end if
+       end do
        ! -------------------------------------------------------------------------------------------------------------------
-       
        dang_data%res_map = dang_data%sig_map
        do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-          write(*,*) k
           do j = 1, nfgs
              dang_data%res_map(:,k,:)  = dang_data%res_map(:,k,:) - dang_data%fg_map(:,k,:,j)
           end do

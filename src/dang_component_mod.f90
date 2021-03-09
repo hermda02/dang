@@ -159,5 +159,41 @@ contains
     title = trim(param%outdir)//trim(param%dat_label(band))//'_thermal_map.fits'
     call write_result_map(trim(title), nside, ordering, header, thermal_map(:,:,band))
   end subroutine dust_correct_band
+
+  subroutine extrapolate_foreground(param, dat, comp, ind, map_n)
+    implicit none
+    type(data),   intent(inout) :: dat
+    type(params)                :: param
+    type(component)             :: comp
+    integer(i4b), intent(in)    :: ind, map_n
+    integer(i4b)                :: i, j, k
+
+    do i = 0, npix-1
+       do j = 1, nbands
+          do k = param%pol_type(1), param%pol_type(size(param%pol_type))
+             dat%fg_map(i,k,j,ind) = dat%fg_map(i,k,param%fg_ref_loc(ind),ind)*compute_spectrum(param,comp,ind,param%dat_nu(j),i,k)
+          end do
+       end do
+    end do
+
+  end subroutine extrapolate_foreground
+
+  subroutine extrapolate_template(param, dat, comp, ind, map_n)
+    implicit none
+    type(data),   intent(inout) :: dat
+    type(params)                :: param
+    type(component)             :: comp
+    integer(i4b), intent(in)    :: ind, map_n
+    integer(i4b)                :: i, j, k
+
+    do i = 0, npix-1
+       do j = 1, nbands
+          do k = param%pol_type(1), param%pol_type(size(param%pol_type))
+             dat%fg_map(i,k,j,param%ncomp+ind) = dat%temp_amps(j,k,ind)*dat%temps(i,k,ind)
+          end do
+       end do
+    end do
+
+  end subroutine extrapolate_template
   
 end module dang_component_mod

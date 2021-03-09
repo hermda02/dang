@@ -60,6 +60,7 @@ module dang_param_mod
         logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_inc    ! Logical - sample fg parameter?
         logical(lgt),       allocatable, dimension(:)     :: fg_samp_amp    ! Logical - sample fg amplitude
         logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_like   ! Logical - sample fg spec param from likelihood?
+        logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_joint  ! Logical - sample fg spec param jointly in Q and U?
         logical(lgt)                                      :: joint_sample   ! Logical - jointly sample fg amplitudes
         logical(lgt)                                      :: joint_pol      ! Points to which Stokes are jointly sampled
         character(len=512), allocatable, dimension(:)     :: joint_comp     ! Joint sampler components
@@ -497,7 +498,7 @@ contains
            
            allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
            allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_samp_amp(n))
-           allocate(par%fg_spec_like(n,2))
+           allocate(par%fg_spec_like(n,2),par%fg_spec_joint(n,2))
            allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
            allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
            allocate(par%fg_spec_file(n,2))
@@ -557,6 +558,8 @@ contains
                       par_lgt=par%fg_samp_inc(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
                       par_lgt=par%fg_spec_like(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_JOINT'//itext, len_itext=len_itext,&
+                      par_lgt=par%fg_spec_joint(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
                       par_string=par%fg_spec_file(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_REGION'//itext, len_itext=len_itext,&
