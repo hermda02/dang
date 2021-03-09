@@ -31,22 +31,9 @@ program dang
   ! frequency bands used here.                                                                          |
   !-----------------------------------------------------------------------------------------------------|  
   
-  integer(i4b)       :: i, j, k, l, m, n
-  integer(i4b)       :: iterations, n2fit, chain_num
-  integer(i4b)       :: output_iter, bp_iter
-  logical(lgt)       :: test, output_fg
-  
-  character(len=128) :: mapfile, title, direct
-  
-  real(dp), allocatable, dimension(:,:,:,:)    :: fg_map
-  real(dp), allocatable, dimension(:,:,:)      :: maps, rmss, model, res
-  real(dp), allocatable, dimension(:,:,:)      :: synchonly
-  real(dp), allocatable, dimension(:,:)        :: map, rms
-  real(dp), allocatable, dimension(:,:)        :: mask
-  real(dp)                                     :: chisq, s
-  character(len=80), allocatable, dimension(:) :: joint_poltype
-  character(len=10)                            :: solver
-  real(dp), allocatable, dimension(:,:)        :: mat_l, mat_u
+  integer(i4b)                          :: i, j, k, l, m, n
+  integer(i4b)                          :: bp_iter
+  real(dp), allocatable, dimension(:,:) :: map, rms, mask
   
   ! Object Orient
   type(params)       :: par
@@ -79,16 +66,10 @@ program dang
   npar              = 3
   nump              = 0
   nlheader          = size(header)
-  nmaps             = nmaps
-  iterations        = par%nsample              ! # of iterations in the samplers
-  niter             = par%ngibbs               ! # of MC-MC iterations
-  output_iter       = par%iter_out             ! Output maps every <- # of iterations
-  output_fg         = par%output_fg            ! Option for outputting foregrounds for all bands
-  direct            = par%outdir               ! Output directory name
   !----------------------------------------------------------------------------------------------------------
   !----------------------------------------------------------------------------------------------------------
-  ! Array allocation
-  allocate(mask(0:npix-1,1), synchonly(0:npix-1,nmaps,nbands))
+  ! Array allocation - dummy maps used for loading in data
+  allocate(mask(0:npix-1,1))
   allocate(map(0:npix-1,nmaps))
   allocate(rms(0:npix-1,nmaps))
   !----------------------------------------------------------------------------------------------------------
@@ -98,16 +79,19 @@ program dang
 
   call RANDOM_SEED()
 
+  ! Initialize data and components
   if (trim(par%mode) == 'comp_sep') then
      ! Joint Sampler Info
      !----------------------------------------------------------------------------------------------------------
-     solver = par%solver
      call init_fg_map(dang_data,npix,nmaps,nbands,nfgs)
      call init_data_maps(dang_data,npix,nmaps,nbands)
      call init_mask_maps(dang_data,npix,nmaps)
      call init_template(dang_data,npix,nmaps,par%ntemp,nbands)
      call init_synch(comp,par,npix,nmaps)
      call init_dust(comp,par,npix,nmaps)
+     
+     dang_data%fg_map    = 0.0
+     dang_data%temp_amps = 0.0
      !----------------------------------------------------------------------------------------------------------
      !----------------------------------------------------------------------------------------------------------
      ! Read maps
@@ -158,9 +142,6 @@ program dang
         end if
      end do
      write(*,*) ''
-     
-     dang_data%fg_map    = 0.0
-     dang_data%temp_amps = 0.0
 
 
      ! All here and below (to call comp sep) is just for testing purposes!!!
@@ -251,20 +232,22 @@ program dang
 
 contains
   
-  !----------------------------------------------------------------------------------------------------------
-  ! Functions and subroutines
-  !----------------------------------------------------------------------------------------------------------
+  !----------------------------------------------------------------|
+  ! Functions and subroutines                                      |
+  !----------------------------------------------------------------|
   
   subroutine comp_sep
-    !----------------------------------------------------------------------------------------------------------
-    ! Calculation portion
-    !----------------------------------------------------------------------------------------------------------
+    !--------------------------------------------------------------|
+    !                   Calculation portion                        |               
+    !--------------------------------------------------------------|
 
-    do iter = 1, niter
+    do iter = 1, par%ngibbs
 
-       ! ------------ BP SWAP CHUNK ----------------------------------------------------------------$
+       !--------------------- BP SWAP CHUNK -----------------------|
+       ! -- Swap in a different BeyondPlanck map each iteration -- |
+       !-----------------------------------------------------------|
        if (par%bp_swap) then
-          call swap_bp_maps(dang_data,par)!,bp_iter),par%bp_chain_list(chain_num))
+          call swap_bp_maps(dang_data,par)
           write(*,*) ''
           bp_iter = bp_iter + 1
           call convert_maps_bp(par, dang_data)
@@ -279,9 +262,9 @@ contains
           end do
           write(*,*) ''
        end if       
-       ! -------------------------------------------------------------------------------------------------------------------
+       ! --------------------------------------------------------------
        if (par%joint_sample) then
-          call sample_joint_amp(par,dang_data,comp,2,trim(solver))
+          call sample_joint_amp(par,dang_data,comp,2,trim(par%solver))
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
              do m = 1, size(par%joint_comp)
                 ! Extrapolate foreround solutions
@@ -298,6 +281,7 @@ contains
                 end do
              end do
           end do
+          ! How good is the fit and what are the parameters looking like?
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
              call compute_chisq(k,chisq,par%mode)
              if (rank == master) then
@@ -305,16 +289,17 @@ contains
                    write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
                         iter, " - chisq: " , chisq, " - A_s: ",&
                         dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                        mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
+                        mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', &
+                        dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
                    write(*,fmt='(a)') '---------------------------------------------'
                 end if
              end if
           end do
        end if
 
-       ! -------------------------------------------------------------------------------------------------------------------
+       ! ------------------------------------------------------------------------------------------
        ! Sample amplitudes
-       ! -------------------------------------------------------------------------------------------------------------------
+       ! ------------------------------------------------------------------------------------------
        do n = 1, par%ncomp
           if (par%fg_samp_amp(n)) then
              do k = par%pol_type(1), par%pol_type(size(par%pol_type))
@@ -332,9 +317,9 @@ contains
        !    call extrapolate_template(par,dang_data,comp,n,k)
        ! end do
 
-       ! -------------------------------------------------------------------------------------------------------------------
+       ! ------------------------------------------------------------------------------------------
        ! Sample spectral parameters
-       ! -------------------------------------------------------------------------------------------------------------------
+       ! ------------------------------------------------------------------------------------------
        do n = 1, par%ncomp
           if (par%fg_samp_inc(n,1)) then
              if (par%fg_spec_joint(n,1)) then
@@ -365,7 +350,7 @@ contains
              end do
           end if
        end do
-       ! -------------------------------------------------------------------------------------------------------------------
+       ! ------------------------------------------------------------------------------------------
        dang_data%res_map = dang_data%sig_map
        do k = par%pol_type(1), par%pol_type(size(par%pol_type))
           do j = 1, nfgs
@@ -385,7 +370,7 @@ contains
              call write_data(par%mode)
           end if
        end do
-       if (mod(iter,output_iter) .EQ. 0) then
+       if (mod(iter,par%iter_out) .EQ. 0) then
           call write_maps(par%mode)
        end if
        write(*,*) ''
@@ -393,11 +378,11 @@ contains
     call mpi_finalize(ierr)
   end subroutine comp_sep
 
+  ! ------------------------------------------------------------------------------------------
   ! Specifically for the hi_fitting mode
-  ! ------------------------------------
-  ! 
+  ! ------------------------------------------------------------------------------------------ 
   subroutine hi_fit
-    do iter = 1, niter
+    do iter = 1, par%ngibbs
 
        if (iter > 1) then
           write(*,*) 'Calc HI gain offset'
@@ -451,7 +436,7 @@ contains
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
           end if
-          if (mod(iter,output_iter) .EQ. 0) then
+          if (mod(iter,par%iter_out) .EQ. 0) then
              call write_maps(par%mode)
           end if
           call write_data(par%mode)
@@ -467,16 +452,17 @@ contains
     real(dp), dimension(0:npix-1,nmaps) :: map
     real(dp)                            :: s, signal
     integer(i4b)                        :: n, mn
-    
+    character(len=128)                  :: title
+
     write(*,*) 'Output data maps'
     
     if (trim(mode) == 'comp_sep') then
        
        write(iter_str, '(i0.5)') iter
-       if (output_fg .eqv. .true.) then
+       if (par%output_fg .eqv. .true.) then
           do j = 1, nbands
              do n = 1, par%ntemp
-                title = trim(direct) // trim(par%dat_label(j)) //'_'// trim(par%temp_label(n)) //&
+                title = trim(par%outdir) // trim(par%dat_label(j)) //'_'// trim(par%temp_label(n)) //&
                      '_k' // trim(iter_str) // '.fits'
                 map(:,:)   = dang_data%fg_map(:,:,j,n+par%ncomp)
                 do i = 0, npix-1
@@ -487,7 +473,7 @@ contains
                 call write_result_map(trim(title), nside, ordering, header, map)
              end do
              do n = 1, par%ncomp
-                title = trim(direct) // trim(par%dat_label(j)) //'_'// trim(par%fg_label(n)) //&
+                title = trim(par%outdir) // trim(par%dat_label(j)) //'_'// trim(par%fg_label(n)) //&
                      '_amplitude_k' // trim(iter_str) // '.fits'
                 map(:,:)   = dang_data%fg_map(:,:,j,n)
                 do i = 0, npix-1
@@ -500,7 +486,7 @@ contains
           end do
        else 
           do n = 1, par%ncomp
-             title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(n))) //'_'// trim(par%fg_label(n)) //&
+             title = trim(par%outdir) // trim(par%dat_label(par%fg_ref_loc(n))) //'_'// trim(par%fg_label(n)) //&
                   '_amplitude_k' // trim(iter_str) // '.fits'
              map(:,:)   = dang_data%fg_map(:,:,par%fg_ref_loc(n),n)
              do i = 0, npix-1
@@ -512,7 +498,7 @@ contains
           end do
        end if
        do j = 1, nbands
-          title = trim(direct) // trim(par%dat_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
+          title = trim(par%outdir) // trim(par%dat_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
           map(:,:)   = dang_data%res_map(:,:,j)
           do i = 0, npix-1
              if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
@@ -521,7 +507,7 @@ contains
           end do
           call write_result_map(trim(title), nside, ordering, header, map)
        end do
-       title = trim(direct) // 'synch_beta_k' // trim(iter_str) // '.fits'
+       title = trim(par%outdir) // 'synch_beta_k' // trim(iter_str) // '.fits'
        map(:,:)   = comp%beta_s(:,:)
        do i = 0, npix-1
           if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
@@ -543,7 +529,7 @@ contains
           end do
        end do
        dang_data%chi_map(:,:) = dang_data%chi_map(:,:)/(nbands+nfgs)
-       title = trim(direct) // 'chisq_k'// trim(iter_str) // '.fits'
+       title = trim(par%outdir) // 'chisq_k'// trim(iter_str) // '.fits'
        map(:,:)   = dang_data%chi_map(:,:)
        do i = 0, npix-1
           if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
@@ -557,7 +543,7 @@ contains
        n = 1
        do j = 1, par%numband
           if (par%band_inc(j)) then
-             title = trim(direct) // trim(par%dat_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
+             title = trim(par%outdir) // trim(par%dat_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
              map(:,1)   = comp%HI_amps(n)*comp%HI(:,1)
              do i = 0, npix-1
                 if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
@@ -572,7 +558,7 @@ contains
        n = 1
        do j = 1, par%numband
           if (par%band_inc(j)) then
-             title = trim(direct) // trim(par%dat_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
+             title = trim(par%outdir) // trim(par%dat_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
              map(:,:)   = dang_data%res_map(:,:,n)
              do i = 0, npix-1
                 if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
@@ -583,7 +569,7 @@ contains
              n = n + 1
           end if
        end do
-       title = trim(direct) // 'T_d_k'// trim(iter_str) // '.fits'
+       title = trim(par%outdir) // 'T_d_k'// trim(iter_str) // '.fits'
        map(:,1)   = comp%T_d(:,1)
        do i = 0, npix-1
           if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
@@ -599,7 +585,7 @@ contains
           end do
        end do
        dang_data%chi_map(:,1) = dang_data%chi_map(:,1)/(nbands+nfgs)
-       title = trim(direct) // 'chisq_k' // trim(iter_str) // '.fits'
+       title = trim(par%outdir) // 'chisq_k' // trim(iter_str) // '.fits'
        map(:,1)   = dang_data%chi_map(:,1)
        do i = 0, npix-1
           if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
@@ -616,10 +602,11 @@ contains
     implicit none
     character(len=16), intent(in) :: mode
     character(len=2)              :: temp_n
-    
+    character(len=128)            :: title
+
     if (trim(mode) == 'comp_sep') then
        
-       title = trim(direct) // 'pixel_23000_A_d_' // trim(tqu(k)) // '.dat'
+       title = trim(par%outdir) // 'pixel_23000_A_d_' // trim(tqu(k)) // '.dat'
        inquire(file=title,exist=exist)
        if (exist) then
           open(30,file=title, status="old",position="append", action="write")
@@ -630,7 +617,7 @@ contains
        write(30,*) dang_data%fg_map(23000,k,par%fg_ref_loc(1),2)
        close(30)
        
-       title = trim(direct) // 'pixel_23000_A_s_' // trim(tqu(k)) // '.dat'
+       title = trim(par%outdir) // 'pixel_23000_A_s_' // trim(tqu(k)) // '.dat'
        inquire(file=title,exist=exist)
        if (exist) then
           open(31,file=title, status="old",position="append", action="write")
@@ -640,7 +627,7 @@ contains
        write(31,*) dang_data%fg_map(23000,k,par%fg_ref_loc(1),1)
        close(31)
        
-       title = trim(direct) // 'pixel_23000_beta_s_' // trim(tqu(k)) // '.dat'
+       title = trim(par%outdir) // 'pixel_23000_beta_s_' // trim(tqu(k)) // '.dat'
        inquire(file=title,exist=exist)
        if (exist) then
           open(32,file=title, status="old",position="append", action="write")
@@ -650,7 +637,7 @@ contains
        write(32,*) comp%beta_s(23000,k)
        close(32)
        
-       title = trim(direct) // 'total_chisq_' // trim(tqu(k)) // '.dat'
+       title = trim(par%outdir) // 'total_chisq_' // trim(tqu(k)) // '.dat'
        inquire(file=title,exist=exist)
        if (exist) then
           open(33,file=title, status="old",position="append", action="write")
@@ -662,7 +649,7 @@ contains
        close(33)
        
        do i = 1, par%ntemp
-          title = trim(direct) //  trim(par%temp_label(i)) // '_' //trim(tqu(k)) // '_amplitudes.dat'
+          title = trim(par%outdir) //  trim(par%temp_label(i)) // '_' //trim(tqu(k)) // '_amplitudes.dat'
           inquire(file=title,exist=exist)
           if (exist) then
              open(34,file=title, status="old", &
@@ -675,7 +662,7 @@ contains
        end do
        
     else if (trim(mode) == 'hi_fit') then
-       title = trim(direct) // 'HI_amplitudes.dat'
+       title = trim(par%outdir) // 'HI_amplitudes.dat'
        inquire(file=title,exist=exist)
        if (exist) then
           open(35,file=title,status="old",position="append",action="write") 
@@ -685,7 +672,7 @@ contains
        write(35,'(10(E17.8))') comp%HI_amps
        close(35)
        
-       title = trim(direct)//'HI_chisq.dat'
+       title = trim(par%outdir)//'HI_chisq.dat'
        inquire(file=title,exist=exist)
        if (exist) then
           open(36,file=title,status="old",position="append",action="write") 
@@ -696,7 +683,7 @@ contains
        write(36,'(E17.8)') chisq
        close(36)
 
-       ! title = trim(direct)//'band_gains.dat'
+       ! title = trim(par%outdir)//'band_gains.dat'
        ! inquire(file=title,exist=exist)
        ! if (exist) then
        !    open(37,file=title,status="old",position="append",action="write") 
@@ -707,7 +694,7 @@ contains
        ! write(37,"(8(E16.4))") dang_data%gain
        ! close(37)
 
-       ! title = trim(direct)//'band_offsets.dat'
+       ! title = trim(par%outdir)//'band_offsets.dat'
        ! inquire(file=title,exist=exist)
        ! if (exist) then
        !    open(38,file=title,status="old",position="append",action="write") 
@@ -745,7 +732,6 @@ contains
           end do
        end do
        chisq = chisq/(nump*(nbands-npar))
-       ! chisq = chisq/(nump*(nbands-1))
        
     else if (trim(mode) == 'hi_fit') then
        chisq = 0.d0
@@ -757,7 +743,7 @@ contains
              chisq = chisq + (dang_data%sig_map(i,map_n,j)-s)**2.d0/(dang_data%rms_map(i,map_n,j)**2.d0)
           end do
        end do
-       chisq = chisq/(n2fit+1)
+       chisq = chisq/(nump*(nbands-2))
     end if
     
   end subroutine compute_chisq

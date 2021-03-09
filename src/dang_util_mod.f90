@@ -15,6 +15,7 @@ module dang_util_mod
   real(dp)           :: t1, t2, t3
   real(dp)           :: nullval
   real(dp)           :: missval = -1.6375d30
+  real(dp)           :: chisq
   integer(i4b)       :: ierr, rank, numprocs
   integer(i4b)       :: nbands, npix, nmaps, nside, nfgs, npar
   integer(i4b)       :: iter, niter, ordering, nlheader
@@ -30,7 +31,7 @@ module dang_util_mod
   character(len=80), dimension(3)   :: tqu
   
   public    :: npix, nbands, nmaps, ordering, header, h, c, k_B, T_CMB
-  public    :: iter, iter_str
+  public    :: iter, iter_str, chisq
 
 contains 
   
