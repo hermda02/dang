@@ -36,17 +36,14 @@ program dang
   integer(i4b)       :: output_iter, bp_iter
   logical(lgt)       :: test, output_fg
   
-  character(len=128) :: template_file_01, template_file_02, mask_file, arg1
-  character(len=128) :: template_file_03, template_file_04
   character(len=128) :: mapfile, title, direct
   
   real(dp), allocatable, dimension(:,:,:,:)    :: fg_map
   real(dp), allocatable, dimension(:,:,:)      :: maps, rmss, model, res
   real(dp), allocatable, dimension(:,:,:)      :: synchonly
   real(dp), allocatable, dimension(:,:)        :: map, rms
-  real(dp), allocatable, dimension(:,:)        :: mask, HI
-  real(dp), allocatable, dimension(:)          :: temp_norm_01, temp_norm_02
-  real(dp)                                     :: chisq, T_d_mean, s
+  real(dp), allocatable, dimension(:,:)        :: mask
+  real(dp)                                     :: chisq, s
   character(len=80), allocatable, dimension(:) :: joint_poltype
   character(len=10)                            :: solver
   real(dp), allocatable, dimension(:,:)        :: mat_l, mat_u
@@ -78,7 +75,6 @@ program dang
   dang_data%npix    = nside2npix(nside) 
   npix              = dang_data%npix
   nbands            = par%numinc
-  ! nbands            = par%numband
   nfgs              = par%ncomp+par%ntemp
   npar              = 3
   nump              = 0
@@ -177,9 +173,9 @@ program dang
      ! dang_data%temp_amps(5,:,1) = 0.20367266*dang_data%temp_norm(:,1)
 
      ! ! 0.50 sim
-     ! dang_data%temp_amps(1,:,1) = 0.21938180*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(2,:,1) = 0.10613910*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(3,:,1) = 0.07796524*dang_data%temp_norm(:,1)
+     dang_data%temp_amps(1,:,1) = 0.20019717*dang_data%temp_norm(:,1)
+     dang_data%temp_amps(2,:,1) = 0.0709024475*dang_data%temp_norm(:,1)
+     dang_data%temp_amps(3,:,1) = 0.0136504706*dang_data%temp_norm(:,1)
      dang_data%temp_amps(4,:,1) = 7.42349435d-4*dang_data%temp_norm(:,1)
      dang_data%temp_amps(5,:,1) = 3.57833056d-4*dang_data%temp_norm(:,1)
  
@@ -197,11 +193,21 @@ program dang
            do j = 1, nbands
               if (.not. par%temp_corr(1,j)) then
                  dang_data%fg_map(i,k,j,par%ncomp+1) = dang_data%temp_amps(j,k,1)*dang_data%temps(i,k,1)
-                 dang_data%sig_map(i,k,j) = dang_data%sig_map(i,k,j) - dang_data%fg_map(i,k,j,par%ncomp+1)
+                 ! dang_data%sig_map(i,k,j) = dang_data%sig_map(i,k,j) - dang_data%fg_map(i,k,j,par%ncomp+1)
               end if
            end do
         end do
      end do
+
+     ! write(*,*) dang_data%temp_amps(:,2,1)
+
+     ! write(*,*) '-------------'
+
+     ! write(*,*) dang_data%sig_map(23000,2,1)
+     ! write(*,*) dang_data%temps(23000,2,1)
+     ! write(*,*) dang_data%fg_map(23000,2,1,par%ncomp+1)
+
+
      !----------------------------------------------------------------------------------------------------------
 
      call comp_sep
@@ -368,6 +374,8 @@ contains
           do i = 1, par%ntemp
              synchonly(:,:,:) = dang_data%sig_map(:,:,:)-dang_data%fg_map(:,:,:,i+1)
           end do
+          ! call write_result_map(trim(direct)//'synchonly.fits',nside,ordering,header,synchonly(:,:,par%fg_ref_loc(1)))
+          ! stop
           call sample_index(par,dang_data,comp,synchonly,par%fg_samp_nside(1,1),1,-1)
           do i = 0, npix-1
              do j = 1, nbands
@@ -772,6 +780,7 @@ contains
           end do
        end do
        chisq = chisq/(nump*(nbands-npar))
+       ! chisq = chisq/(nump*(nbands-1))
        
     else if (trim(mode) == 'hi_fit') then
        chisq = 0.d0

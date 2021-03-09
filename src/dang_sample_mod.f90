@@ -407,23 +407,32 @@ contains
         real(dp), allocatable, dimension(:,:)                  :: chisq_map
         character(len=3)  :: l_str
 
-        naccept = 0.0
-
         !------------------------------------------------------------------------
         ! Spectral index sampler, using the Metropolis approach.
         !------------------------------------------------------------------------
         ! map2fit is the data-(other foregrounds) map which we are fitting to
-        map2fit = data_in
-        cov     = dat%rms_map*dat%rms_map
-        mask    = dat%masks
+        do i = 0, npix-1
+           do j = 1, nbands
+              do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                 cov(i,k,j) = dat%rms_map(i,k,j)**2.d0
+                 map2fit(i,k,j) = data_in(i,k,j)
+              end do
+           end do
+           mask(i,:) = dat%masks(i,:)
+           if (mask(i,self%pol_type(1)) == 0.d0) then
+              mask(i,:) = missval
+           end if
+        end do
 
         !------------------------------------------------------------------------
         ! Load priors for the appropriate spectrum
         !------------------------------------------------------------------------
         if (trim(self%fg_label(ind)) == 'synch') then 
-            indx     = comp%beta_s
+           write(*,*) "Fitting for synchrotron"
+           indx     = comp%beta_s
         else if (trim(self%fg_label(ind)) == 'dust') then 
-            indx     = comp%beta_d
+           write(*,*) "Fitting for thermal dust"
+           indx     = comp%beta_d
         end if
 
         if (index(self%fg_ind_region(ind,1),'pix') /= 0) then
@@ -471,13 +480,7 @@ contains
            allocate(indx_low(0:npix2-1,nmaps),cov_low(0:npix2-1,nmaps,nbands))
            allocate(indx_sample_low(0:npix2-1))
            allocate(mask_low(0:npix2-1,nmaps))
-           
-           do i = 0, npix-1
-              if (mask(i,self%pol_type(1)) == 0.d0) then
-                 mask(i,:) = missval
-              end if
-           end do
-                      
+                                 
            if (nside1 /= nside2) then 
               if (ordering == 1) then
                  call udgrade_ring(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
@@ -726,56 +729,56 @@ contains
         !------------------|
         else
 
-           ! time1 = mpi_wtime()
+           time1 = mpi_wtime()
 
-           ! if (.true.) then
+           if (.true.) then
 
-           !    write(*,*) iter
-           !    write(iter_str, '(i0.5)') iter
+              write(*,*) iter
+              write(iter_str, '(i0.5)') iter
 
-           !    allocate(beta_grid(100))
-           !    allocate(like_grid(100))
+              allocate(beta_grid(100))
+              allocate(like_grid(100))
               
-           !    do l = 1, 100
-           !       beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/100
-           !       write(*,*) l, beta_grid(l)
-           !       sol       = beta_grid(l)
-           !       !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
-           !       a         = 0.d0
-           !       local_a   = 0.d0
-           !       !$OMP DO SCHEDULE(static)
-           !       do i = 0, npix-1
-           !          if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
-           !             cycle
-           !          end if
+              do l = 1, 100
+                 beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/100
+                 write(*,*) l, beta_grid(l)
+                 sol       = beta_grid(l)
+                 !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
+                 a         = 0.d0
+                 local_a   = 0.d0
+                 !$OMP DO SCHEDULE(static)
+                 do i = 0, npix-1
+                    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
+                       cycle
+                    end if
                     
-           !          ! Chi-square from the most recent Gibbs chain update
-           !          do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-           !             do j = 1, nbands
-           !                local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-           !                     - map2fit(i,k,j))**2.d0)/cov(i,k,j)
-           !             end do
-           !          end do
-           !       end do
-           !       !$OMP END DO
-           !       !$OMP CRITICAL
-           !       a = a + local_a
-           !       !$OMP END CRITICAL
-           !       !$OMP END PARALLEL
+                    ! Chi-square from the most recent Gibbs chain update
+                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                       do j = 1, nbands
+                          local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                               - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                       end do
+                    end do
+                 end do
+                 !$OMP END DO
+                 !$OMP CRITICAL
+                 a = a + local_a
+                 !$OMP END CRITICAL
+                 !$OMP END PARALLEL
            
-           !       title = trim(self%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
-           !       inquire(file=title,exist=exist)
-           !       if (exist) then
-           !          open(12,file=title, status="old",position="append", action="write")
-           !       else
-           !          open(12,file=title, status="new", action="write")
-           !          write(12,*)  
-           !       endif
-           !       write(12,*) beta_grid(l), -0.5d0*a
-           !       close(12)
-           !    end do
-           ! end if
-           ! indx_sample(:) = -3.1d0
+                 title = trim(self%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
+                 inquire(file=title,exist=exist)
+                 if (exist) then
+                    open(12,file=title, status="old",position="append", action="write")
+                 else
+                    open(12,file=title, status="new", action="write")
+                    write(12,*)  
+                 endif
+                 write(12,*) beta_grid(l), -0.5d0*a
+                 close(12)
+              end do
+           end if
+           indx_sample(:) = -3.1d0
 
            !----------------------------|
            ! Sample for Q and U jointly |
@@ -783,13 +786,15 @@ contains
            if (map_n == -1) then
               chisq_map   = 0.d0
               indx_sample = indx(:,self%pol_type(1))
-              sol       = indx(0,self%pol_type(1))
-              sam       = sol
+              sol         = indx(0,self%pol_type(1))
+              sam         = sol
+
               ! First evaluate likelihood from previous sample
               !-----------------------------------------------
+
               !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
-              a         = 0.d0
-              local_a   = 0.d0
+              a           = 0.d0
+              local_a     = 0.d0
               !$OMP DO SCHEDULE(static)
               do i = 0, npix-1
                  if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
@@ -906,7 +911,6 @@ contains
                     local_a = local_a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
                          - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
                  end do
-                 end do
               end do
               !$OMP END DO
               !$OMP CRITICAL
@@ -947,7 +951,6 @@ contains
                     do j = 1, nbands
                        local_b = local_b + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
                             - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
-                       end do
                     end do
                  end do
                  !$OMP END DO

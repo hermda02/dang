@@ -90,7 +90,7 @@ contains
     planck  = ((2.d0*h*fre**3.d0)/(c**2.d0))*(1.d0/(exp((h*fre)/(k_B*T))-1))
   end function planck
   
-  function compute_spectrum(param, self, ind, freq, pix, mapn, spec)
+  function compute_spectrum(param, self, ind, freq, pix, mapn, index)
     ! always computed in RJ units
     
     implicit none
@@ -100,13 +100,13 @@ contains
     integer(i4b),       intent(in) :: ind
     integer(i4b),       intent(in) :: pix
     integer(i4b),       intent(in) :: mapn
-    real(dp), optional             :: spec
+    real(dp), optional             :: index
     real(dp)                       :: z, compute_spectrum
     
     !if (trim(param%fg_label(ind)) == 'power-law') then
     if (ind == 1) then
-      if (present(spec)) then
-          compute_spectrum = (freq/param%fg_nu_ref(ind))**spec
+      if (present(index)) then
+          compute_spectrum = (freq/param%fg_nu_ref(ind))**index
        else 
           compute_spectrum = (freq/param%fg_nu_ref(ind))**self%beta_s(pix,mapn)
        end if
