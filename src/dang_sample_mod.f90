@@ -48,8 +48,6 @@ contains
     real(dp)                                   :: t6, t7
     
     if (rank == master) then
-       !write(*,fmt='(a)') 'Starting joint sampling for synch and dust_template.'
-       !write(*,fmt='(a)') 'Pol_type = ', trim(poltype(:))
        t1 = mpi_wtime()
     end if
     
@@ -249,9 +247,6 @@ contains
                          dat%temp_amps(j,map_n,n)   = b(w+l)
                          dat%temp_amps(j,map_n+1,n) = b(w+l)
                          l = l + 1
-                         ! else
-                         !    dat%temp_amps(j,map_n,n)   = 0.d0
-                         !    dat%temp_amps(j,map_n+1,n)   = 0.d0
                       end if
                    end do
                 end do
@@ -878,7 +873,6 @@ contains
              else if (trim(self%ml_mode) == 'sample') then
                 call RANDOM_NUMBER(num)
                 if (ratio > num) then
-                   ! write(*,fmt='(a,f8.4,E12.4,E12.4,E12.4,f8.4)') 'Accepted ', t, like_old, like_new, diff, ratio 
                    sam      = t
                    c        = b
                    like_old = like_new

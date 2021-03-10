@@ -67,21 +67,18 @@ program dang
   nump              = 0
   nlheader          = size(header)
   !----------------------------------------------------------------------------------------------------------
-  !----------------------------------------------------------------------------------------------------------
   ! Array allocation - dummy maps used for loading in data
   allocate(mask(0:npix-1,1))
   allocate(map(0:npix-1,nmaps))
   allocate(rms(0:npix-1,nmaps))
   !----------------------------------------------------------------------------------------------------------
-  !----------------------------------------------------------------------------------------------------------
-  !----------------------------------------------------------------------------------------------------------
-  ! Either do component separation, or carry out the HI fit
 
   call RANDOM_SEED()
 
-  ! Initialize data and components
+  ! Either do component separation, or carry out the HI fit
+  !------------------------------------------------------------------------------------------------
   if (trim(par%mode) == 'comp_sep') then
-     ! Joint Sampler Info
+     ! Initialize data and components
      !----------------------------------------------------------------------------------------------------------
      call init_fg_map(dang_data,npix,nmaps,nbands,nfgs)
      call init_data_maps(dang_data,npix,nmaps,nbands)
@@ -143,42 +140,12 @@ program dang
      end do
      write(*,*) ''
 
-
-     ! All here and below (to call comp sep) is just for testing purposes!!!
-     !----------------------------------------------------------------------------------------------------------
-     ! ! 1.00 sim
-     ! dang_data%temp_amps(1,:,1) = 0.41957897*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(2,:,1) = 0.17704154*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(3,:,1) = 0.09161571*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(4,:,1) = 0.12402716*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(5,:,1) = 0.20367266*dang_data%temp_norm(:,1)
-
-     ! ! 0.50 sim
-     ! dang_data%temp_amps(1,:,1) = 0.20019717*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(2,:,1) = 0.0709024475*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(3,:,1) = 0.0136504706*dang_data%temp_norm(:,1)
-     dang_data%temp_amps(4,:,1) = 7.42349435d-4*dang_data%temp_norm(:,1)
-     dang_data%temp_amps(5,:,1) = 3.57833056d-4*dang_data%temp_norm(:,1)
- 
-     ! dang_data%temp_amps(1,:,1) = 0.196d-2*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(2,:,1) = 0.475d-2*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(3,:,1) = 0.000d0*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(4,:,1) = 0.283d-2*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(5,:,1) = -0.104d-01*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(6,:,1) = 0.000d0*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(7,:,1) = 0.110d-1*dang_data%temp_norm(:,1)
-
-     ! Extrapolating solved for bands for ze cleaning
-     do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-        call extrapolate_template(par,dang_data,comp,1,k)
-     end do
-
-
-     !----------------------------------------------------------------------------------------------------------
-
      call comp_sep
   
+  !------------------------------------------------------------------------------------------------
   else if (trim(par%mode) == 'hi_fit') then
+     ! Initialize data and components
+     !----------------------------------------------------------------------------------------------------------
      call init_data_maps(dang_data,npix,nmaps,nbands)
      call init_mask_maps(dang_data,npix,nmaps)
      call init_template(dang_data,npix,nmaps,par%ntemp,nbands)
@@ -393,13 +360,7 @@ contains
              if (par%fit_offs(j)) then
                 call sample_band_offset(par, dang_data, comp, 1, j, 1)
              end if
-             ! if (par%fit_gain(j) .and. par%fit_offs(j)) then
-             !    call calc_HI_gain_offset(par, dang_data, comp, 1, 1, j)
-             ! end if
           end do
-          ! write(*,"(12x,8(A16))") par%dat_label
-          ! write(*,"(a8,8(E16.4))") 'Gain: ',dang_data%gain
-          ! write(*,"(a8,8(E16.4))") 'Offset: ',dang_data%offset
        end if
 
        write(*,*) 'template_fit'
@@ -682,31 +643,7 @@ contains
        call compute_chisq(1,chisq,mode)
        write(36,'(E17.8)') chisq
        close(36)
-
-       ! title = trim(par%outdir)//'band_gains.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(37,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(37,file=title,status="new",action="write")
-       !    write(37,"(3x,8(A16))") par%dat_label
-       ! end if
-       ! write(37,"(8(E16.4))") dang_data%gain
-       ! close(37)
-
-       ! title = trim(par%outdir)//'band_offsets.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(38,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(38,file=title,status="new",action="write")
-       !    write(38,"(3x,8(A16))") par%dat_label
-       ! end if
-       ! write(38,"(8(E16.4))") dang_data%offset
-       ! close(38)
-       
     end if
-    
   end subroutine write_data
   
   subroutine compute_chisq(map_n,chisq,mode)
