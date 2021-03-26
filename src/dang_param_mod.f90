@@ -52,6 +52,7 @@ module dang_param_mod
         character(len=64),  allocatable, dimension(:)     :: joint_comps    ! List of components in joint sampling group
         character(len=512), allocatable, dimension(:)     :: temp_file      ! Template Filename
         character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
+        logical(lgt),       allocatable, dimension(:)     :: temp_sample    ! Do we sample this template
         logical(lgt),       allocatable, dimension(:)     :: dust_corr      ! Storing which bands should be dust corrected
         logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates fit
         integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
@@ -66,6 +67,7 @@ module dang_param_mod
         character(len=512), allocatable, dimension(:)     :: joint_comp     ! Joint sampler components
         character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
         character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral index sampler (pixel/fullsky)
+        character(len=512), allocatable, dimension(:,:)   :: fg_prior_type  ! Fg spectral parameter prior type (Gaussian/uniform/jeffreys)
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
         character(len=512), allocatable, dimension(:,:)   :: fg_spec_file    ! Fg spectral parameter input map
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
@@ -74,6 +76,7 @@ module dang_param_mod
         integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
+  
 
         real(dp),           allocatable, dimension(:,:)   :: mbb_gauss      ! MBB Gaussian sampling params for thermal dust subtraction
 
@@ -503,10 +506,12 @@ contains
            allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
            allocate(par%fg_spec_file(n,2))
            allocate(par%fg_ind_region(n,2))
+           allocate(par%fg_prior_type(n,2))
            allocate(par%fg_init(n,2))
            par%temp_nfit = 0
 
            allocate(par%temp_file(n2))
+           allocate(par%temp_sample(n2))
            allocate(par%temp_nfit(n2))
            allocate(par%temp_label(n2))
            allocate(par%temp_corr(n2,par%numband))
@@ -517,6 +522,7 @@ contains
               call int2string(i, itext)
               call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext, len_itext=len_itext, par_string=par%temp_file(i))
               call get_parameter_hashtable(htbl, 'TEMPLATE_LABEL'//itext, len_itext=len_itext, par_string=par%temp_label(i))
+              call get_parameter_hashtable(htbl, 'TEMPLATE_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%temp_sample(i))
               do j = 1, par%numband
                  call int2string(j,jtext)
                  call get_parameter_hashtable(htbl, 'TEMPLATE'//trim(itext)//'_FIT'//jtext,&
@@ -564,6 +570,8 @@ contains
                       par_string=par%fg_spec_file(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_REGION'//itext, len_itext=len_itext,&
                       par_string=par%fg_ind_region(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR'//itext, len_itext=len_itext,&
+                      par_string=par%fg_prior_type(i,1))
               else if (trim(par%fg_type(i)) == 'mbb') then
                  call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                       par_dp=par%fg_gauss(i,1,1))

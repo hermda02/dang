@@ -13,9 +13,6 @@ module dang_sample_mod
   private :: i, j, k, l
   integer(i4b) :: i, j, k, l
   
-  logical(lgt) :: exist
-  
-  
 contains
   
   subroutine sample_joint_amp(self, dat, compo, map_n, method)
@@ -40,7 +37,7 @@ contains
     integer(i4b),              intent(in)      :: map_n
     character(len=*),          intent(in)      :: method
     real(dp), allocatable, dimension(:,:,:)    :: map2fit
-    real(dp), allocatable, dimension(:)        :: b, c
+    real(dp), allocatable, dimension(:)        :: b, c, d, q
     character(len=256)                         :: title
     integer(i4b)                               :: x, y, z, w, l, m, n
     integer(i4b)                               :: nfit1, nfit2, nfit3, nfit4
@@ -103,7 +100,7 @@ contains
                          c(i) = 0.d0
                          cycle
                       else
-                         c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
+                         c(i) = c(i) +  (map2fit(i-1,map_n,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n))/(dat%rms_map(i-1,map_n,j)**2.d0)
                       end if
                    end do
                 end do
@@ -116,8 +113,8 @@ contains
                          c(x+i) = 0.d0
                          cycle
                       else                           
-                         c(i)   = c(i)   + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
-                         c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*map2fit(i-1,map_n+1,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1)
+                         c(i)   = c(i)   + (map2fit(i-1,map_n,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n))/(dat%rms_map(i-1,map_n,j)**2.d0)
+                         c(x+i) = c(x+i) + (map2fit(i-1,map_n+1,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1))/(dat%rms_map(i-1,map_n+1,j)**2.d0)
                       end if
                    end do
                 end do
@@ -160,12 +157,12 @@ contains
           end if
        end do
     end do
-    
-    ! ^^ Above has been double-checked. RHS is correctly calculated.
+
+    ! write(*,*) c
     
     ! Computation
     if (trim(method) == 'cholesky') then
-       write(*,*) 'Currently deprecated.'
+       write(*,*) 'method: cholesky - Currently deprecated.'
        stop
        !mat_u(:,:)        = 0.d0
        !if (rank == master) write(*,fmt='(a)') 'Joint sampling using Cholesky Decomposition.'
@@ -175,15 +172,9 @@ contains
        !call backward_sub(mat_u,b,d)
     else if (trim(method) == 'cg') then
        if (rank == master) write(*,*) 'Joint sampling using CG.'
-       ! Optimize
-       !call compute_cg(A,b,c,y,nnz_a,self%cg_iter,self%cg_converge)
-       !call compute_cg_precond(A,b,c,y,nnz_a,self%cg_iter,self%cg_converge)
-       !call compute_cg_vec(b,c,y,self,dat,compo)
-       ! Sample
-       !call sample_cg(A,b,c,2*npix,nnz_a,self%cg_iter,self%cg_converge,self,dat,compo)
-       call sample_cg_vec(b,c,self,dat,compo)
+       call sample_cg_vec(b,c,self,dat,compo,map_n)
     else if (trim(method) == 'lu') then
-       write(*,*) 'Currently deprecated.'
+       write(*,*) 'method: lu - Currently deprecated.'
        stop
        !mat_u(:,:)        = 0.d0
        if (rank == master) write(*,*) 'Joint sampling using LU Decomp'
@@ -249,9 +240,6 @@ contains
                          dat%temp_amps(j,map_n,n)   = b(w+l)
                          dat%temp_amps(j,map_n+1,n) = b(w+l)
                          l = l + 1
-                         ! else
-                         !    dat%temp_amps(j,map_n,n)   = 0.d0
-                         !    dat%temp_amps(j,map_n+1,n)   = 0.d0
                       end if
                    end do
                 end do
@@ -284,7 +272,7 @@ contains
     deallocate(c)
   end subroutine sample_joint_amp
   
-  subroutine template_fit(self, dat, comp,map_n, temp_num)
+  subroutine template_fit(self, dat, comp, map_n, temp_num)
     !------------------------------------------------------------------------
     ! Simple linear fit of a template to data map with a sampling term
     !------------------------------------------------------------------------
@@ -295,22 +283,50 @@ contains
     type(data)                                             :: dat
     !real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: dat, noise
     real(dp), dimension(0:npix-1,nbands)                   :: cov, nos, map
+    real(dp), allocatable, dimension(:,:,:)                :: map2fit
     integer(i4b),                               intent(in) :: map_n
     integer(i4b), optional,                     intent(in) :: temp_num
     real(dp)                                               :: temp, sum1, sum2, norm
-    
+    integer(i4b)                                           :: i, j, k, n
+
     nos = dat%rms_map(:,map_n,:)
     cov = nos**2.d0
+    allocate(map2fit(0:npix-1,nmaps,nbands))
+    
+    map2fit = dat%sig_map
     
     if (trim(self%mode) == 'comp_sep') then
-       
-       write(*,*) "Template fitting NOT coded for general case yet!"
-       stop
-       !do j = 1, self%numband
-       !   if (self%temp_corr(temp_num,j)) then
-       
-       !   end if
-       !end do
+       write(*,*) "Sampling for template "//trim(self%temp_label(temp_num))//", pol = "//trim(tqu(map_n))//"."
+       do j = 1, self%numinc
+          sum1 = 0.d0
+          sum2 = 0.d0
+          norm = 0.d0
+          temp = 0.d0
+          if (self%temp_corr(temp_num,j)) then
+             ! Remove the other foregrounds from the input data before fitting
+             do n = 1, self%ncomp
+                ! write(*,*) "remove for foreground ", trim(self%fg_label(n)), j
+                map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,n)
+             end do
+             do n = 1, self%ntemp
+                if (n == temp_num) cycle
+                ! write(*,*) "remove for template ", trim(self%temp_label(n))
+                map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,self%ncomp+n)
+             end do
+             ! Calculate template amplitude
+             do i = 0, npix-1
+                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
+                sum1 = sum1 + ((map2fit(i,map_n,j)*dat%temps(i,map_n,temp_num))/cov(i,j))
+                sum2 = sum2 + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
+                norm = norm + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
+             end do
+             if (trim(self%ml_mode) == 'sample') then
+                dat%temp_amps(j,map_n,temp_num) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
+             else if (trim(self%ml_mode) == 'optimize') then
+                dat%temp_amps(j,map_n,temp_num) = sum1/sum2
+             end if
+          end if
+       end do
     else if (trim(self%mode) == 'hi_fit') then
        do j = 1, self%numinc
           sum1 = 0.d0
@@ -327,8 +343,12 @@ contains
                 norm = norm + (temp)**2.d0/cov(i,j)
              end do
           end if
-          comp%HI_amps(j) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
-       end do
+          if (trim(self%ml_mode) == 'sample') then
+             comp%HI_amps(j) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
+          else if (trim(self%ml_mode) == 'optimize') then
+             comp%HI_amps(j) = sum1/sum2
+             end if
+      end do
     end if
     
   end subroutine template_fit
@@ -348,18 +368,18 @@ contains
     real(dp)                                               :: sum1, sum2, spec
     real(dp)                                               :: amp, num, t, sam
     real(dp), dimension(0:npix-1)                          :: norm
-    real(dp), dimension(0:npix-1,nmaps,nbands)             :: cov, map2fit
+    real(dp), dimension(0:npix-1,nbands)                   :: cov, map2fit
     real(dp), dimension(0:npix-1)                          :: sample_spec_amp
     
-    map2fit = dat%sig_map(:,:,:)
+    map2fit = dat%sig_map(:,map_n,:)
     
     do f = 1, nfgs
        if (f /= ind) then
-          map2fit(:,:,:) = map2fit(:,:,:) - dat%fg_map(:,:,:,f)
+          map2fit(:,:) = map2fit(:,:) - dat%fg_map(:,map_n,:,f)
        end if
     end do
     
-    cov = dat%rms_map(:,:,:)**2.d0
+    cov = dat%rms_map(:,map_n,:)**2.d0
     
     do i = 0, npix-1
        sum1    = 0.0d0
@@ -367,11 +387,10 @@ contains
        norm(i) = 0.d0
        do j = 1, nbands
           spec           = compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n)
-          sum1           = sum1 + (map2fit(i,map_n,j)*spec)/cov(i,map_n,j)
-          sum2           = sum2 + (spec)**2.d0/cov(i,map_n,j)
-          norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,map_n,j)
+          sum1           = sum1 + (map2fit(i,j)*spec)/cov(i,j)
+          sum2           = sum2 + (spec)**2.d0/cov(i,j)
+          norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,j)
        end do
-       norm(i)            = norm(i)
        amp                = sum1/sum2
        if (trim(self%ml_mode) == 'sample') then
           sample_spec_amp(i) = amp + rand_normal(0.d0,1.d0)/sqrt(norm(i))
@@ -557,7 +576,7 @@ contains
              !$OMP DO SCHEDULE(static)
              do j = 1, nbands
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                   local_a = local_a + (((fg_map_low(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                   local_a = local_a + (((fg_map_low(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
                         - data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                 end do
              end do
@@ -568,9 +587,19 @@ contains
              !$OMP END PARALLEL
              c = a
              
-             like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
-             
-             s = 1.d0
+             if (self%fg_prior_type(ind,1) == 'gaussian') then
+                like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+             else if (self%fg_prior_type(ind,1) == 'uniform') then
+                like_old = -0.5d0*c
+             else if (self%fg_prior_type(ind,1) == 'jeffreys') then
+                like_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
+             else 
+                write(*,*) "error in param%fg_prior_type"
+                write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
+                stop
+             end if
+
+             s = 0.5d0
              do l = 1, self%nsample
                 ! Every 50 samples check acceptance rate, and adjust scaling factor
                 if (mod(l,50) == 0) then
@@ -596,7 +625,7 @@ contains
                 !$OMP DO SCHEDULE(static)
                 do j = 1, nbands
                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                      local_b = local_b + ((fg_map_low(i,k,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t) &
+                      local_b = local_b + ((fg_map_low(i,k,self%fg_ref_loc(ind))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t) &
                            -data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                    end do
                 end do
@@ -606,7 +635,18 @@ contains
                 !$OMP END CRITICAL
                 !$OMP END PARALLEL
                 
-                like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                if (self%fg_prior_type(ind,1) == 'gaussian') then
+                   like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                else if (self%fg_prior_type(ind,1) == 'uniform') then
+                   like_new = -0.5d0*b
+                else if (self%fg_prior_type(ind,1) == 'jeffreys') then
+                   like_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t, i))
+                else 
+                   write(*,*) "error in param%fg_prior_type"
+                   write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
+                   stop
+                end if
+
                 diff = like_new - like_old
                 ratio = exp(diff)
                 if (trim(self%ml_mode) == 'optimize') then
@@ -632,9 +672,9 @@ contains
              end do
           end do
           
-          !----------------------------|
-          ! Sample for a single poltype|
-          !----------------------------|
+       !----------------------------|
+       ! Sample for a single poltype|
+       !----------------------------|
        else
           do i = 0, npix2-1
              naccept   = 0.d0
@@ -653,7 +693,7 @@ contains
              local_a = 0.d0
              !$OMP DO SCHEDULE(static)
              do j = 1, nbands
-                local_a = local_a + (((fg_map_low(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+                local_a = local_a + (((fg_map_low(i,map_n,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
                      - data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
              end do
              !$OMP END DO
@@ -662,10 +702,20 @@ contains
              !$OMP END CRITICAL
              !$OMP END PARALLEL
              c = a
+
+             if (self%fg_prior_type(ind,1) == 'gaussian') then
+                like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+             else if (self%fg_prior_type(ind,1) == 'uniform') then
+                like_old = -0.5d0*c
+             else if (self%fg_prior_type(ind,1) == 'jeffreys') then
+                like_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
+             else 
+                write(*,*) "error in param%fg_prior_type"
+                write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
+                stop
+             end if
              
-             like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
-             
-             s = 1.d0
+             s = 0.5d0
              do l = 1, self%nsample
                 ! Every 50 samples check acceptance rate, and adjust scaling factor
                 if (mod(l,50) == 0) then
@@ -690,7 +740,7 @@ contains
                 local_b   = 0.d0
                 !$OMP DO SCHEDULE(static)
                 do j = 1, nbands
-                   local_b = local_b + ((fg_map_low(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t) &
+                   local_b = local_b + ((fg_map_low(i,map_n,self%fg_ref_loc(ind))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t) &
                         -data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
                 end do
                 !$OMP END DO
@@ -700,6 +750,20 @@ contains
                 !$OMP END PARALLEL
                 
                 like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+
+                if (self%fg_prior_type(ind,1) == 'gaussian') then
+                   like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                else if (self%fg_prior_type(ind,1) == 'uniform') then
+                   like_new = -0.5d0*b
+                else if (self%fg_prior_type(ind,1) == 'jeffreys') then
+                   like_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t, i))
+                else 
+                   write(*,*) "error in param%fg_prior_type"
+                   write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
+                   stop
+                end if
+
+
                 diff = like_new - like_old
                 ratio = exp(diff)
                 if (trim(self%ml_mode) == 'optimize') then
@@ -734,10 +798,10 @@ contains
        else
           indx_sample = indx_sample_low
        end if
-       
-       !------------------|
-       ! Full sky sampler |
-       !------------------|
+      
+    !------------------|
+    ! Full sky sampler |
+    !------------------|
     else
        
        time1 = mpi_wtime()
@@ -754,10 +818,10 @@ contains
              beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/100
              write(*,*) l, beta_grid(l)
              sol       = beta_grid(l)
-             !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
+             !!$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
              a         = 0.d0
              local_a   = 0.d0
-             !$OMP DO SCHEDULE(static)
+             !!$OMP DO SCHEDULE(static)
              do i = 0, npix-1
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
                    cycle
@@ -766,16 +830,18 @@ contains
                 ! Chi-square from the most recent Gibbs chain update
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
                    do j = 1, nbands
-                      local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                      a = a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                      ! local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                      !      - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                    end do
                 end do
              end do
-             !$OMP END DO
-             !$OMP CRITICAL
-             a = a + local_a
-             !$OMP END CRITICAL
-             !$OMP END PARALLEL
+             !!$OMP END DO
+             !!$OMP CRITICAL
+             ! a = a + local_a
+             !!$OMP END CRITICAL
+             !!$OMP END PARALLEL
              
              title = trim(self%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
              inquire(file=title,exist=exist)
@@ -795,6 +861,8 @@ contains
        ! Sample for Q and U jointly |
        !----------------------------|
        if (map_n == -1) then
+          naccept     = 0.d0
+          paccept     = 0.d0
           chisq_map   = 0.d0
           indx_sample = indx(:,self%pol_type(1))
           sol         = indx(0,self%pol_type(1))
@@ -803,28 +871,51 @@ contains
           ! First evaluate likelihood from previous sample
           !-----------------------------------------------
           
-          !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
+          ! !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
+          ! a           = 0.d0
+          ! local_a     = 0.d0
+          ! !$OMP DO SCHEDULE(static)
+          ! do i = 0, npix-1
+          !    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+          !    do j = 1, nbands
+          !       do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+          !          local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+          !               - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+          !       end do
+          !    end do
+          ! end do
+          ! !$OMP END DO
+          ! !$OMP CRITICAL
+          ! a = a + local_a
+          ! !$OMP END CRITICAL
+          ! !$OMP END PARALLEL
+          ! c = a
+
           a           = 0.d0
-          local_a     = 0.d0
-          !$OMP DO SCHEDULE(static)
           do i = 0, npix-1
              if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
              do j = 1, nbands
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                   local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                   sam = indx(i,k)
+                   a   = a + (((fg_map_high(i,k,self%fg_ref_loc(ind))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sam)) &
                         - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                 end do
              end do
           end do
-          !$OMP END DO
-          !$OMP CRITICAL
-          a = a + local_a
-          !$OMP END CRITICAL
-          !$OMP END PARALLEL
           c = a
-          
-          like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
-          
+
+          if (self%fg_prior_type(ind,1) == 'gaussian') then
+             like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+          else if (self%fg_prior_type(ind,1) == 'uniform') then
+             like_old = -0.5d0*c
+          else if (self%fg_prior_type(ind,1) == 'jeffreys') then
+             like_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam))
+          else 
+             write(*,*) "error in param%fg_prior_type"
+             write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
+             stop
+          end if
+
           s = 0.5d0
           do l = 1, self%nsample
              ! Every 50 samples check acceptance rate, and adjust scaling factor
@@ -844,28 +935,50 @@ contains
                 paccept = naccept/l
                 cycle
              end if
-             ! Evaluate likelihood given this sample
-             !--------------------------------------
+             ! ! Evaluate likelihood given this sample
+             ! !--------------------------------------
+             ! b         = 0.d0
+             ! !$OMP PARALLEL PRIVATE(i,j,k,local_b)
+             ! local_b   = 0.d0
+             ! !$OMP DO SCHEDULE(static)
+             ! do i = 0, npix-1
+             !    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+             !    do j = 1, nbands
+             !       do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+             !          local_b = local_b + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
+             !               - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+             !       end do
+             !    end do
+             ! end do
+             ! !$OMP END DO
+             ! !$OMP CRITICAL
+             ! b = b + local_b
+             ! !$OMP END CRITICAL
+             ! !$OMP END PARALLEL
+
              b         = 0.d0
-             !$OMP PARALLEL PRIVATE(i,j,k,local_b)
-             local_b   = 0.d0
-             !$OMP DO SCHEDULE(static)
              do i = 0, npix-1
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                 do j = 1, nbands
                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                      local_b = local_b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
+                      b = b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                    end do
                 end do
              end do
-             !$OMP END DO
-             !$OMP CRITICAL
-             b = b + local_b
-             !$OMP END CRITICAL
-             !$OMP END PARALLEL
-             
-             like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+
+             if (self%fg_prior_type(ind,1) == 'gaussian') then
+                like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+             else if (self%fg_prior_type(ind,1) == 'uniform') then
+                like_new = -0.5d0*b
+             else if (self%fg_prior_type(ind,1) == 'jeffreys') then
+                like_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t))
+             else 
+                write(*,*) "error in param%fg_prior_type"
+                write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
+                stop
+             end if
+
              diff = like_new - like_old
              ratio = exp(diff)
              if (trim(self%ml_mode) == 'optimize') then
@@ -878,7 +991,6 @@ contains
              else if (trim(self%ml_mode) == 'sample') then
                 call RANDOM_NUMBER(num)
                 if (ratio > num) then
-                   ! write(*,fmt='(a,f8.4,E12.4,E12.4,E12.4,f8.4)') 'Accepted ', t, like_old, like_new, diff, ratio 
                    sam      = t
                    c        = b
                    like_old = like_new
@@ -902,37 +1014,63 @@ contains
           sol = sam
           indx_sample(:) = sol
           
-          !--------------------------------------
-          ! Sample for a single poltype - fullsky
-          !--------------------------------------
+       !---------------------------------------|
+       ! Sample for a single poltype - fullsky |
+       !---------------------------------------|
        else
-          indx_sample = indx(:,self%pol_type(1))
-          ! First evaluate likelihood from previous sample
-          !-----------------------------------------------
-          !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
-          a         = 0.d0
-          local_a   = 0.d0
-          !$OMP DO SCHEDULE(static)
+
+          sol         = indx(0,map_n)
+          sam         = sol
+          naccept     = 0.d0
+          paccept     = 0.d0
+
+          a           = 0.d0
           do i = 0, npix-1
-             if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
-                cycle
-             end if
-             
+             if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+
              do j = 1, nbands
-                local_a = local_a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+                a = a + (((fg_map_high(i,map_n,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sam)) &
                      - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
              end do
           end do
-          !$OMP END DO
-          !$OMP CRITICAL
-          a = a + local_a
-          !$OMP END CRITICAL
-          !$OMP END PARALLEL
+
+          ! ! First evaluate likelihood from previous sample
+          ! !-----------------------------------------------
+          ! !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
+          ! a         = 0.d0
+          ! local_a   = 0.d0
+          ! !$OMP DO SCHEDULE(static)
+          ! do i = 0, npix-1
+          !    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
+          !       cycle
+          !    end if
+             
+          !    do j = 1, nbands
+          !       local_a = local_a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+          !            - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
+          !    end do
+          ! end do
+          ! !$OMP END DO
+          ! !$OMP CRITICAL
+          ! a = a + local_a
+          ! !$OMP END CRITICAL
+          ! !$OMP END PARALLEL
+
           c = a
           
-          like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+          if (self%fg_prior_type(ind,1) == 'gaussian') then
+             like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+          else if (self%fg_prior_type(ind,1) == 'uniform') then
+             like_old = -0.5d0*c
+          else if (self%fg_prior_type(ind,1) == 'jeffreys') then
+             like_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam))
+          else 
+             write(*,*) "error in param%fg_prior_type"
+             write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
+             stop
+          end if
           
-          s = 1.d0
+          s = 0.5d0
           do l = 1, self%nsample
              ! Every 50 samples check acceptance rate, and adjust scaling factor
              if (mod(l,50) == 0) then
@@ -944,7 +1082,7 @@ contains
                    s = s/2.0
                 end if
              end if
-             t      = sol + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
+             t      = sam + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
              
              ! If sampled value is outside of uniform bounds, cycle
              if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
@@ -954,33 +1092,61 @@ contains
              ! Evaluate likelihood given this sample
              !--------------------------------------
              b         = 0.d0
-             !$OMP PARALLEL PRIVATE(i,j,k,local_b)
-             local_b   = 0.d0
-             !$OMP DO SCHEDULE(static)
+
              do i = 0, npix-1
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                 do j = 1, nbands
-                   local_b = local_b + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
+                   b = b + (((fg_map_high(i,map_n,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
                         - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
                 end do
              end do
-             !$OMP END DO
-             !$OMP CRITICAL
-             b = b + local_b
-             !$OMP END CRITICAL
-             !$OMP END PARALLEL
+
+             ! !$OMP PARALLEL PRIVATE(i,j,k,local_b)
+             ! local_b   = 0.d0
+             ! !$OMP DO SCHEDULE(static)
+             ! do i = 0, npix-1
+             !    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+             !    do j = 1, nbands
+             !       local_b = local_b + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
+             !            - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
+             !    end do
+             ! end do
+             ! !$OMP END DO
+             ! !$OMP CRITICAL
+             ! b = b + local_b
+             ! !$OMP END CRITICAL
+             ! !$OMP END PARALLEL
              
-             like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+             if (self%fg_prior_type(ind,1) == 'gaussian') then
+                like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+             else if (self%fg_prior_type(ind,1) == 'uniform') then
+                like_new = -0.5d0*b
+             else if (self%fg_prior_type(ind,1) == 'jeffreys') then
+                like_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t))
+             else 
+                write(*,*) "error in param%fg_prior_type"
+                write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
+                stop
+             end if
              
-             write(*,*) c, b
-             
-             ratio = like_new/like_old
+             diff = like_new - like_old
+             ratio = exp(diff)
              call RANDOM_NUMBER(num)
-             if (ratio > num) then
-                sam      = t
-                c        = b
-                like_old = like_new
-                naccept  = naccept + 1.0
+             if (trim(self%ml_mode) == 'optimize') then
+                if (ratio > 1.d0) then
+                   sam      = t
+                   c        = b
+                   like_old = like_new
+                   naccept  = naccept + 1.0
+                end if
+             else if (trim(self%ml_mode) == 'sample') then
+                call RANDOM_NUMBER(num)
+                if (ratio > num) then
+                   sam      = t
+                   c        = b
+                   like_old = like_new
+                   naccept  = naccept + 1.0
+                end if
              end if
              
              paccept = naccept/l
@@ -1371,5 +1537,63 @@ contains
     dat%offset(band) = offset(i-1)
     
   end subroutine calc_hi_gain_offset
+
+  function eval_jeffreys_prior(self, dat, comp, map_n, ind, val, pixel) result(prob)
+    implicit none
+
+    class(params)                                          :: self
+    type(component),                         intent(inout) :: comp
+    type(data)                                             :: dat
+    real(dp),                                   intent(in) :: val
+    integer(i4b),                               intent(in) :: map_n, ind
+    integer(i4b), optional,                     intent(in) :: pixel
+    real(dp)                                               :: prob, sum, ss
+
+    prob = 0.d0
+    sum = 0.d0
+
+    if (trim(self%fg_label(ind)) == 'synch') then
+       ! Is this evaluated for a single pixel?
+       if (present(pixel)) then
+          ! If map_n = -1, then sum over poltypes
+          if (map_n == -1) then
+             do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                do j = 1, nbands
+                   ss  = dat%fg_map(pixel,k,self%fg_ref_loc(ind),ind)*(self%dat_nu(j)/self%fg_nu_ref(ind))**val
+                   sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,self%fg_ref_loc(ind),ind))*log(self%dat_nu(j)/self%fg_nu_ref(ind)))**2.0
+                end do
+             end do
+          else
+             do j = 1, nbands
+                ss  = dat%fg_map(pixel,map_n,self%fg_ref_loc(ind),ind)*(self%dat_nu(j)/self%fg_nu_ref(ind))**val
+                sum = sum + (((1.0/dat%rms_map(pixel,map_n,j))**2)*(ss/dat%fg_map(pixel,map_n,self%fg_ref_loc(ind),ind))*log(self%dat_nu(j)/self%fg_nu_ref(ind)))**2.0
+             end do
+          end if
+       else
+          ! If map_n = -1, then sum over poltypes
+          if (map_n == -1) then
+             do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                do i = 0, npix-1
+                   if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
+                   do j = 1, nbands
+                      ss  = dat%fg_map(i,k,self%fg_ref_loc(ind),ind)*(self%dat_nu(j)/self%fg_nu_ref(ind))**val
+                      sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,self%fg_ref_loc(ind),ind))*log(self%dat_nu(j)/self%fg_nu_ref(ind)))**2.0
+                   end do
+                end do
+             end do
+          else
+             do i = 0, npix-1
+                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
+                do j = 1, nbands
+                   ss  = dat%fg_map(i,k,self%fg_ref_loc(ind),ind)*(self%dat_nu(j)/self%fg_nu_ref(ind))**val
+                   sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,self%fg_ref_loc(ind),ind))*log(self%dat_nu(j)/self%fg_nu_ref(ind)))**2.0
+                end do
+             end do
+          end if
+       end if
+    end if
+    prob = sqrt(sum)
+
+  end function eval_jeffreys_prior
   
 end module dang_sample_mod

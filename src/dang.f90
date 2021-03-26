@@ -33,7 +33,13 @@ program dang
   
   integer(i4b)                          :: i, j, k, l, m, n
   integer(i4b)                          :: bp_iter
-  real(dp), allocatable, dimension(:,:) :: map, rms, mask
+  real(dp), allocatable, dimension(:,:) :: map, rms, mask, true_synch
+
+  real(dp), allocatable, dimension(:)   :: chi_pix
+
+  real(dp)                   :: result
+  character(len=6)           :: pixel_str
+  character(len=128)         :: title
   
   ! Object Orient
   type(params)       :: par
@@ -43,15 +49,12 @@ program dang
   call init_mpi()
   call read_param_file(par)
   
-  allocate(comp%joint(2))
-  comp%joint(1) = 'synch'
-  comp%joint(2) = 'template01'
-  
-  !----------------------------------------------------------------------------------------------------------
-  ! General paramters
   tqu(1)            = 'T'
   tqu(2)            = 'Q'
   tqu(3)            = 'U'
+  
+  !----------------------------------------------------------------------------------------------------------
+  ! General paramters
   if (trim(par%mode) == 'comp_sep') then
      i              = getsize_fits(par%temp_file(1), nside=nside, ordering=ordering, nmaps=nmaps)
   else if (trim(par%mode) == 'hi_fit') then
@@ -63,7 +66,8 @@ program dang
   npix              = dang_data%npix
   nbands            = par%numinc
   nfgs              = par%ncomp+par%ntemp
-  npar              = 3
+  npixpar           = 0.d0
+  nglobalpar        = 0.d0
   nump              = 0
   nlheader          = size(header)
   !----------------------------------------------------------------------------------------------------------
@@ -72,6 +76,7 @@ program dang
   allocate(mask(0:npix-1,1))
   allocate(map(0:npix-1,nmaps))
   allocate(rms(0:npix-1,nmaps))
+  allocate(true_synch(0:npix-1,nmaps))
   !----------------------------------------------------------------------------------------------------------
   !----------------------------------------------------------------------------------------------------------
   !----------------------------------------------------------------------------------------------------------
@@ -130,6 +135,12 @@ program dang
            dang_data%sig_map(:,:,j) = map
         end if
      end do
+
+     call read_bintab('data/test_data/new_sims/synch/synch_030_n0064_rj.fits',map,npix,nmaps,nullval,anynull,header=header)
+
+     true_synch = map
+     
+     dang_data%fg_map(:,:,par%fg_ref_loc(1),1) = true_synch
      
      deallocate(map,rms)
      
@@ -157,8 +168,8 @@ program dang
      ! dang_data%temp_amps(1,:,1) = 0.20019717*dang_data%temp_norm(:,1)
      ! dang_data%temp_amps(2,:,1) = 0.0709024475*dang_data%temp_norm(:,1)
      ! dang_data%temp_amps(3,:,1) = 0.0136504706*dang_data%temp_norm(:,1)
-     dang_data%temp_amps(4,:,1) = 7.42349435d-4*dang_data%temp_norm(:,1)
-     dang_data%temp_amps(5,:,1) = 3.57833056d-4*dang_data%temp_norm(:,1)
+     ! dang_data%temp_amps(4,:,1) = 7.42349435d-4*dang_data%temp_norm(:,1)
+     ! dang_data%temp_amps(5,:,1) = 3.57833056d-4*dang_data%temp_norm(:,1)
  
      ! dang_data%temp_amps(1,:,1) = 0.196d-2*dang_data%temp_norm(:,1)
      ! dang_data%temp_amps(2,:,1) = 0.475d-2*dang_data%temp_norm(:,1)
@@ -171,8 +182,8 @@ program dang
      ! Extrapolating solved for bands for ze cleaning
      do k = par%pol_type(1), par%pol_type(size(par%pol_type))
         call extrapolate_template(par,dang_data,comp,1,k)
+        call extrapolate_foreground(par,dang_data,comp,1,k)
      end do
-
 
      !----------------------------------------------------------------------------------------------------------
 
@@ -237,6 +248,49 @@ contains
   !----------------------------------------------------------------|
   
   subroutine comp_sep
+
+    ! Count up the degrees of freedom for chisq nromalization
+    do n = 1, par%ncomp
+       ! Count up foregrounds in the joint sampler
+       if (ANY(par%joint_comp == trim(par%fg_label(n))) .and. par%joint_sample) then
+          if (par%joint_pol) then
+             npixpar = npixpar + 2*nump
+          else
+             npixpar = npixpar + nump
+          end if
+       ! Count up foregrounds not included in the joint sampler
+       else if (par%fg_samp_amp(n)) then
+             npixpar = npixpar + size(par%pol_type)*nump
+       end if
+       ! Count up spectral index parameters, either fullsky or per pixel
+       if (par%fg_samp_inc(n,1)) then
+          if (index(par%fg_ind_region(n,1),'pix') /= 0) then
+             ! Skip for now because the contribution is not trivial - esp with a mask
+             ! if (par%fg_spec_joint(n,1)) then
+
+          else if (index(par%fg_ind_region(n,1),'full') /= 0) then
+             if (par%fg_spec_joint(n,1)) then
+                ! Sampling fullsky jointly in Q and U
+                nglobalpar = nglobalpar + 1
+             else 
+                ! Sampling fullsky separately in Q and U
+                nglobalpar = nglobalpar + 2
+             end if
+          end if
+       end if
+    end do
+    ! 
+    do n = 1, par%ntemp
+       if (ANY(par%joint_comp == trim(par%temp_label(n)))) then
+          nglobalpar = nglobalpar + par%temp_nfit(n)
+       else if (.not. ANY(par%joint_comp == trim(par%temp_label(n))) .or. .not. (par%joint_sample)) then
+          nglobalpar = nglobalpar + size(par%pol_type)*par%temp_nfit(n)
+       end if
+   end do
+   write(*,*) npixpar
+   write(*,*) nglobalpar
+
+
     !--------------------------------------------------------------|
     !                   Calculation portion                        |               
     !--------------------------------------------------------------|
@@ -263,8 +317,17 @@ contains
           write(*,*) ''
        end if       
        ! --------------------------------------------------------------
+       ! Joint sampling section - checks for templates and foregrounds
+       ! in the joint sampling component list
+       ! --------------------------------------------------------------
        if (par%joint_sample) then
-          call sample_joint_amp(par,dang_data,comp,2,trim(par%solver))
+          if (par%joint_pol) then
+             call sample_joint_amp(par,dang_data,comp,2,trim(par%solver))
+          else
+             do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+                call sample_joint_amp(par,dang_data,comp,k,trim(par%solver))
+             end do
+          end if             
           do k = par%pol_type(1), par%pol_type(size(par%pol_type))
              do m = 1, size(par%joint_comp)
                 ! Extrapolate foreround solutions
@@ -282,20 +345,8 @@ contains
              end do
           end do
           ! How good is the fit and what are the parameters looking like?
-          do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-             call compute_chisq(k,chisq,par%mode)
-             if (rank == master) then
-                if (mod(iter, 1) == 0 .or. iter == 1) then
-                   write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
-                        iter, " - chisq: " , chisq, " - A_s: ",&
-                        dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                        mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', &
-                        dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
-                   write(*,fmt='(a)') '---------------------------------------------'
-                end if
-             end if
-          end do
-       end if
+          call write_stats_to_term(par,dang_data,comp,iter)
+      end if
 
        ! ------------------------------------------------------------------------------------------
        ! Sample amplitudes
@@ -308,14 +359,17 @@ contains
              end do
           end if
        end do
-       ! do n = 1, par%ntemp
-       !    if (.not. ANY(par%joint_comp == trim(par%temp_label(n)))) then
-       !       if (par%fg_amp_joint(n)) then
-       !          call fit_template()
-       !       end if
-       !    end if
-       !    call extrapolate_template(par,dang_data,comp,n,k)
-       ! end do
+       do n = 1, par%ntemp
+          if (.not. ANY(par%joint_comp == trim(par%temp_label(n))) .or. .not. (par%joint_sample)) then
+             write(*,*) 'par%temp_sample', par%temp_sample(n)
+             if (par%temp_sample(n)) then
+                do k = par%pol_type(1), par%pol_type(size(par%pol_type))
+                   call template_fit(par,dang_data,comp,k,n)
+                   call extrapolate_template(par,dang_data,comp,n,k)
+                end do
+             end if
+          end if
+       end do
 
        ! ------------------------------------------------------------------------------------------
        ! Sample spectral parameters
@@ -336,18 +390,8 @@ contains
              do k = par%pol_type(1), par%pol_type(size(par%pol_type))
                 call extrapolate_foreground(par,dang_data,comp,n,k)
              end do
-             do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-                call compute_chisq(k,chisq,par%mode)
-                if (rank == master) then
-                   if (mod(iter, 1) == 0 .or. iter == 1) then
-                      write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
-                           iter, " - chisq: " , chisq, " - A_s: ",&
-                           dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                           mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
-                      write(*,fmt='(a)') '---------------------------------------------'
-                   end if
-                end if
-             end do
+             ! How good is the fit and what are the parameters looking like?
+             call write_stats_to_term(par,dang_data,comp,iter)
           end if
        end do
        ! ------------------------------------------------------------------------------------------
@@ -356,24 +400,16 @@ contains
           do j = 1, nfgs
              dang_data%res_map(:,k,:)  = dang_data%res_map(:,k,:) - dang_data%fg_map(:,k,:,j)
           end do
-          
-          call compute_chisq(k,chisq,par%mode)
-          
           if (rank == master) then
-             if (mod(iter, 1) == 0 .or. iter == 1) then
-                write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
-                     iter, " - chisq: " , chisq, " - A_s: ",&
-                     dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                     mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
-                write(*,fmt='(a)') '---------------------------------------------'
-             end if
-             call write_data(par%mode)
+             call write_data(par,dang_data,comp,k)
           end if
        end do
+       ! How good is the fit and what are the parameters looking like?
+       call write_stats_to_term(par,dang_data,comp,iter)
+
        if (mod(iter,par%iter_out) .EQ. 0) then
-          call write_maps(par%mode)
+          call write_maps(par,dang_data,comp)
        end if
-       write(*,*) ''
     end do
     call mpi_finalize(ierr)
   end subroutine comp_sep
@@ -406,7 +442,7 @@ contains
        call template_fit(par, dang_data, comp, 1)
 
        write(*,fmt='(i6, a, E10.3, a, e10.3)')&
-            iter, " - chisq: " , chisq, " - T_d: ",&
+            iter, " - chisq: " , dang_data%chisq, " - T_d: ",&
             mask_avg(comp%T_d(:,1),dang_data%masks(:,1))
        write(*,fmt='(a)') '---------------------------------------------'
 
@@ -420,332 +456,28 @@ contains
           end do
        end do
 
-       call compute_chisq(1,chisq,par%mode)
+       call compute_chisq(par,dang_data,comp,1)
 
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
              if (nbands .lt. 10) then
                 write(*,fmt='(i6, a, E10.3, a, e10.3, a, 10e10.3)')&
-                     iter, " - chisq: " , chisq, " - T_d: ",&
+                     iter, " - chisq: " , dang_data%chisq, " - T_d: ",&
                      mask_avg(comp%T_d(:,1),dang_data%masks(:,1)), ' - A_HI: ', comp%HI_amps
                 write(*,fmt='(a)') '---------------------------------------------'
              else
                 write(*,fmt='(i6, a, E10.3, a, e10.3)')&
-                     iter, " - chisq: " , chisq, " - T_d: ",&
+                     iter, " - chisq: " , dang_data%chisq, " - T_d: ",&
                      mask_avg(comp%T_d(:,1),dang_data%masks(:,1))
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
           end if
           if (mod(iter,par%iter_out) .EQ. 0) then
-             call write_maps(par%mode)
+             call write_maps(par,dang_data,comp)
           end if
-          call write_data(par%mode)
+          call write_data(par,dang_data,comp,1)
        end if
        write(*,*) ''
     end do
   end subroutine hi_fit
-  
-  subroutine write_maps(mode)
-    implicit none
-    
-    character(len=16), intent(in)       :: mode
-    real(dp), dimension(0:npix-1,nmaps) :: map
-    real(dp)                            :: s, signal
-    integer(i4b)                        :: n, mn
-    character(len=128)                  :: title
-
-    write(*,*) 'Output data maps'
-    
-    if (trim(mode) == 'comp_sep') then
-       
-       write(iter_str, '(i0.5)') iter
-       if (par%output_fg .eqv. .true.) then
-          do j = 1, nbands
-             do n = 1, par%ntemp
-                title = trim(par%outdir) // trim(par%dat_label(j)) //'_'// trim(par%temp_label(n)) //&
-                     '_k' // trim(iter_str) // '.fits'
-                map(:,:)   = dang_data%fg_map(:,:,j,n+par%ncomp)
-                do i = 0, npix-1
-                   if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-                      map(i,:) = missval
-                   end if
-                end do
-                call write_result_map(trim(title), nside, ordering, header, map)
-             end do
-             do n = 1, par%ncomp
-                title = trim(par%outdir) // trim(par%dat_label(j)) //'_'// trim(par%fg_label(n)) //&
-                     '_amplitude_k' // trim(iter_str) // '.fits'
-                map(:,:)   = dang_data%fg_map(:,:,j,n)
-                do i = 0, npix-1
-                   if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-                      map(i,1) = missval
-                   end if
-                end do
-                call write_result_map(trim(title), nside, ordering, header, map)
-             end do
-          end do
-       else 
-          do n = 1, par%ncomp
-             title = trim(par%outdir) // trim(par%dat_label(par%fg_ref_loc(n))) //'_'// trim(par%fg_label(n)) //&
-                  '_amplitude_k' // trim(iter_str) // '.fits'
-             map(:,:)   = dang_data%fg_map(:,:,par%fg_ref_loc(n),n)
-             do i = 0, npix-1
-                if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-                   map(i,1) = missval
-                end if
-             end do
-             call write_result_map(trim(title), nside, ordering, header, map)
-          end do
-       end if
-       do j = 1, nbands
-          title = trim(par%outdir) // trim(par%dat_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
-          map(:,:)   = dang_data%res_map(:,:,j)
-          do i = 0, npix-1
-             if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-                map(i,1) = missval
-             end if
-          end do
-          call write_result_map(trim(title), nside, ordering, header, map)
-       end do
-       title = trim(par%outdir) // 'synch_beta_k' // trim(iter_str) // '.fits'
-       map(:,:)   = comp%beta_s(:,:)
-       do i = 0, npix-1
-          if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-             map(i,1) = missval
-          end if
-       end do
-       call write_result_map(trim(title), nside, ordering, header, map)
-       do mn = 1, nmaps
-          dang_data%chi_map(:,mn) = 0.d0
-          do i = 0, npix-1
-             do j = 1, nbands
-                s      = 0.d0
-                do l = 1, nfgs
-                   signal = dang_data%fg_map(i,mn,j,l)
-                   s      = s + signal
-                end do
-                dang_data%chi_map(i,mn) = dang_data%chi_map(i,mn) + dang_data%masks(i,1)*(dang_data%sig_map(i,mn,j) - s)**2.d0/dang_data%rms_map(i,mn,j)**2.d0
-             end do
-          end do
-       end do
-       dang_data%chi_map(:,:) = dang_data%chi_map(:,:)/(nbands+nfgs)
-       title = trim(par%outdir) // 'chisq_k'// trim(iter_str) // '.fits'
-       map(:,:)   = dang_data%chi_map(:,:)
-       do i = 0, npix-1
-          if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-             map(i,1) = missval
-          end if
-       end do
-       call write_result_map(trim(title), nside, ordering, header, map)
-    else if (trim(mode) == 'hi_fit') then
-
-       write(iter_str, '(i0.5)') iter
-       n = 1
-       do j = 1, par%numband
-          if (par%band_inc(j)) then
-             title = trim(par%outdir) // trim(par%dat_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
-             map(:,1)   = comp%HI_amps(n)*comp%HI(:,1)
-             do i = 0, npix-1
-                if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-                   map(i,1) = missval
-                end if
-             end do
-             call write_bintab(map,npix,1, header, nlheader, trim(title))
-             n = n + 1
-          end if
-       end do
-
-       n = 1
-       do j = 1, par%numband
-          if (par%band_inc(j)) then
-             title = trim(par%outdir) // trim(par%dat_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
-             map(:,:)   = dang_data%res_map(:,:,n)
-             do i = 0, npix-1
-                if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-                   map(i,1) = missval
-                end if
-             end do
-             call write_bintab(map,npix,1, header, nlheader, trim(title))
-             n = n + 1
-          end if
-       end do
-       title = trim(par%outdir) // 'T_d_k'// trim(iter_str) // '.fits'
-       map(:,1)   = comp%T_d(:,1)
-       do i = 0, npix-1
-          if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-             map(i,1) = missval
-          end if
-       end do
-       call write_bintab(map,npix,1, header, nlheader, trim(title))
-       dang_data%chi_map = 0.d0
-       do i = 0, npix-1
-          do j = 1, nbands
-             s =  comp%HI_amps(j)*comp%HI(i,1)*planck(par%dat_nu(j)*1d9,comp%T_d(i,1))
-             dang_data%chi_map(i,1) = dang_data%chi_map(i,1) + dang_data%masks(i,1)*(dang_data%sig_map(i,1,j) - s)**2.d0/dang_data%rms_map(i,1,j)**2.d0
-          end do
-       end do
-       dang_data%chi_map(:,1) = dang_data%chi_map(:,1)/(nbands+nfgs)
-       title = trim(par%outdir) // 'chisq_k' // trim(iter_str) // '.fits'
-       map(:,1)   = dang_data%chi_map(:,1)
-       do i = 0, npix-1
-          if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-             map(i,1) = missval
-          end if
-       end do
-       call write_bintab(map,npix,1, header, nlheader, trim(title))
-          
-    end if
-    
-  end subroutine write_maps
-  
-  subroutine write_data(mode)
-    implicit none
-    character(len=16), intent(in) :: mode
-    character(len=2)              :: temp_n
-    character(len=128)            :: title
-
-    if (trim(mode) == 'comp_sep') then
-       
-       title = trim(par%outdir) // 'pixel_23000_A_d_' // trim(tqu(k)) // '.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(30,file=title, status="old",position="append", action="write")
-       else
-          open(30,file=title, status="new", action="write")
-          write(30,*) 
-       endif
-       write(30,*) dang_data%fg_map(23000,k,par%fg_ref_loc(1),2)
-       close(30)
-       
-       title = trim(par%outdir) // 'pixel_23000_A_s_' // trim(tqu(k)) // '.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(31,file=title, status="old",position="append", action="write")
-       else
-          open(31,file=title, status="new", action="write")
-       endif
-       write(31,*) dang_data%fg_map(23000,k,par%fg_ref_loc(1),1)
-       close(31)
-       
-       title = trim(par%outdir) // 'pixel_23000_beta_s_' // trim(tqu(k)) // '.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(32,file=title, status="old",position="append", action="write")
-       else
-          open(32,file=title, status="new", action="write")
-       endif
-       write(32,*) comp%beta_s(23000,k)
-       close(32)
-       
-       title = trim(par%outdir) // 'total_chisq_' // trim(tqu(k)) // '.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(33,file=title, status="old",position="append", action="write")
-       else
-          open(33,file=title, status="new", action="write")
-       endif
-       call compute_chisq(k,chisq,par%mode)
-       write(33,*) chisq
-       close(33)
-       
-       do i = 1, par%ntemp
-          title = trim(par%outdir) //  trim(par%temp_label(i)) // '_' //trim(tqu(k)) // '_amplitudes.dat'
-          inquire(file=title,exist=exist)
-          if (exist) then
-             open(34,file=title, status="old", &
-                  position="append", action="write")
-          else
-             open(34,file=title, status="new", action="write")
-          endif
-          write(34,'(10(E17.8))') dang_data%temp_amps(:,k,i)
-          close(34)
-       end do
-       
-    else if (trim(mode) == 'hi_fit') then
-       title = trim(par%outdir) // 'HI_amplitudes.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(35,file=title,status="old",position="append",action="write") 
-       else
-          open(35,file=title,status="new",action="write")
-       end if
-       write(35,'(10(E17.8))') comp%HI_amps
-       close(35)
-       
-       title = trim(par%outdir)//'HI_chisq.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(36,file=title,status="old",position="append",action="write") 
-       else
-          open(36,file=title,status="new",action="write")
-       end if
-       call compute_chisq(1,chisq,mode)
-       write(36,'(E17.8)') chisq
-       close(36)
-
-       ! title = trim(par%outdir)//'band_gains.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(37,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(37,file=title,status="new",action="write")
-       !    write(37,"(3x,8(A16))") par%dat_label
-       ! end if
-       ! write(37,"(8(E16.4))") dang_data%gain
-       ! close(37)
-
-       ! title = trim(par%outdir)//'band_offsets.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(38,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(38,file=title,status="new",action="write")
-       !    write(38,"(3x,8(A16))") par%dat_label
-       ! end if
-       ! write(38,"(8(E16.4))") dang_data%offset
-       ! close(38)
-       
-    end if
-    
-  end subroutine write_data
-  
-  subroutine compute_chisq(map_n,chisq,mode)
-    use healpix_types
-    implicit none
-    integer(i4b),                                 intent(in)    :: map_n
-    character(len=16),                            intent(in)    :: mode
-    real(dp),                                     intent(inout) :: chisq
-    real(dp)                                                    :: s, signal
-    integer(i4b)                                                :: i,j,w
-    
-    if (trim(mode) == 'comp_sep') then
-       chisq = 0.d0
-       do i = 0, npix-1
-          if (dang_data%masks(i,1) == missval .or. dang_data%masks(i,1) == 0.d0) cycle
-          do j = 1, nbands
-             s = 0.d0
-             do w = 1, nfgs
-                signal = dang_data%fg_map(i,map_n,j,w)
-                s = s + signal
-             end do
-             chisq = chisq + (((dang_data%sig_map(i,map_n,j) - s)**2))/(dang_data%rms_map(i,map_n,j)**2)
-          end do
-       end do
-       chisq = chisq/(nump*(nbands-npar))
-       
-    else if (trim(mode) == 'hi_fit') then
-       chisq = 0.d0
-       do i = 0, npix-1
-          if (dang_data%masks(i,1) == missval .or. dang_data%masks(i,1) == 0.d0) cycle
-          do j = 1, nbands    
-             s = 0.0
-             s = dang_data%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(par%dat_nu(j)*1d9,comp%T_d(i,1))+dang_data%offset(j)
-             chisq = chisq + (dang_data%sig_map(i,map_n,j)-s)**2.d0/(dang_data%rms_map(i,map_n,j)**2.d0)
-          end do
-       end do
-       chisq = chisq/(nump*(nbands-2))
-    end if
-    
-  end subroutine compute_chisq
-  
 end program dang
