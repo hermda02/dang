@@ -298,7 +298,6 @@ contains
           end do
        end do
        dat%chisq = dat%chisq/(size(param%pol_type)*(nump*nbands)-npixpar-nglobalpar)
-       ! dat%chisq = dat%chisq/(nump*nbands)
     else if (trim(param%mode) == 'hi_fit') then
        dat%chisq = 0.d0
        do i = 0, npix-1
