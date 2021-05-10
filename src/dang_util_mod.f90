@@ -29,9 +29,10 @@ module dang_util_mod
   character(len=5)                  :: iter_str
   character(len=80), dimension(180) :: header
   character(len=80), dimension(3)   :: tqu
+  character(len=128)                :: title
   
   public    :: npix, nbands, nmaps, ordering, header, h, c, k_B, T_CMB
-  public    :: npixpar, nglobalpar
+  public    :: npixpar, nglobalpar, title
   public    :: iter, iter_str, exist, tqu
 
 contains 

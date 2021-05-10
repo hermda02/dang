@@ -60,7 +60,6 @@ module dang_param_mod
         logical(lgt),       allocatable, dimension(:,:)   :: fg_sample_spec ! Logical - sample spec params
         logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_inc    ! Logical - sample fg parameter?
         logical(lgt),       allocatable, dimension(:)     :: fg_samp_amp    ! Logical - sample fg amplitude
-        logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_like   ! Logical - sample fg spec param from likelihood?
         logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_joint  ! Logical - sample fg spec param jointly in Q and U?
         logical(lgt)                                      :: joint_sample   ! Logical - jointly sample fg amplitudes
         logical(lgt)                                      :: joint_pol      ! Points to which Stokes are jointly sampled
@@ -420,7 +419,7 @@ contains
         type(hash_tbl_sll), intent(in)    :: htbl
         type(params),       intent(inout) :: par
 
-        integer(i4b)     :: i, j, n, len_itext
+        integer(i4b)     :: i, j, n, n2, len_itext
         character(len=3) :: itext
         character(len=2) :: jtext
 
@@ -433,7 +432,8 @@ contains
         call get_parameter_hashtable(htbl, 'DATA_DIRECTORY', par_string=par%datadir)
         call get_parameter_hashtable(htbl, 'MASKFILE', par_string=par%mask_file)
 
-        n = par%numband
+        n  = par%numband
+        n2 = par%numinc
 
         allocate(par%dat_mapfile(n),par%dat_label(n))
         allocate(par%dat_noisefile(n),par%dat_nu(n))
@@ -447,20 +447,25 @@ contains
         allocate(par%fit_gain(n))
         allocate(par%fit_offs(n))
 
+        j = 1
         do i = 1, n
-            call int2string(i, itext)
-            call get_parameter_hashtable(htbl, 'INCLUDE_BAND'//itext, len_itext=len_itext, par_lgt=par%band_inc(i))
-            call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%dat_label(i))
-            call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%dat_mapfile(i))
-            call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%dat_noisefile(i))
-            call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%dat_nu(i))
-            call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%dat_unit(i))
-            call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(i))
-            call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(i))
-            !call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(i))
-            call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(i))
-            call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(i))
-         end do
+           call int2string(i, itext)
+           call get_parameter_hashtable(htbl, 'INCLUDE_BAND'//itext, len_itext=len_itext, par_lgt=par%band_inc(i))
+           if (par%band_inc(i)) then
+              call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%dat_label(j))
+              call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%dat_mapfile(j))
+              call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%dat_noisefile(j))
+              call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%dat_nu(j))
+              call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%dat_unit(j))
+              call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(j))
+              call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(j))
+              !call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(j))
+              call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(j))
+              call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(j))
+              j = j + 1
+           end if
+        end do
+
     end subroutine read_data_params
 
     subroutine read_comp_params(htbl,par)
@@ -501,7 +506,7 @@ contains
            
            allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
            allocate(par%fg_inc(n),par%fg_sample_spec(n,2),par%fg_samp_amp(n))
-           allocate(par%fg_spec_like(n,2),par%fg_spec_joint(n,2))
+           allocate(par%fg_spec_joint(n,2))
            allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
            allocate(par%fg_samp_nside(n,2),par%fg_samp_inc(n,2))
            allocate(par%fg_spec_file(n,2))
@@ -562,8 +567,6 @@ contains
                       par_int=par%fg_samp_nside(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
                       par_lgt=par%fg_samp_inc(i,1))
-                 call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
-                      par_lgt=par%fg_spec_like(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_JOINT'//itext, len_itext=len_itext,&
                       par_lgt=par%fg_spec_joint(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
@@ -595,14 +598,10 @@ contains
                       par_int=par%fg_samp_nside(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
                       par_lgt=par%fg_samp_inc(i,1))
-                 call get_parameter_hashtable(htbl, 'COMP_BETA_LIKELIHOOD'//itext, len_itext=len_itext,&
-                      par_lgt=par%fg_spec_like(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_T_SAMP_NSIDE'//itext, len_itext=len_itext,&
                       par_int=par%fg_samp_nside(i,2))
                  call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
                       par_lgt=par%fg_samp_inc(i,2))
-                 call get_parameter_hashtable(htbl, 'COMP_T_LIKELIHOOD'//itext, len_itext=len_itext,&
-                      par_lgt=par%fg_spec_like(i,2))
                  call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
                       par_string=par%fg_spec_file(i,2))
               end if

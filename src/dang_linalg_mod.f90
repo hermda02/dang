@@ -207,7 +207,7 @@ contains
 
     end subroutine backward_sub
 
-    subroutine sample_cg_vec(x,b,param,dat,compos, map_n)
+    subroutine sample_cg_vec(x, b, param, dat, compos, map_n)
         
       ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
       ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
@@ -248,7 +248,7 @@ contains
       end do
 
       if (trim(param%ml_mode) == 'sample') then
-         b2 = b + compute_sample_vec(param, dat, compos, eta, param%numband, map_n, b)
+         b2 = b + compute_sample_vec(param, dat, compos, eta, param%numinc, map_n, b)
       else if (trim(param%ml_mode) == 'optimize') then
          b2 = b
       end if
@@ -260,19 +260,19 @@ contains
       converge = param%cg_converge
       !-----------------------------
 
-      r  = b2 - return_Ax(param, dat, compos, x, param%numband, map_n)
+      r  = b2 - return_Ax(param, dat, compos, x, param%numinc, map_n)
       d  = r
       delta_new = sum(r*r)
       delta_0   = delta_new
       i = 0     
       do while( (i .lt. i_max) .and. (delta_new .gt. converge))
          t3    = mpi_wtime()
-         q     = return_Ax(param, dat, compos, d, param%numband, map_n)
+         q     = return_Ax(param, dat, compos, d, param%numinc, map_n)
          alpha = delta_new/(sum(d*q))
          x     = x + alpha*d
 
          if (mod(i,50) == 0) then
-            r = b2 - return_Ax(param, dat, compos, x, param%numband, map_n)
+            r = b2 - return_Ax(param, dat, compos, x, param%numinc, map_n)
          else
             r = r - alpha*q
          end if

@@ -39,7 +39,6 @@ program dang
 
   real(dp)                   :: result
   character(len=6)           :: pixel_str
-  character(len=128)         :: title
   
   ! Object Orient
   type(params)       :: par
@@ -94,7 +93,7 @@ program dang
      call init_template(dang_data,npix,nmaps,par%ntemp,nbands)
      call init_synch(comp,par,npix,nmaps)
      call init_dust(comp,par,npix,nmaps)
-     
+
      dang_data%fg_map    = 0.0
      dang_data%temp_amps = 0.0
      !----------------------------------------------------------------------------------------------------------
@@ -206,21 +205,17 @@ program dang
      end do
      write(*,*) ''
 
-     k = 1 
      ! Read maps in
-     do j = 1, par%numband
-        if (par%band_inc(j)) then
-           call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(k)), &
-                rms,npix,nmaps,nullval,anynull,header=header)
-           dang_data%rms_map(:,:,k) = rms
-           call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(k)), &
-                map,npix,nmaps,nullval,anynull,header=header)
-           dang_data%sig_map(:,:,k) = map
-           ! Initialize gain and offset values from parameter file
-           dang_data%gain(k)   = par%init_gain(k)
-           dang_data%offset(k) = 0.d0 
-           k = k + 1
-        end if
+     do j = 1, nbands
+        call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
+             rms,npix,nmaps,nullval,anynull,header=header)
+        dang_data%rms_map(:,:,j) = rms
+        call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
+             map,npix,nmaps,nullval,anynull,header=header)
+        dang_data%sig_map(:,:,j) = map
+        ! Initialize gain and offset values from parameter file
+        dang_data%gain(j)   = par%init_gain(j)
+        dang_data%offset(j) = 0.d0 
      end do
 
      do i = 0, npix-1
@@ -287,9 +282,9 @@ contains
           nglobalpar = nglobalpar + size(par%pol_type)*par%temp_nfit(n)
        end if
    end do
-   write(*,*) npixpar
-   write(*,*) nglobalpar
 
+   ! write(*,fmt='(a,i6)') 'npixpar: ', npixpar
+   ! write(*,fmt='(a,i6)') 'nglobalpar: ', nglobalpar
 
     !--------------------------------------------------------------|
     !                   Calculation portion                        |               
@@ -353,16 +348,17 @@ contains
        ! ------------------------------------------------------------------------------------------
        do n = 1, par%ncomp
           if (par%fg_samp_amp(n)) then
+             write(*,*) "Sample "//trim(par%fg_label(n))//" amplitudes."
              do k = par%pol_type(1), par%pol_type(size(par%pol_type))
-                dang_data%fg_map(:,k,par%fg_ref_loc(n),n) = sample_spec_amp(par,dang_data,comp,n,k)
+                dang_data%fg_map(:,k,par%fg_ref_loc(n),n) = sample_fg_amp(par,dang_data,comp,n,k)
                 call extrapolate_foreground(par,dang_data,comp,n,k)
              end do
           end if
        end do
        do n = 1, par%ntemp
           if (.not. ANY(par%joint_comp == trim(par%temp_label(n))) .or. .not. (par%joint_sample)) then
-             write(*,*) 'par%temp_sample', par%temp_sample(n)
              if (par%temp_sample(n)) then
+                write(*,*) "Sample "//trim(par%fg_label(n))//" template amplitudes."
                 do k = par%pol_type(1), par%pol_type(size(par%pol_type))
                    call template_fit(par,dang_data,comp,k,n)
                    call extrapolate_template(par,dang_data,comp,n,k)
@@ -404,6 +400,27 @@ contains
              call write_data(par,dang_data,comp,k)
           end if
        end do
+
+       !-------------------------------------------------------------------------------------------
+       ! write(iter_str, '(i0.5)') iter
+       ! title = trim(par%outdir) // 'samp_minus_true_' // trim(iter_str) // '.dat'
+       ! inquire(file=title,exist=exist)
+       ! if (exist) then
+       !    open(50,file=title, status="old",position="append", action="write")
+       ! else
+       !    open(50,file=title, status="new", action="write")
+       ! endif
+       ! do i = 0, npix-1
+       !    if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
+       !       cycle
+       !    else
+       !       write(50,fmt='(3(f16.8))') dang_data%fg_map(i,:,par%fg_ref_loc(1),1) - true_synch(i,:)
+       !    end if
+       ! end do
+       ! close(50)
+
+       !-------------------------------------------------------------------------------------------
+
        ! How good is the fit and what are the parameters looking like?
        call write_stats_to_term(par,dang_data,comp,iter)
 

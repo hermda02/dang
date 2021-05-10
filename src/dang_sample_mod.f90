@@ -54,7 +54,7 @@ contains
     ! vv These will not change based off of components
     x = dat%npix
     y = 0
-    z = self%numband
+    z = self%numinc
     
     allocate(map2fit(0:npix-1,nmaps,nbands))
     
@@ -257,7 +257,18 @@ contains
           end do
        end do
     end if
-    
+
+    title = trim(self%outdir) // '23000_samples.dat'
+    inquire(file=title,exist=exist)
+    if (exist) then
+       open(51,file=title, status="old",position="append", action="write")
+    else
+       open(51,file=title, status="new", action="write")
+    endif
+    write(51,fmt='(3(f16.8))') dat%fg_map(23000,2:3,self%fg_ref_loc(n),n)
+    close(51)
+
+
     ! Also checked and looks good ^^
     
     if (rank == master) then
@@ -271,135 +282,7 @@ contains
     deallocate(b)
     deallocate(c)
   end subroutine sample_joint_amp
-  
-  subroutine template_fit(self, dat, comp, map_n, temp_num)
-    !------------------------------------------------------------------------
-    ! Simple linear fit of a template to data map with a sampling term
-    !------------------------------------------------------------------------
-    implicit none
     
-    type(params)                                           :: self
-    type(component)                                        :: comp
-    type(data)                                             :: dat
-    !real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: dat, noise
-    real(dp), dimension(0:npix-1,nbands)                   :: cov, nos, map
-    real(dp), allocatable, dimension(:,:,:)                :: map2fit
-    integer(i4b),                               intent(in) :: map_n
-    integer(i4b), optional,                     intent(in) :: temp_num
-    real(dp)                                               :: temp, sum1, sum2, norm
-    integer(i4b)                                           :: i, j, k, n
-
-    nos = dat%rms_map(:,map_n,:)
-    cov = nos**2.d0
-    allocate(map2fit(0:npix-1,nmaps,nbands))
-    
-    map2fit = dat%sig_map
-    
-    if (trim(self%mode) == 'comp_sep') then
-       write(*,*) "Sampling for template "//trim(self%temp_label(temp_num))//", pol = "//trim(tqu(map_n))//"."
-       do j = 1, self%numinc
-          sum1 = 0.d0
-          sum2 = 0.d0
-          norm = 0.d0
-          temp = 0.d0
-          if (self%temp_corr(temp_num,j)) then
-             ! Remove the other foregrounds from the input data before fitting
-             do n = 1, self%ncomp
-                ! write(*,*) "remove for foreground ", trim(self%fg_label(n)), j
-                map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,n)
-             end do
-             do n = 1, self%ntemp
-                if (n == temp_num) cycle
-                ! write(*,*) "remove for template ", trim(self%temp_label(n))
-                map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,self%ncomp+n)
-             end do
-             ! Calculate template amplitude
-             do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-                sum1 = sum1 + ((map2fit(i,map_n,j)*dat%temps(i,map_n,temp_num))/cov(i,j))
-                sum2 = sum2 + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
-                norm = norm + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
-             end do
-             if (trim(self%ml_mode) == 'sample') then
-                dat%temp_amps(j,map_n,temp_num) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
-             else if (trim(self%ml_mode) == 'optimize') then
-                dat%temp_amps(j,map_n,temp_num) = sum1/sum2
-             end if
-          end if
-       end do
-    else if (trim(self%mode) == 'hi_fit') then
-       do j = 1, self%numinc
-          sum1 = 0.d0
-          sum2 = 0.d0
-          norm = 0.d0
-          temp = 0.d0
-          if (self%temp_corr(1,j)) then
-             do i = 0, npix-1
-                if (comp%HI(i,1) > self%thresh) cycle
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-                temp = comp%HI(i,1)*planck(self%dat_nu(j)*1d9,comp%T_d(i,1))
-                sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/cov(i,j)
-                sum2 = sum2 + (temp)**2.d0/cov(i,j)
-                norm = norm + (temp)**2.d0/cov(i,j)
-             end do
-          end if
-          if (trim(self%ml_mode) == 'sample') then
-             comp%HI_amps(j) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
-          else if (trim(self%ml_mode) == 'optimize') then
-             comp%HI_amps(j) = sum1/sum2
-             end if
-      end do
-    end if
-    
-  end subroutine template_fit
-  
-  function sample_spec_amp(self, dat, comp, ind, map_n)
-    !------------------------------------------------------------------------
-    ! Samples spectral amplitude (per pixel), following the spectrum of foreground 'type'. Returns a full map of amplitudes.
-    !------------------------------------------------------------------------
-    implicit none
-    
-    class(params)                                          :: self
-    type(component)                                        :: comp
-    type(data)                                             :: dat
-    integer(i4b),                               intent(in) :: ind
-    integer(i4b),                               intent(in) :: map_n
-    integer(i4b)                                           :: f
-    real(dp)                                               :: sum1, sum2, spec
-    real(dp)                                               :: amp, num, t, sam
-    real(dp), dimension(0:npix-1)                          :: norm
-    real(dp), dimension(0:npix-1,nbands)                   :: cov, map2fit
-    real(dp), dimension(0:npix-1)                          :: sample_spec_amp
-    
-    map2fit = dat%sig_map(:,map_n,:)
-    
-    do f = 1, nfgs
-       if (f /= ind) then
-          map2fit(:,:) = map2fit(:,:) - dat%fg_map(:,map_n,:,f)
-       end if
-    end do
-    
-    cov = dat%rms_map(:,map_n,:)**2.d0
-    
-    do i = 0, npix-1
-       sum1    = 0.0d0
-       sum2    = 0.0d0
-       norm(i) = 0.d0
-       do j = 1, nbands
-          spec           = compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n)
-          sum1           = sum1 + (map2fit(i,j)*spec)/cov(i,j)
-          sum2           = sum2 + (spec)**2.d0/cov(i,j)
-          norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,j)
-       end do
-       amp                = sum1/sum2
-       if (trim(self%ml_mode) == 'sample') then
-          sample_spec_amp(i) = amp + rand_normal(0.d0,1.d0)/sqrt(norm(i))
-       else if (trim(self%ml_mode) == 'optimize') then
-          sample_spec_amp(i) = amp
-       end if
-    end do
-  end function sample_spec_amp
-  
   subroutine sample_index(self, dat, comp, ind, map_n) 
     !------------------------------------------------------------------------
     ! Warning -- not set up for foregrounds with multiple spectral parameters yet
@@ -806,22 +689,22 @@ contains
        
        time1 = mpi_wtime()
        
-       if (.false.) then
+       if (.true.) then
           
           write(*,*) iter
           write(iter_str, '(i0.5)') iter
           
-          allocate(beta_grid(100))
-          allocate(like_grid(100))
+          allocate(beta_grid(1000))
+          allocate(like_grid(1000))
           
-          do l = 1, 100
-             beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/100
-             write(*,*) l, beta_grid(l)
+          do l = 1, 1000
+             beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/1000
+             ! write(*,*) l, beta_grid(l)
              sol       = beta_grid(l)
-             !!$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
+             !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
              a         = 0.d0
              local_a   = 0.d0
-             !!$OMP DO SCHEDULE(static)
+             !$OMP DO SCHEDULE(static)
              do i = 0, npix-1
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
                    cycle
@@ -830,18 +713,16 @@ contains
                 ! Chi-square from the most recent Gibbs chain update
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
                    do j = 1, nbands
-                      a = a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                      local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
-                      ! local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-                      !      - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                    end do
                 end do
              end do
-             !!$OMP END DO
-             !!$OMP CRITICAL
-             ! a = a + local_a
-             !!$OMP END CRITICAL
-             !!$OMP END PARALLEL
+             !$OMP END DO
+             !$OMP CRITICAL
+             a = a + local_a
+             !$OMP END CRITICAL
+             !$OMP END PARALLEL
              
              title = trim(self%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
              inquire(file=title,exist=exist)
@@ -871,37 +752,24 @@ contains
           ! First evaluate likelihood from previous sample
           !-----------------------------------------------
           
-          ! !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
-          ! a           = 0.d0
-          ! local_a     = 0.d0
-          ! !$OMP DO SCHEDULE(static)
-          ! do i = 0, npix-1
-          !    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-          !    do j = 1, nbands
-          !       do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-          !          local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-          !               - map2fit(i,k,j))**2.d0)/cov(i,k,j)
-          !       end do
-          !    end do
-          ! end do
-          ! !$OMP END DO
-          ! !$OMP CRITICAL
-          ! a = a + local_a
-          ! !$OMP END CRITICAL
-          ! !$OMP END PARALLEL
-          ! c = a
-
+          !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
           a           = 0.d0
+          local_a     = 0.d0
+          !$OMP DO SCHEDULE(static)
           do i = 0, npix-1
              if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
              do j = 1, nbands
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                   sam = indx(i,k)
-                   a   = a + (((fg_map_high(i,k,self%fg_ref_loc(ind))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sam)) &
+                   local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
                         - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                 end do
              end do
           end do
+          !$OMP END DO
+          !$OMP CRITICAL
+          a = a + local_a
+          !$OMP END CRITICAL
+          !$OMP END PARALLEL
           c = a
 
           if (self%fg_prior_type(ind,1) == 'gaussian') then
@@ -935,37 +803,26 @@ contains
                 paccept = naccept/l
                 cycle
              end if
-             ! ! Evaluate likelihood given this sample
-             ! !--------------------------------------
-             ! b         = 0.d0
-             ! !$OMP PARALLEL PRIVATE(i,j,k,local_b)
-             ! local_b   = 0.d0
-             ! !$OMP DO SCHEDULE(static)
-             ! do i = 0, npix-1
-             !    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-             !    do j = 1, nbands
-             !       do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-             !          local_b = local_b + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
-             !               - map2fit(i,k,j))**2.d0)/cov(i,k,j)
-             !       end do
-             !    end do
-             ! end do
-             ! !$OMP END DO
-             ! !$OMP CRITICAL
-             ! b = b + local_b
-             ! !$OMP END CRITICAL
-             ! !$OMP END PARALLEL
-
+             ! Evaluate likelihood given this sample
+             !--------------------------------------
              b         = 0.d0
+             !$OMP PARALLEL PRIVATE(i,j,k,local_b)
+             local_b   = 0.d0
+             !$OMP DO SCHEDULE(static)
              do i = 0, npix-1
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                 do j = 1, nbands
                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                      b = b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
+                      local_b = local_b + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                    end do
                 end do
              end do
+             !$OMP END DO
+             !$OMP CRITICAL
+             b = b + local_b
+             !$OMP END CRITICAL
+             !$OMP END PARALLEL
 
              if (self%fg_prior_type(ind,1) == 'gaussian') then
                 like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
@@ -1024,37 +881,27 @@ contains
           naccept     = 0.d0
           paccept     = 0.d0
 
-          a           = 0.d0
+          ! First evaluate likelihood from previous sample
+          !-----------------------------------------------
+          !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
+          a         = 0.d0
+          local_a   = 0.d0
+          !$OMP DO SCHEDULE(static)
           do i = 0, npix-1
-             if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-
+             if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
+                cycle
+             end if
+             
              do j = 1, nbands
-                a = a + (((fg_map_high(i,map_n,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sam)) &
+                local_a = local_a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
                      - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
              end do
           end do
-
-          ! ! First evaluate likelihood from previous sample
-          ! !-----------------------------------------------
-          ! !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
-          ! a         = 0.d0
-          ! local_a   = 0.d0
-          ! !$OMP DO SCHEDULE(static)
-          ! do i = 0, npix-1
-          !    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
-          !       cycle
-          !    end if
-             
-          !    do j = 1, nbands
-          !       local_a = local_a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
-          !            - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
-          !    end do
-          ! end do
-          ! !$OMP END DO
-          ! !$OMP CRITICAL
-          ! a = a + local_a
-          ! !$OMP END CRITICAL
-          ! !$OMP END PARALLEL
+          !$OMP END DO
+          !$OMP CRITICAL
+          a = a + local_a
+          !$OMP END CRITICAL
+          !$OMP END PARALLEL
 
           c = a
           
@@ -1091,31 +938,24 @@ contains
              end if
              ! Evaluate likelihood given this sample
              !--------------------------------------
+
              b         = 0.d0
 
+             !$OMP PARALLEL PRIVATE(i,j,k,local_b)
+             local_b   = 0.d0
+             !$OMP DO SCHEDULE(static)
              do i = 0, npix-1
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                 do j = 1, nbands
-                   b = b + (((fg_map_high(i,map_n,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
+                   local_b = local_b + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
                         - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
                 end do
              end do
-
-             ! !$OMP PARALLEL PRIVATE(i,j,k,local_b)
-             ! local_b   = 0.d0
-             ! !$OMP DO SCHEDULE(static)
-             ! do i = 0, npix-1
-             !    if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-             !    do j = 1, nbands
-             !       local_b = local_b + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
-             !            - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
-             !    end do
-             ! end do
-             ! !$OMP END DO
-             ! !$OMP CRITICAL
-             ! b = b + local_b
-             ! !$OMP END CRITICAL
-             ! !$OMP END PARALLEL
+             !$OMP END DO
+             !$OMP CRITICAL
+             b = b + local_b
+             !$OMP END CRITICAL
+             !$OMP END PARALLEL
              
              if (self%fg_prior_type(ind,1) == 'gaussian') then
                 like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
@@ -1184,7 +1024,137 @@ contains
     write(*,*) ''
     
   end subroutine sample_index
-  
+
+  function sample_fg_amp(self, dat, comp, ind, map_n)
+    !------------------------------------------------------------------------
+    ! Samples spectral amplitude (per pixel), following the spectrum of foreground 'type'. Returns a full map of amplitudes.
+    !------------------------------------------------------------------------
+    implicit none
+    
+    class(params)                                          :: self
+    type(component)                                        :: comp
+    type(data)                                             :: dat
+    integer(i4b),                               intent(in) :: ind
+    integer(i4b),                               intent(in) :: map_n
+    integer(i4b)                                           :: f
+    real(dp)                                               :: sum1, sum2, spec
+    real(dp)                                               :: amp, num, t, sam
+    real(dp), dimension(0:npix-1,nbands)                   :: map2fit
+    real(dp), dimension(0:npix-1)                          :: sample_fg_amp, norm
+    
+    map2fit = dat%sig_map(:,map_n,:)
+
+    norm = 0.d0
+
+    ! remove all other fg signals
+    do f = 1, nfgs
+       if (f /= ind) then
+          map2fit(:,:) = map2fit(:,:) - dat%fg_map(:,map_n,:,f)
+       end if
+    end do
+    
+    !         sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  |
+    !         sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  + (T_nu)^T N_nu^{-1/2} eta|
+    
+    do i = 0, npix-1
+       sum1    = 0.0d0
+       sum2    = 0.0d0
+       do j = 1, nbands
+          spec    = compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n)
+          sum1    = sum1 + (map2fit(i,j)*spec)/dat%rms_map(i,map_n,j)**2.d0
+          sum2    = sum2 + (spec)**2.d0/dat%rms_map(i,map_n,j)**2.d0
+          norm(i) = norm(i) + spec/dat%rms_map(i,map_n,j)
+       end do
+       if (trim(self%ml_mode) == 'sample') then
+          amp        = sum1/sum2 + rand_normal(0.d0,1.d0)*norm(i)/sum2
+       else if (trim(self%ml_mode) == 'optimize') then
+          amp        = sum1/sum2
+       end if
+       sample_fg_amp(i) = amp
+    end do
+  end function sample_fg_amp
+
+  subroutine template_fit(self, dat, comp, map_n, temp_num)
+    !------------------------------------------------------------------------
+    ! Simple linear fit of a template to data map with a sampling term
+    !------------------------------------------------------------------------
+    implicit none
+    
+    type(params)                                           :: self
+    type(component)                                        :: comp
+    type(data)                                             :: dat
+    !real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: dat, noise
+    real(dp), dimension(0:npix-1,nbands)                   :: cov, nos, map
+    real(dp), allocatable, dimension(:,:,:)                :: map2fit
+    integer(i4b),                               intent(in) :: map_n
+    integer(i4b), optional,                     intent(in) :: temp_num
+    real(dp)                                               :: temp, sum1, sum2, norm
+    integer(i4b)                                           :: i, j, k, n
+
+    nos = dat%rms_map(:,map_n,:)
+    cov = nos**2.d0
+    allocate(map2fit(0:npix-1,nmaps,nbands))
+    
+    map2fit = dat%sig_map
+    
+    if (trim(self%mode) == 'comp_sep') then
+       write(*,*) "Sampling for template "//trim(self%temp_label(temp_num))//", pol = "//trim(tqu(map_n))//"."
+       do j = 1, self%numinc
+          sum1 = 0.d0
+          sum2 = 0.d0
+          norm = 0.d0
+          temp = 0.d0
+          if (self%temp_corr(temp_num,j)) then
+             ! Remove the other foregrounds from the input data before fitting
+             do n = 1, self%ncomp
+                ! write(*,*) "remove for foreground ", trim(self%fg_label(n)), j
+                map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,n)
+             end do
+             do n = 1, self%ntemp
+                if (n == temp_num) cycle
+                ! write(*,*) "remove for template ", trim(self%temp_label(n))
+                map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,self%ncomp+n)
+             end do
+             ! Calculate template amplitude
+             do i = 0, npix-1
+                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
+                sum1 = sum1 + ((map2fit(i,map_n,j)*dat%temps(i,map_n,temp_num))/cov(i,j))
+                sum2 = sum2 + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
+                norm = norm + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
+             end do
+             if (trim(self%ml_mode) == 'sample') then
+                dat%temp_amps(j,map_n,temp_num) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
+             else if (trim(self%ml_mode) == 'optimize') then
+                dat%temp_amps(j,map_n,temp_num) = sum1/sum2
+             end if
+          end if
+       end do
+    else if (trim(self%mode) == 'hi_fit') then
+       do j = 1, self%numinc
+          sum1 = 0.d0
+          sum2 = 0.d0
+          norm = 0.d0
+          temp = 0.d0
+          if (self%temp_corr(1,j)) then
+             do i = 0, npix-1
+                if (comp%HI(i,1) > self%thresh) cycle
+                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
+                temp = comp%HI(i,1)*planck(self%dat_nu(j)*1d9,comp%T_d(i,1))
+                sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/cov(i,j)
+                sum2 = sum2 + (temp)**2.d0/cov(i,j)
+                norm = norm + (temp)**2.d0/cov(i,j)
+             end do
+          end if
+          if (trim(self%ml_mode) == 'sample') then
+             comp%HI_amps(j) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
+          else if (trim(self%ml_mode) == 'optimize') then
+             comp%HI_amps(j) = sum1/sum2
+             end if
+      end do
+    end if
+    
+  end subroutine template_fit
+    
   ! This architecture of this function has not been verified yet
   subroutine sample_HI_T(self, dat, comp, map_n)
     implicit none
