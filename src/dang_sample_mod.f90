@@ -334,19 +334,22 @@ contains
           mask(i,:) = missval
        end if
     end do
-    
+
+    ! Correct the "map2fit" by removing all other foregrounds from the signal maps
     do f = 1, nfgs
        if (f /= ind) then
           map2fit(:,:,:) = map2fit(:,:,:) - dat%fg_map(:,:,:,f)
        end if
     end do
+
+    ! Assign estimated foreground amplitude to a dummy array in case of ud_grading
     fg_map_high(:,:,:) = dat%fg_map(:,:,:,ind)
 
     !------------------------------------------------------------------------
     ! Load priors for the appropriate spectrum
     !------------------------------------------------------------------------
     if (trim(self%fg_label(ind)) == 'synch') then 
-       write(*,*) "Fitting for synchrotron"
+       write(*,*) "Fitting for synchrotron beta."
        indx     = comp%beta_s
     else if (trim(self%fg_label(ind)) == 'dust') then 
        write(*,*) "Fitting for thermal dust"
@@ -532,6 +535,7 @@ contains
 
                 diff = like_new - like_old
                 ratio = exp(diff)
+
                 if (trim(self%ml_mode) == 'optimize') then
                    if (ratio > 1.d0) then
                       sam      = t
@@ -714,7 +718,7 @@ contains
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
                    do j = 1, nbands
                       local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-                           - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                           - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
                    end do
                 end do
              end do
@@ -736,7 +740,7 @@ contains
              close(12)
           end do
        end if
-       indx_sample(:) = -3.1d0
+       ! indx_sample(:) = -3.1d0
        
        !----------------------------|
        ! Sample for Q and U jointly |
@@ -760,8 +764,10 @@ contains
              if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
              do j = 1, nbands
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                   local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
-                        - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                   local_a = local_a + (((dat%fg_map(i,k,self%fg_ref_loc(ind),ind) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                        - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
+                   ! local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                   !      - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
                 end do
              end do
           end do
@@ -806,15 +812,15 @@ contains
              ! Evaluate likelihood given this sample
              !--------------------------------------
              b         = 0.d0
-             !$OMP PARALLEL PRIVATE(i,j,k,local_b)
+             !$OMP PARALLEL PRIVATE(i,j,k,local_b), SHARED(b)
              local_b   = 0.d0
              !$OMP DO SCHEDULE(static)
              do i = 0, npix-1
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                 do j = 1, nbands
                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                      local_b = local_b + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
-                           - map2fit(i,k,j))**2.d0)/cov(i,k,j)
+                      local_b = local_b + (((dat%fg_map(i,k,self%fg_ref_loc(ind),ind) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
+                           - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
                    end do
                 end do
              end do
@@ -853,6 +859,7 @@ contains
                    like_old = like_new
                    naccept  = naccept + 1.0
                 end if
+                write(*,fmt='(i6,6(f16.4))') l, t, like_new, like_old, ratio, num, naccept/l
              end if
              
              paccept = naccept/l
@@ -893,8 +900,8 @@ contains
              end if
              
              do j = 1, nbands
-                local_a = local_a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
-                     - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
+                local_a = local_a + (((dat%fg_map(i,map_n,self%fg_ref_loc(ind),ind) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+                     - map2fit(i,map_n,j))**2.d0)/dat%rms_map(i,map_n,j)**2.d0!cov(i,map_n,j)
              end do
           end do
           !$OMP END DO
@@ -941,14 +948,14 @@ contains
 
              b         = 0.d0
 
-             !$OMP PARALLEL PRIVATE(i,j,k,local_b)
+             !$OMP PARALLEL PRIVATE(i,j,k,local_b), SHARED(b)
              local_b   = 0.d0
              !$OMP DO SCHEDULE(static)
              do i = 0, npix-1
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                 do j = 1, nbands
-                   local_b = local_b + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
-                        - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
+                   local_b = local_b + (((dat%fg_map(i,map_n,self%fg_ref_loc(ind),ind) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
+                        - map2fit(i,map_n,j))**2.d0)/dat%rms_map(i,map_n,j)**2.d0!cov(i,map_n,j)
                 end do
              end do
              !$OMP END DO
