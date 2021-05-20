@@ -57,8 +57,6 @@ module dang_param_mod
         integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
 
         logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
-        character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
-        character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral index sampler (pixel/fullsky)
         real(dp),           allocatable, dimension(:,:)   :: fg_init        ! Initialized parameter value (fullsky)
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling parameters
         integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
@@ -70,6 +68,7 @@ module dang_param_mod
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
+  
 
         integer(i4b)                                      :: njoint         ! # of components to jointly sample 
         logical(lgt)                                      :: joint_sample   ! Logical - jointly sample fg amplitudes
@@ -418,7 +417,7 @@ contains
         type(hash_tbl_sll), intent(in)    :: htbl
         type(params),       intent(inout) :: par
 
-        integer(i4b)     :: i, j, n, len_itext
+        integer(i4b)     :: i, j, n, n2, len_itext
         character(len=3) :: itext
         character(len=2) :: jtext
 
@@ -431,7 +430,8 @@ contains
         call get_parameter_hashtable(htbl, 'DATA_DIRECTORY', par_string=par%datadir)
         call get_parameter_hashtable(htbl, 'MASKFILE', par_string=par%mask_file)
 
-        n = par%numband
+        n  = par%numband
+        n2 = par%numinc
 
         allocate(par%band_mapfile(n),par%band_label(n))
         allocate(par%band_noisefile(n),par%band_nu(n))
@@ -445,6 +445,7 @@ contains
         allocate(par%fit_gain(n))
         allocate(par%fit_offs(n))
 
+        j = 1
         do i = 1, n
             call int2string(i, itext)
             call get_parameter_hashtable(htbl, 'INCLUDE_BAND'//itext, len_itext=len_itext, par_lgt=par%band_inc(i))
@@ -504,10 +505,12 @@ contains
            allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
            allocate(par%fg_spec_file(n,2))
            allocate(par%fg_ind_region(n,2))
+           allocate(par%fg_prior_type(n,2))
            allocate(par%fg_init(n,2))
            par%temp_nfit = 0
 
            allocate(par%temp_file(n2))
+           allocate(par%temp_sample(n2))
            allocate(par%temp_nfit(n2))
            allocate(par%temp_label(n2))
            allocate(par%temp_corr(n2,par%numband))
@@ -518,6 +521,7 @@ contains
               call int2string(i, itext)
               call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext, len_itext=len_itext, par_string=par%temp_file(i))
               call get_parameter_hashtable(htbl, 'TEMPLATE_LABEL'//itext, len_itext=len_itext, par_string=par%temp_label(i))
+              call get_parameter_hashtable(htbl, 'TEMPLATE_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%temp_sample(i))
               do j = 1, par%numband
                  call int2string(j,jtext)
                  call get_parameter_hashtable(htbl, 'TEMPLATE'//trim(itext)//'_FIT'//jtext,&
@@ -563,6 +567,8 @@ contains
                       par_string=par%fg_spec_file(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_REGION'//itext, len_itext=len_itext,&
                       par_string=par%fg_ind_region(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR'//itext, len_itext=len_itext,&
+                      par_string=par%fg_prior_type(i,1))
               else if (trim(par%fg_type(i)) == 'mbb') then
                  call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                       par_dp=par%fg_gauss(i,1,1))

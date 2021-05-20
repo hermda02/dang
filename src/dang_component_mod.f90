@@ -4,12 +4,10 @@ module dang_component_mod
   use fitstools
   use dang_util_mod
   use dang_param_mod
-  use dang_data_mod
   implicit none
   
   type, public                              :: component
      
-     character(len=32), allocatable, dimension(:) :: joint
      real(dp), allocatable, dimension(:,:)        :: beta_s, beta_d, T_d, HI
      real(dp), allocatable, dimension(:)          :: HI_amps
 
@@ -26,6 +24,7 @@ contains
     allocate(self%beta_s(0:npix-1,nmaps))
     write(*,*) 'Allocated synch maps'
     if (trim(param%fg_spec_file(1,1)) == 'none') then 
+       write(*,*) 'Full sky beta_s estimate ', param%fg_init(1,1)
        self%beta_s     = param%fg_init(1,1) ! Synchrotron beta initial guess
     else
        !call read_bintab(trim(param%fg_spec_file(1,1)),self%beta_s,npix,3,nullval,anynull,header=header)
@@ -48,16 +47,6 @@ contains
     
   end subroutine init_dust
 
-  subroutine init_template(self,npix,nmaps,ntemp,nbands)
-    implicit none
-    type(data)               :: self
-    integer(i4b), intent(in) :: npix, nmaps, ntemp, nbands
-
-    allocate(self%temps(0:npix-1,nmaps,ntemp))
-    allocate(self%temp_amps(nbands,nmaps,ntemp))
-    allocate(self%temp_norm(nmaps,ntemp))
-
-  end subroutine init_template
 
   subroutine init_hi_fit(self, param, npix)
     implicit none
@@ -119,81 +108,5 @@ contains
             (exp(z*freq*1d9)-1.d0) * (freq/353.d0)**(self%beta_d(pix,mapn)+1.d0)
     end if
   end function compute_spectrum
-
-  subroutine dust_correct_band(dat,param,comp,band)
-    implicit none
-    type(data),   intent(inout) :: dat
-    type(params)                :: param
-    type(component)             :: comp
-    integer(i4b), intent(in)    :: band
-    real(dp), allocatable, dimension(:,:,:) :: thermal_map
-    integer(i4b)                :: i, j, k
-    character(len=256)          :: title
-
-    allocate(thermal_map(0:npix-1,nmaps,nbands))
-
-    if (trim(param%dust_corr_type) == 'uniform') then
-       comp%T_d    = param%mbb_gauss(1,1)
-       comp%beta_d = param%mbb_gauss(2,1)
-    else if (trim(param%dust_corr_type) == 'sample') then
-       if (param%mbb_gauss(1,2) .gt. 0.d0) then
-          comp%T_d    = rand_normal(param%mbb_gauss(1,1),param%mbb_gauss(1,2))
-       else 
-          comp%T_d    = param%mbb_gauss(1,1)
-       end if
-       if (param%mbb_gauss(2,2) .gt. 0.d0) then
-          comp%beta_d = rand_normal(param%mbb_gauss(2,1),param%mbb_gauss(2,2))
-       else
-          comp%beta_d = param%mbb_gauss(2,1)
-       end if
-    else if (trim(param%dust_corr_type) == 'planck') then
-       stop
-    end if
-    write(*,'(a,a)') 'Dust correcting band ', trim(param%band_label(band))
-    do k = param%pol_type(1), param%pol_type(size(param%pol_type))
-       do i = 0, npix-1
-          thermal_map(i,k,band) = dat%temps(i,k,1)*compute_spectrum(param,comp,2,param%band_nu(band),i,k)
-          dat%sig_map(i,k,band) = dat%sig_map(i,k,band) - thermal_map(i,k,band)
-       end do
-    end do
-    title = trim(param%outdir)//trim(param%band_label(band))//'_thermal_map.fits'
-    call write_result_map(trim(title), nside, ordering, header, thermal_map(:,:,band))
-  end subroutine dust_correct_band
-
-  subroutine extrapolate_foreground(param, dat, comp, ind, map_n)
-    implicit none
-    type(data),   intent(inout) :: dat
-    type(params)                :: param
-    type(component)             :: comp
-    integer(i4b), intent(in)    :: ind, map_n
-    integer(i4b)                :: i, j, k
-
-    do i = 0, npix-1
-       do j = 1, nbands
-          do k = param%pol_type(1), param%pol_type(size(param%pol_type))
-             dat%fg_map(i,k,j,ind) = dat%fg_map(i,k,param%fg_ref_loc(ind),ind)*compute_spectrum(param,comp,ind,param%band_nu(j),i,k)
-          end do
-       end do
-    end do
-
-  end subroutine extrapolate_foreground
-
-  subroutine extrapolate_template(param, dat, comp, ind, map_n)
-    implicit none
-    type(data),   intent(inout) :: dat
-    type(params)                :: param
-    type(component)             :: comp
-    integer(i4b), intent(in)    :: ind, map_n
-    integer(i4b)                :: i, j, k
-
-    do i = 0, npix-1
-       do j = 1, nbands
-          do k = param%pol_type(1), param%pol_type(size(param%pol_type))
-             dat%fg_map(i,k,j,param%ncomp+ind) = dat%temp_amps(j,k,ind)*dat%temps(i,k,ind)
-          end do
-       end do
-    end do
-
-  end subroutine extrapolate_template
   
 end module dang_component_mod
