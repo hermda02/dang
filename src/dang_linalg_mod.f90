@@ -426,7 +426,7 @@ contains
                            res(i) = 0.d0
                            cycle
                         else
-                           res(i) = res(i) + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
+                           res(i) = res(i) + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
                         end if
                      end do
                   end do
@@ -440,8 +440,8 @@ contains
                            res(x+i) = 0.d0
                            cycle
                         else                           
-                           res(i)   = res(i)   + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
-                           res(x+i) = res(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j))*vec(i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1)
+                           res(i)   = res(i)   + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                           res(x+i) = res(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                         end if
                      end do
                   end do
@@ -538,8 +538,8 @@ contains
             do m = 1, size(self%joint_comp)
                do n = 1, self%ncomp
                   if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
-                     v_temp2(i)   = vech(i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n)
-                     if (self%joint_pol) v_temp2(x+i) = vech(x+i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n+1)
+                     v_temp2(i)   = vech(i)*compute_spectrum(self,compo,1,self%band_nu(j),i-1,map_n)
+                     if (self%joint_pol) v_temp2(x+i) = vech(x+i)*compute_spectrum(self,compo,1,self%band_nu(j),i-1,map_n+1)
                   end if
                end do
                do n = 1, self%ntemp
@@ -553,8 +553,8 @@ contains
             end do
             v_temp2(i)   = v_temp2(i)/(dat%rms_map(i-1,map_n,j))**2.d0
             if (self%joint_pol) v_temp2(x+i) = v_temp2(x+i)/(dat%rms_map(i-1,map_n+1,j))**2.d0
-            v_temp(i)    = v_temp(i)   + v_temp2(i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n)
-            if (self%joint_pol) v_temp(x+i)  = v_temp(x+i) + v_temp2(x+i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n+1)
+            v_temp(i)    = v_temp(i)   + v_temp2(i)*compute_spectrum(self,compo,1,self%band_nu(j),i-1,map_n)
+            if (self%joint_pol) v_temp(x+i)  = v_temp(x+i) + v_temp2(x+i)*compute_spectrum(self,compo,1,self%band_nu(j),i-1,map_n+1)
          end do
          !$OMP END DO
          !$OMP END PARALLEL
@@ -642,9 +642,9 @@ contains
             do m = 1, size(self%joint_comp)
                do n = 1, self%ncomp
                   if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
-                     v_temp2(i)   = vech(i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n)
+                     v_temp2(i)   = vech(i)*compute_spectrum(self,compo,1,self%band_nu(j),i-1,map_n)
                      ! If sampling Q and U jointly
-                     if (self%joint_pol) v_temp2(x+i) = vech(x+i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n+1)
+                     if (self%joint_pol) v_temp2(x+i) = vech(x+i)*compute_spectrum(self,compo,1,self%band_nu(j),i-1,map_n+1)
                   end if
                end do
                do n = 1, self%ntemp
@@ -660,8 +660,8 @@ contains
             ! Then multiply by N_nu^-1
             v_temp2(i)   = v_temp2(i)/(dat%rms_map(i-1,map_n,j))**2.d0
             if (self%joint_pol) v_temp2(x+i) = v_temp2(x+i)/(dat%rms_map(i-1,map_n+1,j))**2.d0
-            v_temp(i)    = v_temp(i)   + v_temp2(i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n)
-            if (self%joint_pol) v_temp(x+i)  = v_temp(x+i) + v_temp2(x+i)*compute_spectrum(self,compo,1,self%dat_nu(j),i-1,map_n+1)
+            v_temp(i)    = v_temp(i)   + v_temp2(i)*compute_spectrum(self,compo,1,self%band_nu(j),i-1,map_n)
+            if (self%joint_pol) v_temp(x+i)  = v_temp(x+i) + v_temp2(x+i)*compute_spectrum(self,compo,1,self%band_nu(j),i-1,map_n+1)
          end do
          !$OMP END DO
          !$OMP END PARALLEL

@@ -133,18 +133,18 @@ contains
     
     do j = 1, nbands
        if (.not. self%bp_map(j)) then
-          if (trim(self%dat_unit(j)) == 'uK_RJ') then
+          if (trim(self%band_unit(j)) == 'uK_RJ') then
              cycle
-          else if (trim(self%dat_unit(j)) == 'uK_cmb') then
+          else if (trim(self%band_unit(j)) == 'uK_cmb') then
              ! uK_cmb -> uK_RJ
-             write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from uK_cmb to uK_RJ.'
-             dat%sig_map(:,:,j) = dat%sig_map(:,:,j)/a2t(self%dat_nu(j)*1.0d9)
-             dat%rms_map(:,:,j) = dat%rms_map(:,:,j)/a2t(self%dat_nu(j)*1.0d9)
-          else if (trim(self%dat_unit(j)) == 'MJy/sr') then
+             write(*,*) 'Putting band ', trim(self%band_label(j)), ' from uK_cmb to uK_RJ.'
+             dat%sig_map(:,:,j) = dat%sig_map(:,:,j)/a2t(self%band_nu(j)*1.0d9)
+             dat%rms_map(:,:,j) = dat%rms_map(:,:,j)/a2t(self%band_nu(j)*1.0d9)
+          else if (trim(self%band_unit(j)) == 'MJy/sr') then
              ! MJy/sr -> uK_RJ
-             write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from MJy/sr to uK_RJ'
-             dat%sig_map(:,:,j) = dat%sig_map(:,:,j)/a2f(self%dat_nu(j)*1.0d9)
-             dat%rms_map(:,:,j) = dat%rms_map(:,:,j)/a2f(self%dat_nu(j)*1.0d9)
+             write(*,*) 'Putting band ', trim(self%band_label(j)), ' from MJy/sr to uK_RJ'
+             dat%sig_map(:,:,j) = dat%sig_map(:,:,j)/a2f(self%band_nu(j)*1.0d9)
+             dat%rms_map(:,:,j) = dat%rms_map(:,:,j)/a2f(self%band_nu(j)*1.0d9)
           else
              write(*,*) 'Not a unit, dumbass!'
              stop
@@ -162,18 +162,18 @@ contains
     
     do j = 1, nbands
        if (self%bp_map(j)) then
-          if (trim(self%dat_unit(j)) == 'uK_RJ') then
+          if (trim(self%band_unit(j)) == 'uK_RJ') then
              cycle
-          else if (trim(self%dat_unit(j)) == 'uK_cmb') then
+          else if (trim(self%band_unit(j)) == 'uK_cmb') then
              ! uK_cmb -> uK_RJ
-             write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from uK_cmb to uK_RJ.'
-             dat%sig_map(:,:,j) = dat%sig_map(:,:,j)/a2t(self%dat_nu(j)*1.0d9)
-             dat%rms_map(:,:,j) = dat%rms_map(:,:,j)/a2t(self%dat_nu(j)*1.0d9)
-          else if (trim(self%dat_unit(j)) == 'MJy/sr') then
+             write(*,*) 'Putting band ', trim(self%band_label(j)), ' from uK_cmb to uK_RJ.'
+             dat%sig_map(:,:,j) = dat%sig_map(:,:,j)/a2t(self%band_nu(j)*1.0d9)
+             dat%rms_map(:,:,j) = dat%rms_map(:,:,j)/a2t(self%band_nu(j)*1.0d9)
+          else if (trim(self%band_unit(j)) == 'MJy/sr') then
              ! MJy/sr -> uK_RJ
-             write(*,*) 'Putting band ', trim(self%dat_label(j)), ' from MJy/sr to uK_RJ'
-             dat%sig_map(:,:,j) = dat%sig_map(:,:,j)/a2f(self%dat_nu(j)*1.0d9)
-             dat%rms_map(:,:,j) = dat%rms_map(:,:,j)/a2f(self%dat_nu(j)*1.0d9)
+             write(*,*) 'Putting band ', trim(self%band_label(j)), ' from MJy/sr to uK_RJ'
+             dat%sig_map(:,:,j) = dat%sig_map(:,:,j)/a2f(self%band_nu(j)*1.0d9)
+             dat%rms_map(:,:,j) = dat%rms_map(:,:,j)/a2f(self%band_nu(j)*1.0d9)
           else
              write(*,*) 'Not a unit, dumbass!'
              stop

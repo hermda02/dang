@@ -75,18 +75,17 @@ contains
           call RANDOM_NUMBER(temp)
           
           norm    = temp(1)*(param%bp_max-param%bp_burnin)
-          iter_i    = int(norm)+1+param%bp_burnin
+          iter_i  = int(norm)+1+param%bp_burnin
           
           write(iter_str,'(i0.6)') iter_i
 
-          bp_maps(j,1) = trim(param%bp_dir) // trim(param%dat_label(j))//'_map_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str)  // '.fits'
-          bp_maps(j,2) = trim(param%bp_dir) // trim(param%dat_label(j))//'_rms_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str) // '.fits'
-          write(*,'(a,a,a)') 'Swapping band ', trim(param%dat_label(j)), '.'
+          bp_maps(j,1) = trim(param%bp_dir) // trim(param%band_label(j))//'_map_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str)  // '.fits'
+          bp_maps(j,2) = trim(param%bp_dir) // trim(param%band_label(j))//'_rms_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str) // '.fits'
+          write(*,'(a,a,a)') 'Swapping band ', trim(param%band_label(j)), '.'
           call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header)
           dat%sig_map(:,:,j) = map
           call read_bintab(trim(bp_maps(j,2)),rms,dat%npix,3,nullval,anynull,header=header)
           dat%rms_map(:,:,j) = rms
-          ! write(*,*) trim(chain_c), ' ', iter_str
        end if
     end do
 

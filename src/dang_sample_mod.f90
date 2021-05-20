@@ -101,7 +101,7 @@ contains
                          c(i) = 0.d0
                          cycle
                       else
-                         c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
+                         c(i) = c(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
                       end if
                    end do
                 end do
@@ -114,8 +114,8 @@ contains
                          c(x+i) = 0.d0
                          cycle
                       else                           
-                         c(i)   = c(i)   + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
-                         c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*map2fit(i-1,map_n+1,j)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1)
+                         c(i)   = c(i)   + 1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                         c(x+i) = c(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*map2fit(i-1,map_n+1,j)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                       end if
                    end do
                 end do
@@ -316,7 +316,7 @@ contains
              do i = 0, npix-1
                 if (comp%HI(i,1) > self%thresh) cycle
                 if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-                temp = comp%HI(i,1)*planck(self%dat_nu(j)*1d9,comp%T_d(i,1))
+                temp = comp%HI(i,1)*planck(self%band_nu(j)*1d9,comp%T_d(i,1))
                 sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/cov(i,j)
                 sum2 = sum2 + (temp)**2.d0/cov(i,j)
                 norm = norm + (temp)**2.d0/cov(i,j)
@@ -361,7 +361,7 @@ contains
        sum2    = 0.0d0
        norm(i) = 0.d0
        do j = 1, nbands
-          spec           = compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n)
+          spec           = compute_spectrum(self,comp,ind,self%band_nu(j),i,map_n)
           sum1           = sum1 + (map2fit(i,map_n,j)*spec)/cov(i,map_n,j)
           sum2           = sum2 + (spec)**2.d0/cov(i,map_n,j)
           norm(i)        = norm(i) + ((spec)**2.d0)/cov(i,map_n,j)
@@ -552,7 +552,7 @@ contains
              !$OMP DO SCHEDULE(static)
              do j = 1, nbands
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                   local_a = local_a + (((fg_map_low(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                   local_a = local_a + (((fg_map_low(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%band_nu(j),i,k,sol)) &
                         - data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                 end do
              end do
@@ -591,7 +591,7 @@ contains
                 !$OMP DO SCHEDULE(static)
                 do j = 1, nbands
                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                      local_b = local_b + ((fg_map_low(i,k,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t) &
+                      local_b = local_b + ((fg_map_low(i,k,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%band_nu(j),i,k,t) &
                            -data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                    end do
                 end do
@@ -648,7 +648,7 @@ contains
              local_a = 0.d0
              !$OMP DO SCHEDULE(static)
              do j = 1, nbands
-                local_a = local_a + (((fg_map_low(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+                local_a = local_a + (((fg_map_low(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%band_nu(j),i,map_n,sol)) &
                      - data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
              end do
              !$OMP END DO
@@ -685,7 +685,7 @@ contains
                 local_b   = 0.d0
                 !$OMP DO SCHEDULE(static)
                 do j = 1, nbands
-                   local_b = local_b + ((fg_map_low(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t) &
+                   local_b = local_b + ((fg_map_low(i,map_n,self%fg_ref_loc(1))*compute_spectrum(self,comp,ind,self%band_nu(j),i,map_n,t) &
                         -data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
                 end do
                 !$OMP END DO
@@ -761,7 +761,7 @@ contains
                 ! Chi-square from the most recent Gibbs chain update
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
                    do j = 1, nbands
-                      local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                      local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%band_nu(j),i,k,sol)) &
                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                    end do
                 end do
@@ -806,7 +806,7 @@ contains
              if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
              do j = 1, nbands
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                   local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,sol)) &
+                   local_a = local_a + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%band_nu(j),i,k,sol)) &
                         - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                 end do
              end do
@@ -849,7 +849,7 @@ contains
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                 do j = 1, nbands
                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                      local_b = local_b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,k,t)) &
+                      local_b = local_b + (((fg_map_high(i,k,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%band_nu(j),i,k,t)) &
                            - map2fit(i,k,j))**2.d0)/cov(i,k,j)
                    end do
                 end do
@@ -913,7 +913,7 @@ contains
              end if
              
              do j = 1, nbands
-                local_a = local_a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,sol)) &
+                local_a = local_a + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%band_nu(j),i,map_n,sol)) &
                      - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
              end do
           end do
@@ -954,7 +954,7 @@ contains
              do i = 0, npix-1
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                 do j = 1, nbands
-                   local_b = local_b + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%dat_nu(j),i,map_n,t)) &
+                   local_b = local_b + (((fg_map_high(i,map_n,self%fg_ref_loc(1)) * compute_spectrum(self,comp,ind,self%band_nu(j),i,map_n,t)) &
                         - map2fit(i,map_n,j))**2.d0)/cov(i,map_n,j)
                 end do
              end do
@@ -1092,7 +1092,7 @@ contains
           sam = sol
           ! Chi-square from the most recent Gibbs chain update
           do j = 1, nbands
-             a = a + (((comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,sol)) &
+             a = a + (((comp%HI_amps(j)*comp%HI(i,1)*planck(self%band_nu(j)*1.d9,sol)) &
                   - (maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/cov_low(i,map_n,j)
           end do
           c   = a
@@ -1111,7 +1111,7 @@ contains
              t = rand_normal(sol,self%HI_Td_std)
              b = 0.d0
              do j = 1, nbands
-                b = b + (((comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,t)) &
+                b = b + (((comp%HI_amps(j)*comp%HI(i,1)*planck(self%band_nu(j)*1.d9,t)) &
                      - (maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/cov_low(i,map_n,j)
              end do
              b = b
@@ -1196,7 +1196,7 @@ contains
     if (trim(self%mode) == 'hi_fit') then
        do i = 0, dat%npix-1
           if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-          map1(i) = comp%HI_amps(band)*comp%HI(i,1)*planck(self%dat_nu(band)*1d9,comp%T_d(i,1))
+          map1(i) = comp%HI_amps(band)*comp%HI(i,1)*planck(self%band_nu(band)*1d9,comp%T_d(i,1))
        end do
     else
        map1 = dat%fg_map(:,map_n,band,fg)
@@ -1328,7 +1328,7 @@ contains
     if (trim(self%mode) == 'hi_fit') then
        do i = 0, dat%npix-1
           if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-          map1(i) = comp%HI_amps(band)*comp%HI(i,1)*planck(self%dat_nu(band)*1d9,comp%T_d(i,1))
+          map1(i) = comp%HI_amps(band)*comp%HI(i,1)*planck(self%band_nu(band)*1d9,comp%T_d(i,1))
        end do
     else
        map1 = dat%fg_map(:,map_n,band,fg)

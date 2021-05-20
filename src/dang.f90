@@ -119,10 +119,10 @@ program dang
      do j = 1, nbands
         ! If not supposed to be swapped BP maps, load that map
         if (.not. par%bp_map(j)) then
-           call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
+           call read_bintab(trim(par%datadir) // trim(par%band_noisefile(j)), &
                 rms,npix,nmaps,nullval,anynull,header=header)
            dang_data%rms_map(:,:,j) = rms
-           call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
+           call read_bintab(trim(par%datadir) // trim(par%band_mapfile(j)), &
                 map,npix,nmaps,nullval,anynull,header=header)
            dang_data%sig_map(:,:,j) = map
         end if
@@ -166,10 +166,10 @@ program dang
      ! Read maps in
      do j = 1, par%numband
         if (par%band_inc(j)) then
-           call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(k)), &
+           call read_bintab(trim(par%datadir) // trim(par%band_noisefile(k)), &
                 rms,npix,nmaps,nullval,anynull,header=header)
            dang_data%rms_map(:,:,k) = rms
-           call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(k)), &
+           call read_bintab(trim(par%datadir) // trim(par%band_mapfile(k)), &
                 map,npix,nmaps,nullval,anynull,header=header)
            dang_data%sig_map(:,:,k) = map
            ! Initialize gain and offset values from parameter file
@@ -288,7 +288,7 @@ contains
        ! Sample spectral parameters
        ! ------------------------------------------------------------------------------------------
        do n = 1, par%ncomp
-          if (par%fg_samp_inc(n,1)) then
+          if (par%fg_samp_spec(n,1)) then
              if (par%fg_spec_joint(n,1)) then
                 write(*,*) "Sample "//trim(par%fg_label(n))//" beta jointly."
                 write(*,*) "---------------------------------"
@@ -377,7 +377,7 @@ contains
           do i = 0, npix-1
              if (dang_data%masks(i,1) == missval .or. dang_data%masks(i,1) == 0.d0) cycle
              dang_data%res_map(i,1,j) = (dang_data%sig_map(i,1,j)-dang_data%offset(j))/dang_data%gain(j) &
-                  - comp%HI_amps(j)*comp%HI(i,1)*planck(par%dat_nu(j)*1d9,comp%T_d(i,1))
+                  - comp%HI_amps(j)*comp%HI(i,1)*planck(par%band_nu(j)*1d9,comp%T_d(i,1))
           end do
        end do
 
@@ -423,7 +423,7 @@ contains
        if (par%output_fg .eqv. .true.) then
           do j = 1, nbands
              do n = 1, par%ntemp
-                title = trim(par%outdir) // trim(par%dat_label(j)) //'_'// trim(par%temp_label(n)) //&
+                title = trim(par%outdir) // trim(par%band_label(j)) //'_'// trim(par%temp_label(n)) //&
                      '_k' // trim(iter_str) // '.fits'
                 map(:,:)   = dang_data%fg_map(:,:,j,n+par%ncomp)
                 do i = 0, npix-1
@@ -434,7 +434,7 @@ contains
                 call write_result_map(trim(title), nside, ordering, header, map)
              end do
              do n = 1, par%ncomp
-                title = trim(par%outdir) // trim(par%dat_label(j)) //'_'// trim(par%fg_label(n)) //&
+                title = trim(par%outdir) // trim(par%band_label(j)) //'_'// trim(par%fg_label(n)) //&
                      '_amplitude_k' // trim(iter_str) // '.fits'
                 map(:,:)   = dang_data%fg_map(:,:,j,n)
                 do i = 0, npix-1
@@ -447,7 +447,7 @@ contains
           end do
        else 
           do n = 1, par%ncomp
-             title = trim(par%outdir) // trim(par%dat_label(par%fg_ref_loc(n))) //'_'// trim(par%fg_label(n)) //&
+             title = trim(par%outdir) // trim(par%band_label(par%fg_ref_loc(n))) //'_'// trim(par%fg_label(n)) //&
                   '_amplitude_k' // trim(iter_str) // '.fits'
              map(:,:)   = dang_data%fg_map(:,:,par%fg_ref_loc(n),n)
              do i = 0, npix-1
@@ -459,7 +459,7 @@ contains
           end do
        end if
        do j = 1, nbands
-          title = trim(par%outdir) // trim(par%dat_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
+          title = trim(par%outdir) // trim(par%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
           map(:,:)   = dang_data%res_map(:,:,j)
           do i = 0, npix-1
              if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
@@ -504,7 +504,7 @@ contains
        n = 1
        do j = 1, par%numband
           if (par%band_inc(j)) then
-             title = trim(par%outdir) // trim(par%dat_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
+             title = trim(par%outdir) // trim(par%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
              map(:,1)   = comp%HI_amps(n)*comp%HI(:,1)
              do i = 0, npix-1
                 if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
@@ -519,7 +519,7 @@ contains
        n = 1
        do j = 1, par%numband
           if (par%band_inc(j)) then
-             title = trim(par%outdir) // trim(par%dat_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
+             title = trim(par%outdir) // trim(par%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
              map(:,:)   = dang_data%res_map(:,:,n)
              do i = 0, npix-1
                 if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
@@ -541,7 +541,7 @@ contains
        dang_data%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
-             s =  comp%HI_amps(j)*comp%HI(i,1)*planck(par%dat_nu(j)*1d9,comp%T_d(i,1))
+             s =  comp%HI_amps(j)*comp%HI(i,1)*planck(par%band_nu(j)*1d9,comp%T_d(i,1))
              dang_data%chi_map(i,1) = dang_data%chi_map(i,1) + dang_data%masks(i,1)*(dang_data%sig_map(i,1,j) - s)**2.d0/dang_data%rms_map(i,1,j)**2.d0
           end do
        end do
@@ -676,7 +676,7 @@ contains
           if (dang_data%masks(i,1) == missval .or. dang_data%masks(i,1) == 0.d0) cycle
           do j = 1, nbands    
              s = 0.0
-             s = dang_data%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(par%dat_nu(j)*1d9,comp%T_d(i,1))+dang_data%offset(j)
+             s = dang_data%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(par%band_nu(j)*1d9,comp%T_d(i,1))+dang_data%offset(j)
              chisq = chisq + (dang_data%sig_map(i,map_n,j)-s)**2.d0/(dang_data%rms_map(i,map_n,j)**2.d0)
           end do
        end do
