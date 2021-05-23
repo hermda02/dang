@@ -64,7 +64,7 @@ def _init_():
         exit()
 
 def load_data():
-    global diag, parameters, chiQ, chiU
+    global diag, parameters, chiQ, chiU, chisq
     global param_labels, param_Q, param_U
     global asQ, adQ, bsQ, adU, asU, bsU, x
     global iterations, ranges_Q, ranges_U
@@ -75,6 +75,8 @@ def load_data():
     chiQ = np.loadtxt('../'+dir+'/total_chisq_Q.dat')    
     chiU = np.loadtxt('../'+dir+'/total_chisq_U.dat') 
 
+    chisq = np.sqrt(chiQ**2 + chiU**2)
+    
     for file in files:
         if file.startswith('pixel') and file.endswith('dat'):
             diag.append(file)
@@ -110,12 +112,12 @@ def load_data():
         ranges_Q[i] = (np.mean(data_Q[i])-4.5*np.std(data_Q[i]),np.mean(data_Q[i])+4.5*np.std(data_Q[i]))
         ranges_U[i] = (np.mean(data_U[i])-4.5*np.std(data_U[i]),np.mean(data_U[i])+4.5*np.std(data_U[i]))
 
-    asQ = data_Q[0]
-    adQ = data_Q[1]
-    bsQ = data_Q[2]
-    asU = data_U[0]
-    adU = data_U[1]
-    bsU = data_U[2]
+    bsQ = data_Q[0]
+    asQ = data_Q[1]
+    adQ = data_Q[2]
+    adU = data_U[0]
+    bsU = data_U[1]
+    asU = data_U[2]
     x   = np.linspace(1,iterations,iterations)
 
 
@@ -185,7 +187,7 @@ def trace_all(pol):
         # axes[1].axvline(x=b_s_mean,c='k')
 
         # Chisq
-        axes[3][0].plot(x,chiQ)
+        axes[3][0].plot(x,chisq)
         axes[3][0].set_yscale('log')
         # axes[3][0].set_title('Trace',size=15)
         axes[3][0].set_ylabel(r'$\chi^2$',size=15)
@@ -225,7 +227,7 @@ def trace_all(pol):
         axes[2][1].set_ylabel('Count',size=15)
 
         # Chisq
-        axes[3][0].plot(x,chiU)
+        axes[3][0].plot(x,chisq)
         axes[3][0].set_yscale('log')
         axes[3][0].set_ylabel(r'$\chi^2$',size=15)
         axes[3][0].set_xlabel('Gibbs Iteration',size=10)
