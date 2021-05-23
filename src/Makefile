@@ -2,7 +2,8 @@
 
 F90       = ifort
 MPF90     = mpiifort
-F90FLAGS  = -g -C
+#F90FLAGS  = -g -C
+F90FLAGS  = -g -C -traceback -check all -fp-stack-check
 
 LOCAL=/mn/stornext/u3/hke/owl/local
 
