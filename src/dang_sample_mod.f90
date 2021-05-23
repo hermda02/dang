@@ -299,7 +299,6 @@ contains
     character(len=5)                                          :: iter_str
     character(len=128)                                        :: title
 
-
     ! Initialize our spectral parameter
 
     index_map = comp%beta_s
@@ -311,6 +310,20 @@ contains
           map2fit(:,:,:) = map2fit(:,:,:) - dat%fg_map(:,:,:,f)
        end if
     end do
+
+    write(*,*) 'Index: ', ind
+    write(*,*) 'Ref: ', self%fg_ref_loc(ind)
+    write(*,*) 'Ref_nu: ', self%fg_nu_ref(ind)
+    write(*,*) '-----------------------------'
+    write(*,fmt='(a,f8.4)') 'fg estimate ',dat%fg_map(23000,2,self%fg_ref_loc(ind),ind)
+    write(*,fmt='(a,f8.4)') 'map2fit ',map2fit(23000,2,self%fg_ref_loc(ind))
+    write(*,fmt='(a,f8.4)') 'rms ',dat%rms_map(23000,2,self%fg_ref_loc(ind))
+    write(*,*) '-----------------------------'
+    write(*,*),self%band_nu(1), compute_spectrum(self,comp,ind,self%band_nu(1),i,k,-3.1d0)
+    write(*,fmt='(a,f8.4)') 'fg estimate ',dat%fg_map(23000,2,1,ind)
+    write(*,fmt='(a,f8.4)') 'map2fit ',map2fit(23000,2,1)
+    write(*,fmt='(a,f8.4)') 'rms ',dat%rms_map(23000,2,1)
+    write(*,*) '-----------------------------'
 
     ! Compute the original lnl
     if (map_n == -1) then
@@ -347,7 +360,6 @@ contains
           !$OMP END CRITICAL
           !$OMP END PARALLEL
 
-
           title = trim(self%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
           inquire(file=title,exist=exist)
           if (exist) then
@@ -359,47 +371,6 @@ contains
           write(12,*) beta_grid(l), -0.5d0*lnl_sum
           close(12)
        end do
-
-
-       ! spec = index_map(0,2)
-
-       ! lnl_old = 0.d0
-       ! do i = 0, npix-1
-       !    do j = 1, nbands
-       !       do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-       !          lnl_old = lnl_old + (dat%fg_map(i,k,j,ind) * compute_spectrum(self,comp,ind,self%band_nu(j),i,k,spec) &
-       !                  - map2fit(i,k,j))**2.d0 / dat%rms_map(i,k,j)**2.d0
-       !       end do
-       !    end do
-       ! end do
-
-       ! lnl_old = -0.5d0*lnl_old
-
-       ! ! Draw a sample
-       ! do l = 1, self%nsample
-       !    sample = spec + rand_normal(0.d0,self%fg_gauss(ind,1,2))
-
-       !    lnl_new = 0.d0
-       !    do i = 0, npix-1
-       !       do j = 1, nbands
-       !          do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-       !             lnl_new = lnl_new + (dat%fg_map(i,k,j,ind) * compute_spectrum(self,comp,ind,self%band_nu(j),i,k,sample) &
-       !                     - map2fit(i,k,j))**2.d0 / dat%rms_map(i,k,j)**2.d0
-       !          end do
-       !       end do
-       !    end do
-
-       !    lnl_new = -0.5d0*lnl_new
-
-       !    ratio = exp(lnl_new-lnl_old)
-
-       !    write(*,fmt='(4(f30.4))') sample, lnl_old, lnl_new, ratio
-
-       !    call RANDOM_NUMBER(rand)
-
-
-       ! end do
-
 
     else
        spec = index_map(0,map_n)
