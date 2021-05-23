@@ -524,9 +524,44 @@ contains
        end if
        
        !------------------------------------------------------------------------
-       ! Metropolis algorithm:
-       ! Sampling portion. Determine the log-likelihood, and accept based off of
-       ! the improvement in the fit.
+       ! Hamiltonian Markov Chain (HMC)
+       ! Sampling portion. 
+       ! Essentially, using the thermodynamic probability distribution
+       ! P \propto \exp(-H(q,p)), where H is the Hamiltonian from classical
+       ! mechanics, given by H = U(q) + T(p) in most cases. The kinectic energy
+       ! term T = 0.5 p^T M^{-1} p samples the momentum, and the potential
+       ! energy term U(q) = -\ln (\pi(q) L(q | d)), where L(q | d) is the usual
+       ! likelihood in the parameters q. Essentially, q and p are evolved using
+       ! Hamilton's equations, creating a trajectory. The momentum parameter p
+       ! is marginalized out in the end.
+       !
+       ! And for reference, Hamilton's equations are
+       ! dq_i/dt = \partial H/\partial p_i
+       ! dp_i/dt =-\partial H/\partial q_i
+       !
+       ! To solve these, we essentially use a "leapfrog" method, a modifcation
+       ! of Euler's method;
+       ! p_i(t+e/2) = p_i(t)     - (e/2)\partial U/\partial q_i[q(t)]
+       ! q_i(t+e)   = q_i(t)     + e * p_i(t+e/2)/m_i
+       ! p_i(t+e)   = p_i(t+e/2) - (e/2)\partial U/\partial q_i[q(t+e)]
+       ! 
+       ! In practice, you integrate along the trajectory with some number Le,
+       ! to obtain H(q*,p*). Then, this proposed state is accepted with
+       ! probability min[1, \exp(-H(q*,p*) + H(q,p))]. As in regular MH, you
+       ! duplicate q,p if it is not accepted in the chain. You also need to
+       ! start each step by drawing p from the multivariate Gaussian p ~ N(0, M).
+       !
+       !
+       ! To eliminate the tuning of L and e, use the No-U-Turn Sampler (NUTS):
+       ! http://www.stat.columbia.edu/~gelman/research/unpublished/nuts.pdf
+       !
+       ! To-do:
+       ! write function that evaluates log(L(beta))
+       ! write function that evaluates \partial log(L(beta))/\partial\beta
+       ! get samples of p_beta
+       ! write function that will return theta, p given theta^0, eps, L, \log L, M
+       ! as in algorithm 1 of nuts.pdf.
+       !
        !------------------------------------------------------------------------
        
        !---------------------------|
