@@ -207,10 +207,10 @@ program dang
 
      ! Read maps in
      do j = 1, nbands
-        call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
+        call read_bintab(trim(par%datadir) // trim(par%band_noisefile(j)), &
              rms,npix,nmaps,nullval,anynull,header=header)
         dang_data%rms_map(:,:,j) = rms
-        call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
+        call read_bintab(trim(par%datadir) // trim(par%band_mapfile(j)), &
              map,npix,nmaps,nullval,anynull,header=header)
         dang_data%sig_map(:,:,j) = map
         ! Initialize gain and offset values from parameter file
@@ -258,7 +258,7 @@ contains
              npixpar = npixpar + size(par%pol_type)*nump
        end if
        ! Count up spectral index parameters, either fullsky or per pixel
-       if (par%fg_samp_inc(n,1)) then
+       if (par%fg_samp_spec(n,1)) then
           if (index(par%fg_ind_region(n,1),'pix') /= 0) then
              ! Skip for now because the contribution is not trivial - esp with a mask
              ! if (par%fg_spec_joint(n,1)) then
@@ -375,7 +375,8 @@ contains
              if (par%fg_spec_joint(n,1)) then
                 write(*,*) "Sample "//trim(par%fg_label(n))//" beta jointly."
                 write(*,*) "---------------------------------"
-                call sample_index(par,dang_data,comp,n,-1)
+                call sample_new_index(par,dang_data,comp,n,-1)
+                ! call sample_index(par,dang_data,comp,n,-1)
              else
                 do k = par%pol_type(1), par%pol_type(size(par%pol_type))
                 write(*,*) "Sample "//trim(par%fg_label(n))//" beta for "//trim(tqu(k))//"."

@@ -55,10 +55,14 @@ module dang_param_mod
         character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
         logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates fit
         integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
+        logical(lgt),       allocatable, dimension(:)     :: temp_sample    ! Storing which bands should have templates fit
 
+        character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label
         logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
         real(dp),           allocatable, dimension(:,:)   :: fg_init        ! Initialized parameter value (fullsky)
+        character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral parameter input map
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling parameters
+        character(len=512), allocatable, dimension(:,:)   :: fg_prior_type  ! Fg spectral parameter input map
         integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
         logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_spec   ! Logical - sample fg parameter?
         logical(lgt),       allocatable, dimension(:)     :: fg_samp_amp    ! Logical - sample fg amplitude

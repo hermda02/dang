@@ -24,7 +24,7 @@ contains
     allocate(self%beta_s(0:npix-1,nmaps))
     write(*,*) 'Allocated synch maps'
     if (trim(param%fg_spec_file(1,1)) == 'none') then 
-       write(*,*) 'Full sky beta_s estimate ', param%fg_init(1,1)
+       write(*,fmt='(a,f8.4)') 'Full sky beta_s estimate ', param%fg_init(1,1)
        self%beta_s     = param%fg_init(1,1) ! Synchrotron beta initial guess
     else
        !call read_bintab(trim(param%fg_spec_file(1,1)),self%beta_s,npix,3,nullval,anynull,header=header)
@@ -79,7 +79,7 @@ contains
     planck  = ((2.d0*h*fre**3.d0)/(c**2.d0))*(1.d0/(exp((h*fre)/(k_B*T))-1))
   end function planck
   
-  function compute_spectrum(param, self, ind, freq, pix, mapn, index)
+  function compute_spectrum(param, self, ind, freq, pix, map_n, index)
     ! always computed in RJ units
     
     implicit none
@@ -88,7 +88,7 @@ contains
     real(dp),           intent(in) :: freq
     integer(i4b),       intent(in) :: ind
     integer(i4b),       intent(in) :: pix
-    integer(i4b),       intent(in) :: mapn
+    integer(i4b),       intent(in) :: map_n
     real(dp), optional             :: index
     real(dp)                       :: z, compute_spectrum
     
@@ -97,15 +97,15 @@ contains
       if (present(index)) then
           compute_spectrum = (freq/param%fg_nu_ref(ind))**index
        else 
-          compute_spectrum = (freq/param%fg_nu_ref(ind))**self%beta_s(pix,mapn)
+          compute_spectrum = (freq/param%fg_nu_ref(ind))**self%beta_s(pix,map_n)
        end if
     !else if (trim(param%fg_label(ind)) == 'mbb') then
     else if (ind == 2) then
-       z = h / (k_B*self%T_d(pix,mapn))
+       z = h / (k_B*self%T_d(pix,map_n))
 !       compute_spectrum = (exp(z*param%fg_nu_ref(ind)*1d9)-1.d0) / &
-!            (exp(z*freq*1d9)-1.d0) * (freq/param%fg_nu_ref(ind))**(self%beta_d(pix,mapn)+1.d0)!*rj_cmb
+!            (exp(z*freq*1d9)-1.d0) * (freq/param%fg_nu_ref(ind))**(self%beta_d(pix,map_n)+1.d0)!*rj_cmb
        compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
-            (exp(z*freq*1d9)-1.d0) * (freq/353.d0)**(self%beta_d(pix,mapn)+1.d0)
+            (exp(z*freq*1d9)-1.d0) * (freq/353.d0)**(self%beta_d(pix,map_n)+1.d0)
     end if
   end function compute_spectrum
   

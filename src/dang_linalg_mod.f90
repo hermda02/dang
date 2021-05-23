@@ -480,8 +480,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp2(i) = temp1(i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
-                     if (self%joint_pol) temp2(x+i) = temp1(x+i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1)
+                     temp2(i) = temp1(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                     if (self%joint_pol) temp2(x+i) = temp1(x+i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                   end do
                   !$OMP END DO
                   !$OMP END PARALLEL
@@ -517,7 +517,7 @@ contains
       !                      res(i) = 0.d0
       !                      cycle
       !                   else
-      !                      res(i) = res(i) + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
+      !                      res(i) = res(i) + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
       !                   end if
       !                end do
       !             end do
@@ -531,8 +531,8 @@ contains
       !                      res(x+i) = 0.d0
       !                      cycle
       !                   else                           
-      !                      res(i)   = res(i)   + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
-      !                      res(x+i) = res(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j))*vec(i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1)
+      !                      res(i)   = res(i)   + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+      !                      res(x+i) = res(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
       !                   end if
       !                end do
       !             end do
@@ -654,8 +654,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp1(i) = compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)*vec(i)
-                     if (self%joint_pol) temp1(x+i) = compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1)*vec(x+i)
+                     temp1(i) = compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)*vec(i)
+                     if (self%joint_pol) temp1(x+i) = compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)*vec(x+i)
                    end do
                    !$OMP END DO
                    !$OMP END PARALLEL
@@ -696,8 +696,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp3(i) = temp2(i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
-                     if (self%joint_pol) temp3(x+i) = temp2(x+i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1)
+                     temp3(i) = temp2(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                     if (self%joint_pol) temp3(x+i) = temp2(x+i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                   end do
                   !$OMP END DO
                   !$OMP END PARALLEL
@@ -800,8 +800,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp1(i) = compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)*vec(i)
-                     if (self%joint_pol) temp1(x+i) = compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1)*vec(x+i)
+                     temp1(i) = compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)*vec(i)
+                     if (self%joint_pol) temp1(x+i) = compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)*vec(x+i)
                   end do
                   !$OMP END DO
                   !$OMP END PARALLEL
@@ -844,8 +844,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp3(i) = temp2(i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n)
-                     if (self%joint_pol) temp3(x+i) = temp2(x+i)*compute_spectrum(self,compo,n,self%dat_nu(j),i-1,map_n+1)
+                     temp3(i) = temp2(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                     if (self%joint_pol) temp3(x+i) = temp2(x+i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                   end do
                   !$OMP END DO
                   !$OMP END PARALLEL

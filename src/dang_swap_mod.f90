@@ -33,9 +33,9 @@ contains
 
   !   do j = 1, param%numband
   !      if (param%bp_map(j)) then
-  !         bp_maps(j,1) = trim(param%bp_dir) // trim(param%dat_label(j))//'_map_'//trim(chain)//'_n0064_60arcmin_k'//trim(iter_str)//'.fits'
-  !         bp_maps(j,2) = trim(param%bp_dir) // trim(param%dat_label(j))//'_rms_'//trim(chain)//'_n0064_60arcmin_k'//trim(iter_str)//'.fits'
-  !         write(*,'(a,a,a)') 'Swapping band ', trim(param%dat_label(j)), '.'
+  !         bp_maps(j,1) = trim(param%bp_dir) // trim(param%band_label(j))//'_map_'//trim(chain)//'_n0064_60arcmin_k'//trim(iter_str)//'.fits'
+  !         bp_maps(j,2) = trim(param%bp_dir) // trim(param%band_label(j))//'_rms_'//trim(chain)//'_n0064_60arcmin_k'//trim(iter_str)//'.fits'
+  !         write(*,'(a,a,a)') 'Swapping band ', trim(param%band_label(j)), '.'
   !         !write(*,*) trim(bp_maps(j,1))                                                             
   !         !write(*,*) trim(bp_maps(j,2))                                                             
   !         call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header)
