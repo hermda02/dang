@@ -263,7 +263,7 @@ contains
     else
        open(51,file=title, status="new", action="write")
     endif
-    write(51,fmt='(3(f16.8))') dat%fg_map(23000,2:3,self%fg_ref_loc(1),1)
+    write(51,fmt='(2(f16.8))') dat%fg_map(23000,2:3,self%fg_ref_loc(1),1)
     close(51)
 
 
@@ -291,7 +291,7 @@ contains
     real(dp), dimension(0:npix-1,nmaps,nbands)                :: map2fit 
     real(dp), dimension(0:npix-1,nmaps)                       :: index_map
     real(dp)                                                  :: lnl_old, lnl_new, ratio
-    real(dp)                                                  :: spec, sample, rand
+    real(dp)                                                  :: spec, sample, rand, scale
     integer(i4b)                                              :: i, j, k, l, f
 
     real(dp), dimension(1000)                                 :: beta_grid, like_grid
@@ -311,66 +311,116 @@ contains
        end if
     end do
 
-    write(*,*) 'Index: ', ind
-    write(*,*) 'Ref: ', self%fg_ref_loc(ind)
-    write(*,*) 'Ref_nu: ', self%fg_nu_ref(ind)
-    write(*,*) '-----------------------------'
-    write(*,fmt='(a,f8.4)') 'fg estimate ',dat%fg_map(23000,2,self%fg_ref_loc(ind),ind)
-    write(*,fmt='(a,f8.4)') 'map2fit ',map2fit(23000,2,self%fg_ref_loc(ind))
-    write(*,fmt='(a,f8.4)') 'rms ',dat%rms_map(23000,2,self%fg_ref_loc(ind))
-    write(*,*) '-----------------------------'
-    write(*,*),self%band_nu(1), compute_spectrum(self,comp,ind,self%band_nu(1),i,k,-3.1d0)
-    write(*,fmt='(a,f8.4)') 'fg estimate ',dat%fg_map(23000,2,1,ind)
-    write(*,fmt='(a,f8.4)') 'map2fit ',map2fit(23000,2,1)
-    write(*,fmt='(a,f8.4)') 'rms ',dat%rms_map(23000,2,1)
-    write(*,*) '-----------------------------'
+    ! write(*,*) 'Index: ', ind
+    ! write(*,*) 'Ref: ', self%fg_ref_loc(ind)
+    ! write(*,*) 'Ref_nu: ', self%fg_nu_ref(ind)
+    ! write(*,*) '-----------------------------'
+    ! write(*,fmt='(a,f8.4)') 'fg estimate ',dat%fg_map(23000,2,self%fg_ref_loc(ind),ind)
+    ! write(*,fmt='(a,f8.4)') 'map2fit ',map2fit(23000,2,self%fg_ref_loc(ind))
+    ! write(*,fmt='(a,f8.4)') 'rms ',dat%rms_map(23000,2,self%fg_ref_loc(ind))
+    ! write(*,*) '-----------------------------'
+    ! write(*,*),self%band_nu(1), compute_spectrum(self,comp,ind,self%band_nu(1),i,k,-3.1d0)
+    ! write(*,fmt='(a,f8.4)') 'fg estimate ',dat%fg_map(23000,2,1,ind)
+    ! write(*,fmt='(a,f8.4)') 'map2fit ',map2fit(23000,2,1)
+    ! write(*,fmt='(a,f8.4)') 'rms ',dat%rms_map(23000,2,1)
+    ! write(*,*) '-----------------------------'
 
     ! Compute the original lnl
     if (map_n == -1) then
 
        ! Grid out the likelihood and write to file
 
-       write(*,*) iter
-       write(iter_str, '(i0.5)') iter
+       ! write(*,*) iter
+       ! write(iter_str, '(i0.5)') iter
        
+       ! do l = 1, 1000
+       !    like_grid(l) = 0.d0
+       !    beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/1000
+
+       !    spec = beta_grid(l)
+
+       !    !$OMP PARALLEL PRIVATE(i,j,k,lnl), shared(lnl_sum)
+       !    lnl     = 0.d0
+       !    lnl_sum = 0.d0
+
+       !    !$OMP DO SCHEDULE(static) 
+       !    do i = 0, npix-1
+       !       do j = 1, nbands
+       !          do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+       !             lnl = lnl + (dat%fg_map(i,k,self%fg_ref_loc(ind),ind) * compute_spectrum(self,comp,ind,self%band_nu(j),i,k,spec) &
+       !                  - map2fit(i,k,j))**2.d0 / dat%rms_map(i,k,j)**2.d0
+       !          end do
+       !       end do
+       !    end do
+
+       !    !$OMP END DO
+       !    !$OMP CRITICAL
+       !    lnl_sum = lnl_sum + lnl
+       !    !$OMP END CRITICAL
+       !    !$OMP END PARALLEL
+
+       !    title = trim(self%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
+       !    inquire(file=title,exist=exist)
+       !    if (exist) then
+       !       open(12,file=title, status="old",position="append", action="write")
+       !    else
+       !       open(12,file=title, status="new", action="write")
+       !       write(12,*)  
+       !    endif
+       !    write(12,*) beta_grid(l), -0.5d0*lnl_sum
+       !    close(12)
+       ! end do
+
+       spec        = comp%beta_s(0,self%pol_type(1))
+
+       ! First calculate the old likelihood
+
+       lnl_old = 0.d0
+       do i = 0, npix-1
+          do j = 1, nbands
+             do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                lnl_old = lnl_old + (dat%fg_map(i,k,self%fg_ref_loc(ind),ind)*compute_spectrum(self,comp,ind,self%band_nu(j),i,k,spec) &
+                     - map2fit(i,k,j))**2.d0/dat%rms_map(i,k,j)**2.d0
+             end do
+          end do
+       end do
+
+       lnl_old = -0.5d0*lnl_old
+
+       ! scale is the random draw scaling factor (can make variable)
+       scale = 0.5d0
        
-       do l = 1, 1000
-          like_grid(l) = 0.d0
-          beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/1000
+       ! Draw samples and accept if exp(lnl_new-lnl_old)> some random number
+       do l = 1, self%nsample
+          sample = spec + rand_normal(0.d0,self%fg_gauss(ind,1,2))*scale
 
-          spec = beta_grid(l)
-
-          !$OMP PARALLEL PRIVATE(i,j,k,lnl), shared(lnl_sum)
-          lnl     = 0.d0
-          lnl_sum = 0.d0
-
-          !$OMP DO SCHEDULE(static) 
+          ! Calculate new likelihood
+          lnl_new = 0.d0
           do i = 0, npix-1
              do j = 1, nbands
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                   lnl = lnl + (dat%fg_map(i,k,self%fg_ref_loc(ind),ind) * compute_spectrum(self,comp,ind,self%band_nu(j),i,k,spec) &
-                        - map2fit(i,k,j))**2.d0 / dat%rms_map(i,k,j)**2.d0
+                   lnl_new = lnl_new + (dat%fg_map(i,k,self%fg_ref_loc(ind),ind)*compute_spectrum(self,comp,ind,self%band_nu(j),i,k,sample) &
+                        - map2fit(i,k,j))**2.d0/dat%rms_map(i,k,j)**2.d0
                 end do
              end do
           end do
 
-          !$OMP END DO
-          !$OMP CRITICAL
-          lnl_sum = lnl_sum + lnl
-          !$OMP END CRITICAL
-          !$OMP END PARALLEL
+          lnl_new = -0.5d0*lnl_new
 
-          title = trim(self%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
-          inquire(file=title,exist=exist)
-          if (exist) then
-             open(12,file=title, status="old",position="append", action="write")
-          else
-             open(12,file=title, status="new", action="write")
-             write(12,*)  
-          endif
-          write(12,*) beta_grid(l), -0.5d0*lnl_sum
-          close(12)
+          ratio = exp(lnl_new-lnl_old)
+
+          call RANDOM_NUMBER(rand)
+          if (ratio > rand) then
+             spec    = sample
+             lnl_old = lnl_new
+          end if
        end do
+
+       do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+          comp%beta_s(:,k) = spec
+       end do
+
+
 
     else
        spec = index_map(0,map_n)
@@ -402,7 +452,7 @@ contains
     real(dp), allocatable, dimension(:)                    :: indx_sample_low
     real(dp)                                               :: a, b, c, num, sam, t, p, sol
     real(dp)                                               :: time1, time2, diff
-    real(dp)                                               :: like_old, like_new, ratio, s
+    real(dp)                                               :: lnl_old, lnl_new, ratio, s
     real(dp)                                               :: naccept, paccept, local_a, local_b
     logical                                                :: pix_samp
     logical                                                :: exist
@@ -541,9 +591,13 @@ contains
        !---------------------------|
        if (map_n == -1) then
           indx_sample_low = indx_low(:,self%pol_type(1))
+
+          !$OMP PARALLEL PRIVATE(i,j,k,l,a,b,sol,sam,lnl_old,lnl_new,ratio,s,t)
+
+          !$OMP DO SCHEDULE(STATIC)
           do i = 0, npix2-1
-             naccept   = 0.d0
-             paccept   = 0.d0
+             ! naccept   = 0.d0
+             ! paccept   = 0.d0
              a         = 0.d0
              sol       = indx_low(i,self%pol_type(1))
              sam       = sol
@@ -554,107 +608,93 @@ contains
              ! First evaluate likelihood from previous sample
              !-----------------------------------------------
              
-             !$OMP PARALLEL PRIVATE(j,k,local_a)
              local_a = 0.d0
-             !$OMP DO SCHEDULE(static)
              do j = 1, nbands
                 do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                   local_a = local_a + (((fg_map_low(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%band_nu(j),i,k,sol)) &
+                   a = a + (((fg_map_low(i,k,self%fg_ref_loc(ind)) * compute_spectrum(self,comp,ind,self%band_nu(j),i,k,sol)) &
                         - data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                 end do
              end do
-             !$OMP END DO
-             !$OMP CRITICAL
-             a = a + local_a
-             !$OMP END CRITICAL
-             !$OMP END PARALLEL
              c = a
              
              if (self%fg_prior_type(ind,1) == 'gaussian') then
-                like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                lnl_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
              else if (self%fg_prior_type(ind,1) == 'uniform') then
-                like_old = -0.5d0*c
+                lnl_old = -0.5d0*c
              else if (self%fg_prior_type(ind,1) == 'jeffreys') then
-                like_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
+                lnl_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
              else 
                 write(*,*) "error in param%fg_prior_type"
                 write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
                 stop
              end if
 
-             s = 0.5d0
+             ! s = 0.5d0
              do l = 1, self%nsample
                 ! Every 50 samples check acceptance rate, and adjust scaling factor
-                if (mod(l,50) == 0) then
-                   if (paccept > 0.6d0) then
-                      s = s*2.0
-                   else if (paccept < 0.4d0) then
-                      s = s/2.0
-                   end if
-                end if
-                t      = sam + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
+                ! if (mod(l,50) == 0) then
+                !    if (paccept > 0.6d0) then
+                !       s = s*2.0
+                !    else if (paccept < 0.4d0) then
+                !       s = s/2.0
+                !    end if
+                ! end if
+                t      = sam + rand_normal(0.d0, self%fg_gauss(ind,1,2))!*s
                 
                 ! If sampled value is outside of uniform bounds, cycle
                 if (t .gt. self%fg_uni(ind,1,2) .or. t .lt. self%fg_uni(ind,1,1)) then
-                   paccept = naccept/l
+                   ! paccept = naccept/l
                    cycle
                 end if
                 
                 ! Evaluate likelihood given this sample
                 !--------------------------------------
                 b         = 0.d0
-                !$OMP PARALLEL PRIVATE(j,k,local_b)
-                local_b   = 0.d0
-                !$OMP DO SCHEDULE(static)
                 do j = 1, nbands
                    do k = self%pol_type(1), self%pol_type(size(self%pol_type))
-                      local_b = local_b + ((fg_map_low(i,k,self%fg_ref_loc(ind))*compute_spectrum(self,comp,ind,self%band_nu(j),i,k,t) &
+                      b = b + ((fg_map_low(i,k,self%fg_ref_loc(ind))*compute_spectrum(self,comp,ind,self%band_nu(j),i,k,t) &
                            -data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                    end do
                 end do
-                !$OMP END DO
-                !$OMP CRITICAL
-                b = b + local_b
-                !$OMP END CRITICAL
-                !$OMP END PARALLEL
                 
                 if (self%fg_prior_type(ind,1) == 'gaussian') then
-                   like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                   lnl_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
                 else if (self%fg_prior_type(ind,1) == 'uniform') then
-                   like_new = -0.5d0*b
+                   lnl_new = -0.5d0*b
                 else if (self%fg_prior_type(ind,1) == 'jeffreys') then
-                   like_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t, i))
+                   lnl_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t, i))
                 else 
                    write(*,*) "error in param%fg_prior_type"
                    write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
                    stop
                 end if
 
-                diff = like_new - like_old
+                diff = lnl_new - lnl_old
                 ratio = exp(diff)
 
                 if (trim(self%ml_mode) == 'optimize') then
                    if (ratio > 1.d0) then
                       sam      = t
                       c        = b
-                      like_old = like_new
-                      naccept  = naccept + 1.0
+                      lnl_old = lnl_new
+                      ! naccept  = naccept + 1.0
                    end if
                 else if (trim(self%ml_mode) == 'sample') then
                    call RANDOM_NUMBER(num)
                    if (ratio > num) then
                       sam      = t
                       c        = b
-                      like_old = like_new
-                      naccept  = naccept + 1.0
+                      lnl_old = lnl_new
+                      ! naccept  = naccept + 1.0
                    end if
                 end if
                 
-                paccept = naccept/l
+                ! paccept = naccept/l
                 sol = sam
                 indx_sample_low(i) = sol
              end do
           end do
+          !$OMP END PARALLEL
           
        !----------------------------|
        ! Sample for a single poltype|
@@ -688,11 +728,11 @@ contains
              c = a
 
              if (self%fg_prior_type(ind,1) == 'gaussian') then
-                like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                lnl_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
              else if (self%fg_prior_type(ind,1) == 'uniform') then
-                like_old = -0.5d0*c
+                lnl_old = -0.5d0*c
              else if (self%fg_prior_type(ind,1) == 'jeffreys') then
-                like_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
+                lnl_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
              else 
                 write(*,*) "error in param%fg_prior_type"
                 write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -733,14 +773,14 @@ contains
                 !$OMP END CRITICAL
                 !$OMP END PARALLEL
                 
-                like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                lnl_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
 
                 if (self%fg_prior_type(ind,1) == 'gaussian') then
-                   like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                   lnl_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
                 else if (self%fg_prior_type(ind,1) == 'uniform') then
-                   like_new = -0.5d0*b
+                   lnl_new = -0.5d0*b
                 else if (self%fg_prior_type(ind,1) == 'jeffreys') then
-                   like_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t, i))
+                   lnl_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t, i))
                 else 
                    write(*,*) "error in param%fg_prior_type"
                    write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -748,13 +788,13 @@ contains
                 end if
 
 
-                diff = like_new - like_old
+                diff = lnl_new - lnl_old
                 ratio = exp(diff)
                 if (trim(self%ml_mode) == 'optimize') then
                    if (ratio > 1.d0) then
                       sam      = t
                       c        = b
-                      like_old = like_new
+                      lnl_old = lnl_new
                       naccept  = naccept + 1.0
                    end if
                 else if (trim(self%ml_mode) == 'sample') then
@@ -762,7 +802,7 @@ contains
                    if (ratio > num) then
                       sam      = t
                       c        = b
-                      like_old = like_new
+                      lnl_old = lnl_new
                       naccept  = naccept + 1.0
                    end if
                 end if
@@ -876,11 +916,11 @@ contains
           c = a
 
           if (self%fg_prior_type(ind,1) == 'gaussian') then
-             like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+             lnl_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
           else if (self%fg_prior_type(ind,1) == 'uniform') then
-             like_old = -0.5d0*c
+             lnl_old = -0.5d0*c
           else if (self%fg_prior_type(ind,1) == 'jeffreys') then
-             like_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam))
+             lnl_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam))
           else 
              write(*,*) "error in param%fg_prior_type"
              write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -890,15 +930,15 @@ contains
           s = 0.5d0
           do l = 1, self%nsample
              ! Every 50 samples check acceptance rate, and adjust scaling factor
-             if (mod(l,50) == 0) then
-                if (paccept > 0.6d0) then
-                   write(*,*) paccept,l,'s = s*2.0'
-                   s = s*2.0
-                else if (paccept < 0.4d0) then
-                   write(*,*) paccept,l,'s = s/2.0'
-                   s = s/2.0
-                end if
-             end if
+             ! if (mod(l,50) == 0) then
+             !    if (paccept > 0.6d0) then
+             !       write(*,*) paccept,l,'s = s*2.0'
+             !       s = s*2.0
+             !    else if (paccept < 0.4d0) then
+             !       write(*,*) paccept,l,'s = s/2.0'
+             !       s = s/2.0
+             !    end if
+             ! end if
              t      = sam + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
              
              ! If sampled value is outside of uniform bounds, cycle
@@ -928,24 +968,24 @@ contains
              !$OMP END PARALLEL
 
              if (self%fg_prior_type(ind,1) == 'gaussian') then
-                like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                lnl_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
              else if (self%fg_prior_type(ind,1) == 'uniform') then
-                like_new = -0.5d0*b
+                lnl_new = -0.5d0*b
              else if (self%fg_prior_type(ind,1) == 'jeffreys') then
-                like_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t))
+                lnl_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t))
              else 
                 write(*,*) "error in param%fg_prior_type"
                 write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
                 stop
              end if
 
-             diff = like_new - like_old
+             diff = lnl_new - lnl_old
              ratio = exp(diff)
              if (trim(self%ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
                    sam      = t
                    c        = b
-                   like_old = like_new
+                   lnl_old = lnl_new
                    naccept  = naccept + 1.0
                 end if
              else if (trim(self%ml_mode) == 'sample') then
@@ -953,10 +993,10 @@ contains
                 if (ratio > num) then
                    sam      = t
                    c        = b
-                   like_old = like_new
+                   lnl_old = lnl_new
                    naccept  = naccept + 1.0
                 end if
-                write(*,fmt='(i6,6(f16.4))') l, t, like_new, like_old, ratio, num, naccept/l
+                ! write(*,fmt='(i6,6(f16.4))') l, t, lnl_new, lnl_old, ratio, num, naccept/l
              end if
              
              paccept = naccept/l
@@ -1010,11 +1050,11 @@ contains
           c = a
           
           if (self%fg_prior_type(ind,1) == 'gaussian') then
-             like_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+             lnl_old = -0.5d0*c + log(eval_normal_prior(sam,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
           else if (self%fg_prior_type(ind,1) == 'uniform') then
-             like_old = -0.5d0*c
+             lnl_old = -0.5d0*c
           else if (self%fg_prior_type(ind,1) == 'jeffreys') then
-             like_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam))
+             lnl_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam))
           else 
              write(*,*) "error in param%fg_prior_type"
              write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -1024,15 +1064,15 @@ contains
           s = 0.5d0
           do l = 1, self%nsample
              ! Every 50 samples check acceptance rate, and adjust scaling factor
-             if (mod(l,50) == 0) then
-                if (paccept > 0.6d0) then
-                   write(*,*) paccept,l,'s = s*2.0'
-                   s = s*2.0
-                else if (paccept < 0.4d0) then
-                   write(*,*) paccept,l,'s = s/2.0'
-                   s = s/2.0
-                end if
-             end if
+             ! if (mod(l,50) == 0) then
+             !    if (paccept > 0.6d0) then
+             !       write(*,*) paccept,l,'s = s*2.0'
+             !       s = s*2.0
+             !    else if (paccept < 0.4d0) then
+             !       write(*,*) paccept,l,'s = s/2.0'
+             !       s = s/2.0
+             !    end if
+             ! end if
              t      = sam + rand_normal(0.d0, self%fg_gauss(ind,1,2))*s
              
              ! If sampled value is outside of uniform bounds, cycle
@@ -1062,25 +1102,25 @@ contains
              !$OMP END PARALLEL
              
              if (self%fg_prior_type(ind,1) == 'gaussian') then
-                like_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
+                lnl_new = -0.5d0*b + log(eval_normal_prior(t,self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
              else if (self%fg_prior_type(ind,1) == 'uniform') then
-                like_new = -0.5d0*b
+                lnl_new = -0.5d0*b
              else if (self%fg_prior_type(ind,1) == 'jeffreys') then
-                like_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t))
+                lnl_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t))
              else 
                 write(*,*) "error in param%fg_prior_type"
                 write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
                 stop
              end if
              
-             diff = like_new - like_old
+             diff = lnl_new - lnl_old
              ratio = exp(diff)
              call RANDOM_NUMBER(num)
              if (trim(self%ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
                    sam      = t
                    c        = b
-                   like_old = like_new
+                   lnl_old = lnl_new
                    naccept  = naccept + 1.0
                 end if
              else if (trim(self%ml_mode) == 'sample') then
@@ -1088,7 +1128,7 @@ contains
                 if (ratio > num) then
                    sam      = t
                    c        = b
-                   like_old = like_new
+                   lnl_old = lnl_new
                    naccept  = naccept + 1.0
                 end if
              end if
@@ -1276,7 +1316,7 @@ contains
     real(dp), allocatable, dimension(:)                    :: sample_T_low
     real(dp)                                               :: a, b, c, num, sam
     real(dp)                                               :: t, p, sol
-    real(dp)                                               :: like_old, like_new
+    real(dp)                                               :: lnl_old, lnl_new
     real(dp)                                               :: diff, ratio
     real(dp)                                               :: paccept, naccept, s
     
@@ -1343,7 +1383,7 @@ contains
           end do
           c   = a
           
-          like_old = -0.5d0*c + log(eval_normal_prior(sam,self%HI_Td_mean, self%HI_Td_std))
+          lnl_old = -0.5d0*c + log(eval_normal_prior(sam,self%HI_Td_mean, self%HI_Td_std))
           
           do l = 1, self%nsample
              if (mod(l,50) == 0) then
@@ -1362,14 +1402,14 @@ contains
              end do
              b = b
              
-             like_new = -0.5d0*b + log(eval_normal_prior(sam,self%HI_Td_mean, self%HI_Td_std))
-             diff = like_new - like_old
+             lnl_new = -0.5d0*b + log(eval_normal_prior(sam,self%HI_Td_mean, self%HI_Td_std))
+             diff = lnl_new - lnl_old
              ratio = exp(diff)
              if (trim(self%ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
                    sam      = t
                    c        = b
-                   like_old = like_new
+                   lnl_old = lnl_new
                    naccept  = naccept + 1.0
                 end if
              else if (trim(self%ml_mode) == 'sample') then
@@ -1377,7 +1417,7 @@ contains
                 if (ratio > num) then
                    sam      = t
                    c        = b
-                   like_old = like_new
+                   lnl_old = lnl_new
                    naccept  = naccept + 1.0
                 end if
              end if

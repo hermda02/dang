@@ -272,6 +272,10 @@ contains
     
   end subroutine convert_maps_bp
 
+  ! function like(param,dat,comp)
+
+  ! end function like
+
   subroutine compute_chisq(param,dat,comp,map_n)
     use healpix_types
     implicit none
