@@ -214,7 +214,7 @@ contains
           end do
        end do
     else if (self%joint_pol) then
-       write(*,*) 'output amplitudes'
+       ! write(*,*) 'output amplitudes'
        w = 0
        do m = 1, size(self%joint_comp)
           do n = 1, self%ncomp
@@ -585,16 +585,18 @@ contains
        ! Sampling portion. Determine the log-likelihood, and accept based off of
        ! the improvement in the fit.
        !------------------------------------------------------------------------
-       
+
        !---------------------------|
        ! Sample for Q and U jointly|
        !---------------------------|
        if (map_n == -1) then
           indx_sample_low = indx_low(:,self%pol_type(1))
 
-          !$OMP PARALLEL PRIVATE(i,j,k,l,a,b,sol,sam,lnl_old,lnl_new,ratio,s,t)
 
-          !$OMP DO SCHEDULE(STATIC)
+          ! Parallelization breaks down for prior evaluation
+          ! !$OMP PARALLEL PRIVATE(i,j,k,l,a,b,sol,sam,lnl_old,lnl_new,ratio,s,t)
+
+          ! !$OMP DO SCHEDULE(STATIC)
           do i = 0, npix2-1
              ! naccept   = 0.d0
              ! paccept   = 0.d0
@@ -623,9 +625,11 @@ contains
                 lnl_old = -0.5d0*c
              else if (self%fg_prior_type(ind,1) == 'jeffreys') then
                 lnl_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
+             else if (self%fg_prior_type(ind,1) == 'full_jeffreys') then
+                lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
              else 
                 write(*,*) "error in param%fg_prior_type"
-                write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
+                write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys' 'full_jeffreys'"
                 stop
              end if
 
@@ -663,6 +667,8 @@ contains
                    lnl_new = -0.5d0*b
                 else if (self%fg_prior_type(ind,1) == 'jeffreys') then
                    lnl_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t, i))
+                else if (self%fg_prior_type(ind,1) == 'full_jeffreys') then
+                   lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
                 else 
                    write(*,*) "error in param%fg_prior_type"
                    write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -694,7 +700,7 @@ contains
                 indx_sample_low(i) = sol
              end do
           end do
-          !$OMP END PARALLEL
+          ! !$OMP END PARALLEL
           
        !----------------------------|
        ! Sample for a single poltype|
@@ -733,6 +739,8 @@ contains
                 lnl_old = -0.5d0*c
              else if (self%fg_prior_type(ind,1) == 'jeffreys') then
                 lnl_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
+             else if (self%fg_prior_type(ind,1) == 'full_jeffreys') then
+                lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
              else 
                 write(*,*) "error in param%fg_prior_type"
                 write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -781,6 +789,8 @@ contains
                    lnl_new = -0.5d0*b
                 else if (self%fg_prior_type(ind,1) == 'jeffreys') then
                    lnl_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t, i))
+                else if (self%fg_prior_type(ind,1) == 'full_jeffreys') then
+                   lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
                 else 
                    write(*,*) "error in param%fg_prior_type"
                    write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -830,7 +840,7 @@ contains
        
        time1 = mpi_wtime()
        
-       if (.true.) then
+       if (.false.) then
           
           write(*,*) iter
           write(iter_str, '(i0.5)') iter
@@ -840,7 +850,6 @@ contains
           
           do l = 1, 1000
              beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/1000
-             ! write(*,*) l, beta_grid(l)
              sol       = beta_grid(l)
              !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
              a         = 0.d0
@@ -864,6 +873,7 @@ contains
              a = a + local_a
              !$OMP END CRITICAL
              !$OMP END PARALLEL
+             write(*,fmt='(i5,f8.4,f12.4, f12.4)') l, beta_grid(l), -0.5*a, log(eval_normal_prior(beta_grid(l),self%fg_gauss(ind,1,1), self%fg_gauss(ind,1,2)))
              
              title = trim(self%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
              inquire(file=title,exist=exist)
@@ -873,7 +883,7 @@ contains
                 open(12,file=title, status="new", action="write")
                 write(12,*)  
              endif
-             write(12,*) beta_grid(l), -0.5d0*a
+             write(12,*) beta_grid(l), -0.5d0*a, log(eval_jeffreys_prior(self, dat, comp, map_n, ind, beta_grid(l)))
              close(12)
           end do
        end if
@@ -921,6 +931,8 @@ contains
              lnl_old = -0.5d0*c
           else if (self%fg_prior_type(ind,1) == 'jeffreys') then
              lnl_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam))
+          else if (self%fg_prior_type(ind,1) == 'full_jeffreys') then
+             lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
           else 
              write(*,*) "error in param%fg_prior_type"
              write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -973,6 +985,8 @@ contains
                 lnl_new = -0.5d0*b
              else if (self%fg_prior_type(ind,1) == 'jeffreys') then
                 lnl_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t))
+             else if (self%fg_prior_type(ind,1) == 'full_jeffreys') then
+                lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
              else 
                 write(*,*) "error in param%fg_prior_type"
                 write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -1055,6 +1069,8 @@ contains
              lnl_old = -0.5d0*c
           else if (self%fg_prior_type(ind,1) == 'jeffreys') then
              lnl_old = -0.5d0*c + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, sam))
+          else if (self%fg_prior_type(ind,1) == 'full_jeffreys') then
+             lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
           else 
              write(*,*) "error in param%fg_prior_type"
              write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -1107,6 +1123,8 @@ contains
                 lnl_new = -0.5d0*b
              else if (self%fg_prior_type(ind,1) == 'jeffreys') then
                 lnl_new = -0.5d0*b + log(eval_jeffreys_prior(self, dat, comp, map_n, ind, t))
+             else if (self%fg_prior_type(ind,1) == 'full_jeffreys') then
+                lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(self, dat, comp, map_n, ind, sam, i))
              else 
                 write(*,*) "error in param%fg_prior_type"
                 write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
@@ -1264,7 +1282,8 @@ contains
                 if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
                 sum1 = sum1 + ((map2fit(i,map_n,j)*dat%temps(i,map_n,temp_num))/cov(i,j))
                 sum2 = sum2 + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
-                norm = norm + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
+                norm = norm + dat%temps(i,map_n,temp_num)/dat%rms_map(i,map_n,j)
+                ! norm = norm + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
              end do
              if (trim(self%ml_mode) == 'sample') then
                 dat%temp_amps(j,map_n,temp_num) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
@@ -1284,18 +1303,23 @@ contains
                 if (comp%HI(i,1) > self%thresh) cycle
                 if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
                 temp = comp%HI(i,1)*planck(self%band_nu(j)*1d9,comp%T_d(i,1))
+
                 sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/cov(i,j)
-                sum2 = sum2 + (temp)**2.d0/cov(i,j)
-                norm = norm + (temp)**2.d0/cov(i,j)
+                ! sum1 = sum1 + (dat%sig_map(i,map_n,j)*temp)/dat%rms_map(i,map_n,j)**2.d0
+                sum2 = sum2 + (temp)**2.d0/dat%rms_map(i,map_n,j)**2.d0
+                norm = norm + temp/dat%rms_map(i,map_n,j)
+
              end do
           end if
           if (trim(self%ml_mode) == 'sample') then
              comp%HI_amps(j) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
+             ! write(*,*) comp%HI_amps(j), sum1/sum2, sum1/sum2 - comp%HI_amps(j)
           else if (trim(self%ml_mode) == 'optimize') then
              comp%HI_amps(j) = sum1/sum2
              end if
       end do
     end if
+    ! stop
     
   end subroutine template_fit
     
@@ -1368,7 +1392,7 @@ contains
     do i = 0, npix2-1
        naccept = 0.d0
        paccept = 0.d0
-       s       = 0.d0
+       s       = 1.d0
        if (dat%masks(i,1) == 0.d0  .or. dat%masks(i,1) == missval) then
           sample_T_low(i) = missval
           cycle
@@ -1394,7 +1418,7 @@ contains
                 end if
              end if
              ! Begin sampling from the prior
-             t = rand_normal(sol,self%HI_Td_std)
+             t = sol + rand_normal(0.d0,self%HI_Td_std)
              b = 0.d0
              do j = 1, nbands
                 b = b + (((comp%HI_amps(j)*comp%HI(i,1)*planck(self%band_nu(j)*1.d9,t)) &
@@ -1672,10 +1696,13 @@ contains
           ! If map_n = -1, then sum over poltypes
           if (map_n == -1) then
              do k = self%pol_type(1), self%pol_type(size(self%pol_type))
+                ! write(*,*) 'k = ', k
                 do j = 1, nbands
+                   ! write(*,*) 'j = ', j
                    ss  = dat%fg_map(pixel,k,self%fg_ref_loc(ind),ind)*(self%band_nu(j)/self%fg_nu_ref(ind))**val
                    sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,self%fg_ref_loc(ind),ind))*log(self%band_nu(j)/self%fg_nu_ref(ind)))**2.0
                 end do
+                ! write(*,*) ''
              end do
           else
              do j = 1, nbands
@@ -1709,5 +1736,44 @@ contains
     prob = sqrt(sum)
 
   end function eval_jeffreys_prior
+
+  function eval_full_jeffreys_prior(self, dat, comp, map_n, ind, val, pixel) result(prob)
+    implicit none
+
+    class(params)                                          :: self
+    type(component),                         intent(inout) :: comp
+    type(data)                                             :: dat
+    real(dp),                                   intent(in) :: val
+    integer(i4b),                               intent(in) :: map_n, ind
+    integer(i4b), optional,                     intent(in) :: pixel
+    real(dp)                                               :: prob, sum, ss_Q, ss_U
+
+    prob = 0.d0
+    sum = 0.d0
+
+    if (trim(self%fg_label(ind)) == 'synch') then
+       ! Is this evaluated for a single pixel?
+       if (present(pixel)) then
+          do j = 1, nbands
+             ss_Q  = dat%fg_map(pixel,2,self%fg_ref_loc(ind),ind)*(self%band_nu(j)/self%fg_nu_ref(ind))**val
+             ss_U  = dat%fg_map(pixel,3,self%fg_ref_loc(ind),ind)*(self%band_nu(j)/self%fg_nu_ref(ind))**val
+             sum = sum + val*((self%band_nu(j)/self%fg_nu_ref(ind))**(3*val-1))/(dat%rms_map(pixel,2,j)*dat%rms_map(pixel,3,j))&
+                  *sqrt(ss_Q**2/dat%rms_map(pixel,2,j)**2 + ss_U**2/dat%rms_map(pixel,3,j))
+          end do
+       else
+          do i = 0, npix-1
+             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
+             do j = 1, nbands
+                ss_Q  = dat%fg_map(i,2,self%fg_ref_loc(ind),ind)*(self%band_nu(j)/self%fg_nu_ref(ind))**val
+                ss_U  = dat%fg_map(i,3,self%fg_ref_loc(ind),ind)*(self%band_nu(j)/self%fg_nu_ref(ind))**val
+                sum = sum + val*((self%band_nu(j)/self%fg_nu_ref(ind))**(3*val-1))/(dat%rms_map(i,2,j)*dat%rms_map(i,3,j))&
+                     *sqrt(ss_Q**2/dat%rms_map(i,2,j)**2 + ss_U**2/dat%rms_map(i,3,j))
+                ! sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,self%fg_ref_loc(ind),ind))*log(self%band_nu(j)/self%fg_nu_ref(ind)))**2.0
+             end do
+          end do
+       end if
+    end if
+  end function eval_full_jeffreys_prior
+
   
 end module dang_sample_mod

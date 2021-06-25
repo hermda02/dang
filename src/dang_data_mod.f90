@@ -85,15 +85,16 @@ contains
 
   end subroutine init_template
 
-  subroutine dust_correct_band(dat,param,comp,band)
+  subroutine dust_correct_band(dat,param,comp,band,iter)
     implicit none
-    type(data),   intent(inout) :: dat
-    type(params)                :: param
-    type(component)             :: comp
-    integer(i4b), intent(in)    :: band
-    real(dp), allocatable, dimension(:,:,:) :: thermal_map
-    integer(i4b)                :: i, j, k
-    character(len=256)          :: title
+    type(data),                  intent(inout) :: dat
+    type(params)                               :: param
+    type(component)                            :: comp
+    integer(i4b),                intent(in)    :: band
+    integer(i4b), optional,      intent(in)    :: iter
+    real(dp), allocatable, dimension(:,:,:)    :: thermal_map
+    integer(i4b)                               :: i, j, k
+    character(len=256)                         :: title
 
     allocate(thermal_map(0:npix-1,nmaps,nbands))
 
@@ -121,7 +122,12 @@ contains
           dat%sig_map(i,k,band) = dat%sig_map(i,k,band) - thermal_map(i,k,band)
        end do
     end do
-    title = trim(param%outdir)//trim(param%band_label(band))//'_thermal_map.fits'
+    if (present(iter)) then
+       write(iter_str, '(i0.5)') iter
+       title = trim(param%outdir)//trim(param%band_label(band))//'_thermal_map_k' // trim(iter_str) // '.fits'
+    else
+       title = trim(param%outdir)//trim(param%band_label(band))//'_thermal_map.fits'
+    end if
     call write_result_map(trim(title), nside, ordering, header, thermal_map(:,:,band))
   end subroutine dust_correct_band
 
@@ -450,34 +456,26 @@ contains
     else if (trim(param%mode) == 'hi_fit') then
 
        write(iter_str, '(i0.5)') iter
-       n = 1
-       do j = 1, param%numband
-          if (param%band_inc(j)) then
-             title = trim(param%outdir) // trim(param%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
-             map(:,1)   = comp%HI_amps(n)*comp%HI(:,1)
-             do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-                   map(i,1) = missval
-                end if
-             end do
-             call write_bintab(map,npix,1, header, nlheader, trim(title))
-             n = n + 1
-          end if
+       do j = 1, nbands
+          title = trim(param%outdir) // trim(param%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
+          map(:,1)   = comp%HI_amps(j)*comp%HI(:,1)
+          do i = 0, npix-1
+             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                map(i,1) = missval
+             end if
+          end do
+          call write_bintab(map,npix,1, header, nlheader, trim(title))
        end do
 
-       n = 1
-       do j = 1, param%numband
-          if (param%band_inc(j)) then
-             title = trim(param%outdir) // trim(param%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
-             map(:,:)   = dat%res_map(:,:,n)
-             do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-                   map(i,1) = missval
-                end if
-             end do
-             call write_bintab(map,npix,1, header, nlheader, trim(title))
-             n = n + 1
-          end if
+       do j = 1, nbands
+          title = trim(param%outdir) // trim(param%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
+          map(:,:)   = dat%res_map(:,:,j)
+          do i = 0, npix-1
+             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                map(i,1) = missval
+             end if
+          end do
+          call write_bintab(map,npix,1, header, nlheader, trim(title))
        end do
        title = trim(param%outdir) // 'T_d_k'// trim(iter_str) // '.fits'
        map(:,1)   = comp%T_d(:,1)
@@ -490,7 +488,8 @@ contains
        dat%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
-             s =  comp%HI_amps(j)*comp%HI(i,1)*planck(param%band_nu(j)*1d9,comp%T_d(i,1))
+             s = dat%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(param%band_nu(j)*1d9,comp%T_d(i,1))+dat%offset(j)
+             ! s =  comp%HI_amps(j)*comp%HI(i,1)*planck(param%band_nu(j)*1d9,comp%T_d(i,1))
              dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
           end do
        end do
@@ -582,7 +581,7 @@ contains
        else
           open(35,file=title,status="new",action="write")
        end if
-       write(35,'(10(E17.8))') comp%HI_amps
+       write(35,'(20(E17.8))') comp%HI_amps
        close(35)
        
        title = trim(param%outdir)//'HI_chisq.dat'
@@ -607,16 +606,16 @@ contains
        ! write(37,"(8(E16.4))") dat%gain
        ! close(37)
 
-       ! title = trim(param%outdir)//'band_offsets.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(38,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(38,file=title,status="new",action="write")
-       !    write(38,"(3x,8(A16))") param%band_label
-       ! end if
-       ! write(38,"(8(E16.4))") dat%offset
-       ! close(38)
+       title = trim(param%outdir)//'band_offsets.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(38,file=title,status="old",position="append",action="write") 
+       else
+          open(38,file=title,status="new",action="write")
+          write(38,"(3x,20(A16))") param%band_label
+       end if
+       write(38,"(20(E16.4))") dat%offset
+       close(38)
        
     end if
     

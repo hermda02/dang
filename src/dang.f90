@@ -144,7 +144,7 @@ program dang
   
      do j = 1, nbands
         ! Check to see if any maps need to be dust corrected
-        if (dpar%dust_corr(j)) then
+        if (dpar%dust_corr(j) .and. .not. dpar%bp_map(j)) then
            call dust_correct_band(dang_data,dpar,comp,j)
         end if
      end do
@@ -221,6 +221,8 @@ program dang
      do i = 0, npix-1
         if (comp%HI(i,1) > dpar%thresh) then
            dang_data%masks(i,1) = missval
+        else if (dang_data%masks(i,1) == missval) then
+           dang_data%masks(i,1) = missval
         else if (dang_data%rms_map(i,1,1) == 0.d0) then
            dang_data%masks(i,1) = missval
         else
@@ -228,7 +230,7 @@ program dang
         end if
      end do
 
-     dpar%fit_offs(:) = .false.
+     dpar%fit_offs(:) = .true.
      
      deallocate(map,rms)
 
@@ -305,7 +307,7 @@ contains
           do j = 1, nbands
              if ( dpar%bp_map(j)) then
                 if (dpar%dust_corr(j)) then
-                   call dust_correct_band(dang_data,dpar,comp,j)
+                   call dust_correct_band(dang_data,dpar,comp,j,iter)
                 end if
              end if
           end do
@@ -453,12 +455,14 @@ contains
        write(*,*) 'template_fit'
        call template_fit(dpar, dang_data, comp, 1)
 
+       call compute_chisq(dpar,dang_data,comp,1)
+
        write(*,fmt='(i6, a, E10.3, a, e10.3)')&
             iter, " - chisq: " , dang_data%chisq, " - T_d: ",&
             mask_avg(comp%T_d(:,1),dang_data%masks(:,1))
        write(*,fmt='(a)') '---------------------------------------------'
 
-       call sample_HI_T(dpar, dang_data, comp, 1)
+       ! call sample_HI_T(dpar, dang_data, comp, 1)
 
        do j = 1, nbands
           do i = 0, npix-1

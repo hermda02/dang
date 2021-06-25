@@ -437,32 +437,34 @@ contains
         n  = par%numband
         n2 = par%numinc
 
-        allocate(par%band_mapfile(n),par%band_label(n))
-        allocate(par%band_noisefile(n),par%band_nu(n))
-        allocate(par%band_unit(n))
-        allocate(par%bp_map(n))
-        allocate(par%dust_corr(n))
         allocate(par%band_inc(n))
+        allocate(par%band_mapfile(n2),par%band_label(n2))
+        allocate(par%band_noisefile(n2),par%band_nu(n2))
+        allocate(par%band_unit(n2))
+        allocate(par%bp_map(n2))
+        allocate(par%dust_corr(n2))
 
-        allocate(par%init_gain(n))
-        allocate(par%init_offs(n))
-        allocate(par%fit_gain(n))
-        allocate(par%fit_offs(n))
+        allocate(par%init_gain(n2))
+        allocate(par%init_offs(n2))
+        allocate(par%fit_gain(n2))
+        allocate(par%fit_offs(n2))
 
         j = 1
         do i = 1, n
             call int2string(i, itext)
             call get_parameter_hashtable(htbl, 'INCLUDE_BAND'//itext, len_itext=len_itext, par_lgt=par%band_inc(i))
-            call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%band_label(i))
-            call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%band_mapfile(i))
-            call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%band_noisefile(i))
-            call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%band_nu(i))
-            call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%band_unit(i))
-            call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(i))
-            call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(i))
-            !call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(i))
-            call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(i))
-            call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(i))
+            if (.not. par%band_inc(i)) cycle
+            call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%band_label(j))
+            call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%band_mapfile(j))
+            call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%band_noisefile(j))
+            call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%band_nu(j))
+            call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%band_unit(j))
+            call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(j))
+            call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(j))
+            !call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(j))
+            call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(j))
+            call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(j))
+            j = j + 1
          end do
     end subroutine read_data_params
 
