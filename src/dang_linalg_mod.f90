@@ -426,7 +426,8 @@ contains
                            res(i) = 0.d0
                            cycle
                         else
-                           res(i) = res(i) + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                           res(i) = res(i) + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)&
+                                &*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
                         end if
                      end do
                   end do
@@ -440,8 +441,10 @@ contains
                            res(x+i) = 0.d0
                            cycle
                         else                           
-                           res(i)   = res(i)   + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
-                           res(x+i) = res(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
+                           res(i)   = res(i)   + 1.d0/(dat%rms_map(i-1,map_n,j))*&
+                                &vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                           res(x+i) = res(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j))*&
+                                &vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                         end if
                      end do
                   end do

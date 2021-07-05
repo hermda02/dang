@@ -310,7 +310,8 @@ contains
                       write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
                            iter, " - chisq: " , chisq, " - A_s: ",&
                            dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                           mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
+                           mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', &
+                           dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
                       write(*,fmt='(a)') '---------------------------------------------'
                    end if
                 end if
@@ -331,7 +332,8 @@ contains
                 write(*,fmt='(i6, a, E10.3, a, f7.3, a, f8.4, a, 10e10.3)')&
                      iter, " - chisq: " , chisq, " - A_s: ",&
                      dang_data%fg_map(23000,k,par%fg_ref_loc(1),1),  " - beta_s: ",&
-                     mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
+                     mask_avg(comp%beta_s(:,k),dang_data%masks(:,1)), ' - A_d: ', &
+                     dang_data%temp_amps(:,k,1)/dang_data%temp_norm(k,1)
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
              call write_data(par%mode)
@@ -485,7 +487,8 @@ contains
                    signal = dang_data%fg_map(i,mn,j,l)
                    s      = s + signal
                 end do
-                dang_data%chi_map(i,mn) = dang_data%chi_map(i,mn) + dang_data%masks(i,1)*(dang_data%sig_map(i,mn,j) - s)**2.d0/dang_data%rms_map(i,mn,j)**2.d0
+                dang_data%chi_map(i,mn) = dang_data%chi_map(i,mn) + dang_data%masks(i,1)*&
+                     (dang_data%sig_map(i,mn,j) - s)**2.d0/dang_data%rms_map(i,mn,j)**2.d0
              end do
           end do
        end do
@@ -542,7 +545,8 @@ contains
        do i = 0, npix-1
           do j = 1, nbands
              s =  comp%HI_amps(j)*comp%HI(i,1)*planck(par%band_nu(j)*1d9,comp%T_d(i,1))
-             dang_data%chi_map(i,1) = dang_data%chi_map(i,1) + dang_data%masks(i,1)*(dang_data%sig_map(i,1,j) - s)**2.d0/dang_data%rms_map(i,1,j)**2.d0
+             dang_data%chi_map(i,1) = dang_data%chi_map(i,1) + dang_data%masks(i,1)*&
+                  (dang_data%sig_map(i,1,j) - s)**2.d0/dang_data%rms_map(i,1,j)**2.d0
           end do
        end do
        dang_data%chi_map(:,1) = dang_data%chi_map(:,1)/(nbands+nfgs)

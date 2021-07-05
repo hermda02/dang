@@ -79,8 +79,10 @@ contains
           
           write(iter_str,'(i0.6)') iter_i
 
-          bp_maps(j,1) = trim(param%bp_dir) // trim(param%band_label(j))//'_map_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str)  // '.fits'
-          bp_maps(j,2) = trim(param%bp_dir) // trim(param%band_label(j))//'_rms_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str) // '.fits'
+          bp_maps(j,1) = trim(param%bp_dir) // trim(param%band_label(j))//&
+               '_map_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str)  // '.fits'
+          bp_maps(j,2) = trim(param%bp_dir) // trim(param%band_label(j))//&
+               '_rms_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str) // '.fits'
           write(*,'(a,a,a)') 'Swapping band ', trim(param%band_label(j)), '.'
           call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header)
           dat%sig_map(:,:,j) = map
