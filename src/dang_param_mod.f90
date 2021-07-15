@@ -4,7 +4,7 @@ module dang_param_mod
     use hashtbl
     implicit none
 
-    type, public :: params
+    type, public :: dang_params
         ! Global parameters
         integer(i4b)                                  :: ngibbs        ! Number of Gibbs iterations
         integer(i4b)                                  :: nsample       ! For internal samplers (MH)
@@ -55,12 +55,14 @@ module dang_param_mod
         character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
         logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates fit
         integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
+        logical(lgt),       allocatable, dimension(:)     :: temp_sample    ! Storing which bands should have templates fit
 
+        character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label
         logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
-        character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label (for outputs)
-        character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral index sampler (pixel/fullsky)
         real(dp),           allocatable, dimension(:,:)   :: fg_init        ! Initialized parameter value (fullsky)
+        character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral parameter input map
         real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling parameters
+        character(len=512), allocatable, dimension(:,:)   :: fg_prior_type  ! Fg spectral parameter input map
         integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
         logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_spec   ! Logical - sample fg parameter?
         logical(lgt),       allocatable, dimension(:)     :: fg_samp_amp    ! Logical - sample fg amplitude
@@ -70,6 +72,7 @@ module dang_param_mod
         character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
         real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
         real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
+  
 
         integer(i4b)                                      :: njoint         ! # of components to jointly sample 
         logical(lgt)                                      :: joint_sample   ! Logical - jointly sample fg amplitudes
@@ -84,7 +87,7 @@ module dang_param_mod
         real(dp)                                          :: HI_Td_mean     ! HI Temperature sampling mean
         real(dp)                                          :: HI_Td_std      ! HI Temperature sampling std
 
-    end type params
+    end type dang_params
 
 contains
 
@@ -136,7 +139,7 @@ contains
     subroutine read_param_file(par)
         implicit none
         type(hash_tbl_sll)                            :: htable
-        type(params), intent(inout)                   :: par
+        type(dang_params), intent(inout)                   :: par
         integer(i4b)                                  :: parfile_len, i
         character(len=512)                            :: paramfile
         character(len=512), allocatable, dimension(:) :: parfile_cache
@@ -349,7 +352,7 @@ contains
         implicit none
 
         type(hash_tbl_sll), intent(in)    :: htbl
-        type(params),       intent(inout) :: par
+        type(dang_params),       intent(inout) :: par
         integer(i4b)                      :: pol_count
 
         integer(i4b)     :: i, j, n, len_itext
@@ -416,9 +419,9 @@ contains
         implicit none
 
         type(hash_tbl_sll), intent(in)    :: htbl
-        type(params),       intent(inout) :: par
+        type(dang_params),       intent(inout) :: par
 
-        integer(i4b)     :: i, j, n, len_itext
+        integer(i4b)     :: i, j, n, n2, len_itext
         character(len=3) :: itext
         character(len=2) :: jtext
 
@@ -431,33 +434,38 @@ contains
         call get_parameter_hashtable(htbl, 'DATA_DIRECTORY', par_string=par%datadir)
         call get_parameter_hashtable(htbl, 'MASKFILE', par_string=par%mask_file)
 
-        n = par%numband
+        n  = par%numband
+        n2 = par%numinc
 
-        allocate(par%band_mapfile(n),par%band_label(n))
-        allocate(par%band_noisefile(n),par%band_nu(n))
-        allocate(par%band_unit(n))
-        allocate(par%bp_map(n))
-        allocate(par%dust_corr(n))
         allocate(par%band_inc(n))
+        allocate(par%band_mapfile(n2),par%band_label(n2))
+        allocate(par%band_noisefile(n2),par%band_nu(n2))
+        allocate(par%band_unit(n2))
+        allocate(par%bp_map(n2))
+        allocate(par%dust_corr(n2))
 
-        allocate(par%init_gain(n))
-        allocate(par%init_offs(n))
-        allocate(par%fit_gain(n))
-        allocate(par%fit_offs(n))
+        allocate(par%init_gain(n2))
+        allocate(par%init_offs(n2))
+        allocate(par%fit_gain(n2))
+        allocate(par%fit_offs(n2))
 
+        j = 1
         do i = 1, n
             call int2string(i, itext)
             call get_parameter_hashtable(htbl, 'INCLUDE_BAND'//itext, len_itext=len_itext, par_lgt=par%band_inc(i))
-            call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%band_label(i))
-            call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%band_mapfile(i))
-            call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%band_noisefile(i))
-            call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%band_nu(i))
-            call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%band_unit(i))
-            call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(i))
-            call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(i))
-            !call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(i))
-            call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(i))
-            call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(i))
+            if (.not. par%band_inc(i)) cycle
+            call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%band_label(j))
+            call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%band_mapfile(j))
+            call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%band_noisefile(j))
+            call get_parameter_hashtable(htbl, 'BAND_FREQ'//itext, len_itext=len_itext, par_dp=par%band_nu(j))
+            call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%band_unit(j))
+            call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(j))
+            call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(j))
+            call get_parameter_hashtable(htbl, 'BAND_FIT_OFFSET'//itext, len_itext=len_itext, par_lgt=par%fit_offs(j))
+            call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(j))
+            call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(j))
+            call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(j))
+            j = j + 1
          end do
     end subroutine read_data_params
 
@@ -465,7 +473,7 @@ contains
         implicit none
 
         type(hash_tbl_sll), intent(in)    :: htbl
-        type(params),       intent(inout) :: par
+        type(dang_params),       intent(inout) :: par
 
         integer(i4b)     :: i, j, n, n2, n3
         integer(i4b)     :: len_itext, len_jtext
@@ -504,10 +512,12 @@ contains
            allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
            allocate(par%fg_spec_file(n,2))
            allocate(par%fg_ind_region(n,2))
+           allocate(par%fg_prior_type(n,2))
            allocate(par%fg_init(n,2))
            par%temp_nfit = 0
 
            allocate(par%temp_file(n2))
+           allocate(par%temp_sample(n2))
            allocate(par%temp_nfit(n2))
            allocate(par%temp_label(n2))
            allocate(par%temp_corr(n2,par%numband))
@@ -518,6 +528,7 @@ contains
               call int2string(i, itext)
               call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext, len_itext=len_itext, par_string=par%temp_file(i))
               call get_parameter_hashtable(htbl, 'TEMPLATE_LABEL'//itext, len_itext=len_itext, par_string=par%temp_label(i))
+              call get_parameter_hashtable(htbl, 'TEMPLATE_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%temp_sample(i))
               do j = 1, par%numband
                  call int2string(j,jtext)
                  call get_parameter_hashtable(htbl, 'TEMPLATE'//trim(itext)//'_FIT'//jtext,&
@@ -563,6 +574,8 @@ contains
                       par_string=par%fg_spec_file(i,1))
                  call get_parameter_hashtable(htbl, 'COMP_BETA_REGION'//itext, len_itext=len_itext,&
                       par_string=par%fg_ind_region(i,1))
+                 call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR'//itext, len_itext=len_itext,&
+                      par_string=par%fg_prior_type(i,1))
               else if (trim(par%fg_type(i)) == 'mbb') then
                  call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                       par_dp=par%fg_gauss(i,1,1))
