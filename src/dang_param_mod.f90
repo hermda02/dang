@@ -4,7 +4,7 @@ module dang_param_mod
     use hashtbl
     implicit none
 
-    type, public :: params
+    type, public :: dang_params
         ! Global parameters
         integer(i4b)                                  :: ngibbs        ! Number of Gibbs iterations
         integer(i4b)                                  :: nsample       ! For internal samplers (MH)
@@ -87,7 +87,7 @@ module dang_param_mod
         real(dp)                                          :: HI_Td_mean     ! HI Temperature sampling mean
         real(dp)                                          :: HI_Td_std      ! HI Temperature sampling std
 
-    end type params
+    end type dang_params
 
 contains
 
@@ -139,7 +139,7 @@ contains
     subroutine read_param_file(par)
         implicit none
         type(hash_tbl_sll)                            :: htable
-        type(params), intent(inout)                   :: par
+        type(dang_params), intent(inout)                   :: par
         integer(i4b)                                  :: parfile_len, i
         character(len=512)                            :: paramfile
         character(len=512), allocatable, dimension(:) :: parfile_cache
@@ -352,7 +352,7 @@ contains
         implicit none
 
         type(hash_tbl_sll), intent(in)    :: htbl
-        type(params),       intent(inout) :: par
+        type(dang_params),       intent(inout) :: par
         integer(i4b)                      :: pol_count
 
         integer(i4b)     :: i, j, n, len_itext
@@ -419,7 +419,7 @@ contains
         implicit none
 
         type(hash_tbl_sll), intent(in)    :: htbl
-        type(params),       intent(inout) :: par
+        type(dang_params),       intent(inout) :: par
 
         integer(i4b)     :: i, j, n, n2, len_itext
         character(len=3) :: itext
@@ -461,7 +461,8 @@ contains
             call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%band_unit(j))
             call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(j))
             call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(j))
-            !call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(j))
+            call get_parameter_hashtable(htbl, 'BAND_FIT_OFFSET'//itext, len_itext=len_itext, par_lgt=par%fit_offs(j))
+            call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(j))
             call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(j))
             call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(j))
             j = j + 1
@@ -472,7 +473,7 @@ contains
         implicit none
 
         type(hash_tbl_sll), intent(in)    :: htbl
-        type(params),       intent(inout) :: par
+        type(dang_params),       intent(inout) :: par
 
         integer(i4b)     :: i, j, n, n2, n3
         integer(i4b)     :: len_itext, len_jtext

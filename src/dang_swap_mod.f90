@@ -14,8 +14,8 @@ module dang_swap_mod
 contains
 
   ! subroutine swap_bp_maps(dat,dpar,iteration,chain)
-  !   type(params)                                    :: dpar
-  !   type(data),                       intent(inout) :: dat
+  !   type(dang_params)                                    :: dpar
+  !   type(dang_data),                       intent(inout) :: dat
   !   integer(i4b),                     intent(in)    :: iteration
   !   character(len=512),               intent(in)    :: chain
   !   character(len=300), allocatable, dimension(:,:) :: bp_maps
@@ -47,8 +47,8 @@ contains
 
 
   subroutine swap_bp_maps(dat,dpar)
-    type(params)                                    :: dpar
-    type(data),                       intent(inout) :: dat
+    type(dang_params)                               :: dpar
+    type(dang_data),                  intent(inout) :: dat
     character(len=512)                              :: chain_c
     character(len=300), allocatable, dimension(:,:) :: bp_maps
     integer(i4b)                                    :: i, j, iter_i, chain_i

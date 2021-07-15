@@ -6,23 +6,23 @@ module dang_component_mod
   use dang_param_mod
   implicit none
   
-  type, public                              :: component
+  type, public                              :: dang_comps
      
      real(dp), allocatable, dimension(:,:)        :: beta_s, beta_d, T_d, HI
      real(dp), allocatable, dimension(:)          :: HI_amps
 
-  end type component
+  end type dang_comps
 
 contains 
 
   subroutine init_synch(self,param,npix,nmaps)
     implicit none
-    type(component)               :: self
-    type(params)                  :: param
+    type(dang_comps)              :: self
+    type(dang_params)             :: param
     integer(i4b), intent(in)      :: npix, nmaps
     
     allocate(self%beta_s(0:npix-1,nmaps))
-    write(*,*) 'Allocated synch maps'
+    write(*,*) 'Allocated synch parameter maps'
     if (trim(param%fg_spec_file(1,1)) == 'none') then 
        write(*,fmt='(a,f8.4)') 'Full sky beta_s estimate ', param%fg_init(1,1)
        self%beta_s     = param%fg_init(1,1) ! Synchrotron beta initial guess
@@ -34,24 +34,23 @@ contains
   
   subroutine init_dust(self,param,npix,nmaps)
     implicit none
-    type(component)               :: self
-    type(params)                  :: param
+    type(dang_comps)              :: self
+    type(dang_params)             :: param
     integer(i4b), intent(in)      :: npix, nmaps
     
     allocate(self%beta_d(0:npix-1,nmaps))
     allocate(self%T_d(0:npix-1,nmaps))
-    write(*,*) 'Allocated dust maps!'
+    write(*,*) 'Allocated dust parameter maps!'
 
     self%beta_d     = 1.53d0              ! Dust beta initial guess
     self%T_d        = 19.6d0
     
   end subroutine init_dust
 
-
   subroutine init_hi_fit(self, param, npix)
     implicit none
-    type(component)          :: self
-    type(params)             :: param
+    type(dang_comps)         :: self
+    type(dang_params)        :: param
     integer(i4b), intent(in) :: npix
     character(len=80), dimension(180) :: head
 
@@ -83,8 +82,8 @@ contains
     ! always computed in RJ units
     
     implicit none
-    class(params)                  :: param
-    type(component)                :: self
+    class(dang_params)             :: param
+    type(dang_comps)               :: self
     real(dp),           intent(in) :: freq
     integer(i4b),       intent(in) :: ind
     integer(i4b),       intent(in) :: pix

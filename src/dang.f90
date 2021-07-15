@@ -33,17 +33,12 @@ program dang
   
   integer(i4b)                          :: i, j, k, l, m, n
   integer(i4b)                          :: bp_iter
-  real(dp), allocatable, dimension(:,:) :: map, rms, mask, true_synch
-
-  real(dp), allocatable, dimension(:)   :: chi_pix
-
-  real(dp)                   :: result
-  character(len=6)           :: pixel_str
+  real(dp), allocatable, dimension(:,:) :: map, rms, true_synch
   
   ! Object Orient
-  type(params)       :: dpar
-  type(data)         :: dang_data
-  type(component)    :: comp
+  type(dang_params) :: dpar
+  type(dang_data)   :: ddata
+  type(dang_comps)  :: dcomps
   
   call init_mpi()
   call read_param_file(dpar)
@@ -55,14 +50,14 @@ program dang
   !----------------------------------------------------------------------------------------------------------
   ! General paramters
   if (trim(dpar%mode) == 'comp_sep') then
-     i              = getsize_fits(dpar%temp_file(1), nside=nside, ordering=ordering, nmaps=nmaps)
+     i = getsize_fits(dpar%temp_file(1), nside=nside, ordering=ordering, nmaps=nmaps)
   else if (trim(dpar%mode) == 'hi_fit') then
-     i                 = getsize_fits(dpar%mask_file, nside=nside, ordering=ordering, nmaps=nmaps)
+     i = getsize_fits(dpar%mask_file,    nside=nside, ordering=ordering, nmaps=nmaps)
   else
      write(*,*) 'Unrecognized operational mode. Do better!'
   end if
-  dang_data%npix    = nside2npix(nside) 
-  npix              = dang_data%npix
+  ddata%npix    = nside2npix(nside) 
+  npix              = ddata%npix
   nbands            = dpar%numinc
   nfgs              = dpar%ncomp+dpar%ntemp
   npixpar           = 0.d0
@@ -70,11 +65,6 @@ program dang
   nump              = 0
   nlheader          = size(header)
   !----------------------------------------------------------------------------------------------------------
-  ! Array allocation - dummy maps used for loading in data
-  allocate(mask(0:npix-1,1))
-  allocate(map(0:npix-1,nmaps))
-  allocate(rms(0:npix-1,nmaps))
-  allocate(true_synch(0:npix-1,nmaps))
   !----------------------------------------------------------------------------------------------------------
 
   call RANDOM_SEED()
@@ -82,157 +72,81 @@ program dang
   ! Either do component separation, or carry out the HI fit
   !------------------------------------------------------------------------------------------------
   if (trim(dpar%mode) == 'comp_sep') then
-     ! Initialize data and components
+     ! Initialize ddata and components
      !----------------------------------------------------------------------------------------------------------
-     call init_fg_map(dang_data,npix,nmaps,nbands,nfgs)
-     call init_data_maps(dang_data,npix,nmaps,nbands)
-     call init_mask_maps(dang_data,npix,nmaps)
-     call init_template(dang_data,npix,nmaps,dpar%ntemp,nbands)
-     call init_synch(comp,dpar,npix,nmaps)
-     call init_dust(comp,dpar,npix,nmaps)
+     call ddata%init_data_maps(dpar)
 
-     dang_data%fg_map    = 0.0
-     dang_data%temp_amps = 0.0
+     ! Initialize component
+     call init_synch(dcomps,dpar,npix,nmaps)
+     call init_dust(dcomps,dpar,npix,nmaps)
+
      !----------------------------------------------------------------------------------------------------------
      !----------------------------------------------------------------------------------------------------------
      ! Read maps
-     do i = 1, dpar%ntemp
-        ! Read in templates
-        call read_bintab(dpar%temp_file(i), dang_data%temps(:,:,i), npix,nmaps,nullval,anynull,header=header)
-        ! Normalize templates
-        do k = 1, nmaps
-           dang_data%temp_norm(k,i) = 1.d0!maxval(dang_data%temps(:,k,i))
-           dang_data%temps(:,k,i)   = dang_data%temps(:,k,i)/dang_data%temp_norm(k,i)
-        end do
-     end do
-  
-     write(*,*) 'Reading MASKFILE'
-     call read_bintab(dpar%mask_file,dang_data%masks,npix,1,nullval,anynull,header=header)
-     do i = 0, npix-1
-        do j = 1, nmaps
-           if (dang_data%masks(i,j) == 0.d0 .or. dang_data%masks(i,j) == missval) then
-              dang_data%masks(i,j) = missval
-           else 
-              nump = nump + 1
-           end if
-        end do
-     end do
-     write(*,*) ''
-  
-     ! Read maps in
-     do j = 1, nbands
-        ! If not supposed to be swapped BP maps, load that map
-        if (.not. dpar%bp_map(j)) then
-           call read_bintab(trim(dpar%datadir) // trim(dpar%band_noisefile(j)), &
-                rms,npix,nmaps,nullval,anynull,header=header)
-           dang_data%rms_map(:,:,j) = rms
-           call read_bintab(trim(dpar%datadir) // trim(dpar%band_mapfile(j)), &
-                map,npix,nmaps,nullval,anynull,header=header)
-           dang_data%sig_map(:,:,j) = map
-        end if
-     end do
-
-     call read_bintab('data/test_data/new_sims/synch/synch_030_n0064_rj.fits',map,npix,nmaps,nullval,anynull,header=header)
-
-     true_synch = map
+     call ddata%read_data_maps(dpar)
      
-     dang_data%fg_map(:,:,dpar%fg_ref_loc(1),1) = true_synch
-     
-     deallocate(map,rms)
-     
-     call convert_maps(dpar,dang_data)
-  
+     call convert_maps(ddata,dpar)
      do j = 1, nbands
         ! Check to see if any maps need to be dust corrected
         if (dpar%dust_corr(j) .and. .not. dpar%bp_map(j)) then
-           call dust_correct_band(dang_data,dpar,comp,j)
+           call dust_correct_band(ddata,dpar,dcomps,j)
         end if
      end do
      write(*,*) ''
-
 
      ! All here and below (to call comp sep) is just for testing purposes!!!
      !----------------------------------------------------------------------------------------------------------
      ! ! 1.00 sim
-     ! dang_data%temp_amps(1,:,1) = 0.41957897*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(2,:,1) = 0.17704154*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(3,:,1) = 0.09161571*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(4,:,1) = 0.12402716*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(5,:,1) = 0.20367266*dang_data%temp_norm(:,1)
+     ! ddata%temp_amps(1,:,1) = 0.41957897*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(2,:,1) = 0.17704154*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(3,:,1) = 0.09161571*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(4,:,1) = 0.12402716*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(5,:,1) = 0.20367266*ddata%temp_norm(:,1)
 
      ! ! 0.50 sim
-     ! dang_data%temp_amps(1,:,1) = 0.20019717*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(2,:,1) = 0.0709024475*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(3,:,1) = 0.0136504706*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(4,:,1) = 7.42349435d-4*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(5,:,1) = 3.57833056d-4*dang_data%temp_norm(:,1)
+     ! ddata%temp_amps(1,:,1) = 0.20019717*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(2,:,1) = 0.0709024475*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(3,:,1) = 0.0136504706*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(4,:,1) = 7.42349435d-4*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(5,:,1) = 3.57833056d-4*ddata%temp_norm(:,1)
  
-     ! dang_data%temp_amps(1,:,1) = 0.196d-2*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(2,:,1) = 0.475d-2*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(3,:,1) = 0.000d0*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(4,:,1) = 0.283d-2*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(5,:,1) = -0.104d-01*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(6,:,1) = 0.000d0*dang_data%temp_norm(:,1)
-     ! dang_data%temp_amps(7,:,1) = 0.110d-1*dang_data%temp_norm(:,1)
+     ! ddata%temp_amps(1,:,1) = 0.196d-2*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(2,:,1) = 0.475d-2*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(3,:,1) = 0.000d0*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(4,:,1) = 0.283d-2*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(5,:,1) = -0.104d-01*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(6,:,1) = 0.000d0*ddata%temp_norm(:,1)
+     ! ddata%temp_amps(7,:,1) = 0.110d-1*ddata%temp_norm(:,1)
 
      ! Extrapolating solved for bands for ze cleaning
-     do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-        call extrapolate_template(dpar,dang_data,comp,1,k)
-        call extrapolate_foreground(dpar,dang_data,comp,1,k)
-     end do
+     ! do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+     !    call extrapolate_template(dpar,ddata,dcomps,1,k)
+     !    call extrapolate_foreground(dpar,ddata,dcomps,1,k)
+     ! end do
 
      !----------------------------------------------------------------------------------------------------------
-
      call comp_sep
   
   !------------------------------------------------------------------------------------------------
   else if (trim(dpar%mode) == 'hi_fit') then
-     ! Initialize data and components
+     ! Initialize ddata and components
      !----------------------------------------------------------------------------------------------------------
-     call init_data_maps(dang_data,npix,nmaps,nbands)
-     call init_mask_maps(dang_data,npix,nmaps)
-     call init_template(dang_data,npix,nmaps,dpar%ntemp,nbands)
-     call init_hi_fit(comp, dpar, npix)
+     call ddata%init_data_maps(dpar)
+     call init_hi_fit(dcomps, dpar, npix)
 
-     write(*,*) 'Reading MASKFILE'
-     call read_bintab(dpar%mask_file,dang_data%masks,npix,1,nullval,anynull,header=header)
-     do i = 0, npix-1
-        if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-           dang_data%masks(i,1) = missval
-        else 
-           nump = nump + 1
-        end if
-     end do
-     write(*,*) ''
-
-     ! Read maps in
-     do j = 1, nbands
-        call read_bintab(trim(dpar%datadir) // trim(dpar%band_noisefile(j)), &
-             rms,npix,nmaps,nullval,anynull,header=header)
-        dang_data%rms_map(:,:,j) = rms
-        call read_bintab(trim(dpar%datadir) // trim(dpar%band_mapfile(j)), &
-             map,npix,nmaps,nullval,anynull,header=header)
-        dang_data%sig_map(:,:,j) = map
-        ! Initialize gain and offset values from parameter file
-        dang_data%gain(j)   = dpar%init_gain(j)
-        dang_data%offset(j) = 0.d0 
-     end do
+     call read_data_maps(ddata,dpar)
 
      do i = 0, npix-1
-        if (comp%HI(i,1) > dpar%thresh) then
-           dang_data%masks(i,1) = missval
-        else if (dang_data%masks(i,1) == missval) then
-           dang_data%masks(i,1) = missval
-        else if (dang_data%rms_map(i,1,1) == 0.d0) then
-           dang_data%masks(i,1) = missval
+        if (dcomps%HI(i,1) > dpar%thresh) then
+           ddata%masks(i,1) = missval
+        else if (ddata%masks(i,1) == missval) then
+           ddata%masks(i,1) = missval
+        else if (ddata%rms_map(i,1,1) == 0.d0) then
+           ddata%masks(i,1) = missval
         else
-           dang_data%masks(i,1) = 1.d0
+           ddata%masks(i,1) = 1.d0
         end if
      end do
-
-     dpar%fit_offs(:) = .true.
-     
-     deallocate(map,rms)
 
      call hi_fit 
   
@@ -298,16 +212,16 @@ contains
        ! -- Swap in a different BeyondPlanck map each iteration -- |
        !-----------------------------------------------------------|
        if (dpar%bp_swap) then
-          call swap_bp_maps(dang_data,dpar)
+          call swap_bp_maps(ddata,dpar)
           write(*,*) ''
           bp_iter = bp_iter + 1
-          call convert_maps_bp(dpar, dang_data)
+          call convert_maps_bp(ddata, dpar)
           write(*,*) ''
           ! Check to see if any swapped maps need to be dust corrected                               
           do j = 1, nbands
              if ( dpar%bp_map(j)) then
                 if (dpar%dust_corr(j)) then
-                   call dust_correct_band(dang_data,dpar,comp,j,iter)
+                   call dust_correct_band(ddata,dpar,dcomps,j,iter)
                 end if
              end if
           end do
@@ -319,10 +233,10 @@ contains
        ! --------------------------------------------------------------
        if (dpar%joint_sample) then
           if (dpar%joint_pol) then
-             call sample_joint_amp(dpar,dang_data,comp,2,trim(dpar%solver))
+             call sample_joint_amp(dpar,ddata,dcomps,2,trim(dpar%solver))
           else
              do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                call sample_joint_amp(dpar,dang_data,comp,k,trim(dpar%solver))
+                call sample_joint_amp(dpar,ddata,dcomps,k,trim(dpar%solver))
              end do
           end if             
           do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
@@ -330,19 +244,19 @@ contains
                 ! Extrapolate foreround solutions
                 do n = 1, dpar%ncomp
                    if (trim(dpar%joint_comp(m)) == trim(dpar%fg_label(n))) then
-                      call extrapolate_foreground(dpar,dang_data,comp,n,k)
+                      call extrapolate_foreground(dpar,ddata,dcomps,n,k)
                    end if
                 end do
                 ! Extrapolate template solutions
                 do n = 1, dpar%ntemp
                    if (trim(dpar%joint_comp(m)) == trim(dpar%temp_label(n))) then
-                      call extrapolate_template(dpar,dang_data,comp,n,k)
+                      call extrapolate_template(dpar,ddata,dcomps,n,k)
                    end if
                 end do
              end do
           end do
           ! How good is the fit and what are the parameters looking like?
-          call write_stats_to_term(dpar,dang_data,comp,iter)
+          call write_stats_to_term(ddata,dpar,dcomps,iter)
       end if
 
        ! ------------------------------------------------------------------------------------------
@@ -352,8 +266,8 @@ contains
           if (dpar%fg_samp_amp(n)) then
              write(*,*) "Sample "//trim(dpar%fg_label(n))//" amplitudes."
              do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                dang_data%fg_map(:,k,dpar%fg_ref_loc(n),n) = sample_fg_amp(dpar,dang_data,comp,n,k)
-                call extrapolate_foreground(dpar,dang_data,comp,n,k)
+                ddata%fg_map(:,k,dpar%fg_ref_loc(n),n) = sample_fg_amp(dpar,ddata,dcomps,n,k)
+                call extrapolate_foreground(dpar,ddata,dcomps,n,k)
              end do
           end if
        end do
@@ -362,8 +276,8 @@ contains
              if (dpar%temp_sample(n)) then
                 write(*,*) "Sample "//trim(dpar%fg_label(n))//" template amplitudes."
                 do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                   call template_fit(dpar,dang_data,comp,k,n)
-                   call extrapolate_template(dpar,dang_data,comp,n,k)
+                   call template_fit(dpar,ddata,dcomps,k,n)
+                   call extrapolate_template(dpar,ddata,dcomps,n,k)
                 end do
              end if
           end if
@@ -377,58 +291,39 @@ contains
              if (dpar%fg_spec_joint(n,1)) then
                 write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta jointly."
                 write(*,*) "---------------------------------"
-                ! call sample_new_index(dpar,dang_data,comp,n,-1)
-                call sample_index(dpar,dang_data,comp,n,-1)
+                ! call sample_new_index(dpar,ddata,dcomps,n,-1)
+                call sample_index(dpar,ddata,dcomps,n,-1)
              else
                 do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
                 write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta for "//trim(tqu(k))//"."
                 write(*,*) "---------------------------------"
-                   call sample_index(dpar,dang_data,comp,n,k)
+                   call sample_index(dpar,ddata,dcomps,n,k)
                 end do
              end if
              do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                call extrapolate_foreground(dpar,dang_data,comp,n,k)
+                call extrapolate_foreground(dpar,ddata,dcomps,n,k)
              end do
              ! How good is the fit and what are the parameters looking like?
-             call write_stats_to_term(dpar,dang_data,comp,iter)
+             call write_stats_to_term(ddata,dpar,dcomps,iter)
           end if
        end do
        ! ------------------------------------------------------------------------------------------
-       dang_data%res_map = dang_data%sig_map
+       ddata%res_map = ddata%sig_map
        do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
           do j = 1, nfgs
-             dang_data%res_map(:,k,:)  = dang_data%res_map(:,k,:) - dang_data%fg_map(:,k,:,j)
+             ddata%res_map(:,k,:)  = ddata%res_map(:,k,:) - ddata%fg_map(:,k,:,j)
           end do
           if (rank == master) then
-             call write_data(dpar,dang_data,comp,k)
+             call write_data(dpar,ddata,dcomps,k)
           end if
        end do
-
-       !-------------------------------------------------------------------------------------------
-       ! write(iter_str, '(i0.5)') iter
-       ! title = trim(dpar%outdir) // 'samp_minus_true_' // trim(iter_str) // '.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(50,file=title, status="old",position="append", action="write")
-       ! else
-       !    open(50,file=title, status="new", action="write")
-       ! endif
-       ! do i = 0, npix-1
-       !    if (dang_data%masks(i,1) == 0.d0 .or. dang_data%masks(i,1) == missval) then
-       !       cycle
-       !    else
-       !       write(50,fmt='(3(f16.8))') dang_data%fg_map(i,:,dpar%fg_ref_loc(1),1) - true_synch(i,:)
-       !    end if
-       ! end do
-       ! close(50)
-
        !-------------------------------------------------------------------------------------------
 
        ! How good is the fit and what are the parameters looking like?
-       call write_stats_to_term(dpar,dang_data,comp,iter)
+       call write_stats_to_term(ddata,dpar,dcomps,iter)
 
        if (mod(iter,dpar%iter_out) .EQ. 0) then
-          call write_maps(dpar,dang_data,comp)
+          call write_maps(dpar,ddata,dcomps)
        end if
     end do
     call mpi_finalize(ierr)
@@ -441,58 +336,37 @@ contains
     do iter = 1, dpar%ngibbs
 
        if (iter > 1) then
-          write(*,*) 'Calc HI gain offset'
           do j = 1, nbands
              if (dpar%fit_gain(j)) then
-                call sample_band_gain(dpar, dang_data, comp, 1, j, 1, 1)
+                call sample_band_gain(dpar, ddata, dcomps, 1, j, 1, 1)
              end if
              if (dpar%fit_offs(j)) then
-                call sample_band_offset(dpar, dang_data, comp, 1, j, 1)
+                call sample_band_offset(dpar, ddata, dcomps, 1, j, 1)
              end if
           end do
        end if
 
-       write(*,*) 'template_fit'
-       call template_fit(dpar, dang_data, comp, 1)
-
-       call compute_chisq(dpar,dang_data,comp,1)
-
-       write(*,fmt='(i6, a, E10.3, a, e10.3)')&
-            iter, " - chisq: " , dang_data%chisq, " - T_d: ",&
-            mask_avg(comp%T_d(:,1),dang_data%masks(:,1))
-       write(*,fmt='(a)') '---------------------------------------------'
-
-       ! call sample_HI_T(dpar, dang_data, comp, 1)
+       write(*,*) 'Fit templates'
+       call template_fit(dpar, ddata, dcomps, 1)
+       call write_stats_to_term(ddata,dpar,dcomps,iter)
+       write(*,*) 'Sample Td'
+       call sample_HI_T(dpar, ddata, dcomps, 1)
 
        do j = 1, nbands
           do i = 0, npix-1
-             if (dang_data%masks(i,1) == missval .or. dang_data%masks(i,1) == 0.d0) cycle
-             dang_data%res_map(i,1,j) = (dang_data%sig_map(i,1,j)-dang_data%offset(j))/dang_data%gain(j) &
-                  - comp%HI_amps(j)*comp%HI(i,1)*planck(dpar%band_nu(j)*1d9,comp%T_d(i,1))
+             if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
+             ddata%res_map(i,1,j) = (ddata%sig_map(i,1,j)-ddata%offset(j))/ddata%gain(j) &
+                  - dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(dpar%band_nu(j)*1d9,dcomps%T_d(i,1))
           end do
        end do
 
-       call compute_chisq(dpar,dang_data,comp,1)
+       ! How good is the fit and what are the parameters looking like?
+       call write_stats_to_term(ddata,dpar,dcomps,iter)
 
-       if (rank == master) then
-          if (mod(iter, 1) == 0 .or. iter == 1) then
-             if (nbands .lt. 10) then
-                write(*,fmt='(i6, a, E10.3, a, e10.3, a, 10e10.3)')&
-                     iter, " - chisq: " , dang_data%chisq, " - T_d: ",&
-                     mask_avg(comp%T_d(:,1),dang_data%masks(:,1)), ' - A_HI: ', comp%HI_amps
-                write(*,fmt='(a)') '---------------------------------------------'
-             else
-                write(*,fmt='(i6, a, E10.3, a, e10.3)')&
-                     iter, " - chisq: " , dang_data%chisq, " - T_d: ",&
-                     mask_avg(comp%T_d(:,1),dang_data%masks(:,1))
-                write(*,fmt='(a)') '---------------------------------------------'
-             end if
-          end if
-          if (mod(iter,dpar%iter_out) .EQ. 0) then
-             call write_maps(dpar,dang_data,comp)
-          end if
-          call write_data(dpar,dang_data,comp,1)
+       if (mod(iter,dpar%iter_out) .EQ. 0) then
+          call write_maps(dpar,ddata,dcomps)
        end if
+       call write_data(dpar,ddata,dcomps,1)
        write(*,*) ''
     end do
   end subroutine hi_fit

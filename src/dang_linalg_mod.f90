@@ -213,9 +213,9 @@ contains
       ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
 
       implicit none
-      type(params)                          :: param
-      type(data)                            :: dat
-      type(component)                       :: compos
+      type(dang_params)                     :: param
+      type(dang_data)                       :: dat
+      type(dang_comps)                      :: compos
       real(dp), dimension(:), intent(in)    :: b
       real(dp), dimension(:), intent(out)   :: x
       integer(i4b),           intent(in)    :: map_n
@@ -410,9 +410,9 @@ contains
       ! univariate vector of length size(b).
       !-----------------------------------------------------------------
       implicit none
-      type(params)                           :: self
-      type(data)                             :: dat
-      type(component)                        :: compo
+      type(dang_params)                      :: self
+      type(dang_data)                        :: dat
+      type(dang_comps)                       :: compo
 
       real(dp), dimension(:), intent(in)     :: vec
       real(dp), dimension(:), intent(in)     :: rhs
@@ -506,83 +506,13 @@ contains
          end do
          res = res + temp2
       end do
-
-      ! do m = 1, size(self%joint_comp)
-      !    do n = 1, self%ncomp
-      !       if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
-      !          if (.not. self%joint_pol) then
-      !             do j=1, z
-      !                do i=1, x
-      !                   if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
-      !                      res(i) = 0.d0
-      !                      cycle
-      !                   else
-      !                      res(i) = res(i) + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
-      !                   end if
-      !                end do
-      !             end do
-      !             w = w + x
-      !          else if (self%joint_pol) then
-      !             ! If sampling Q and U jointly
-      !              do j=1, z
-      !                do i=1, x
-      !                   if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
-      !                      res(i)   = 0.d0
-      !                      res(x+i) = 0.d0
-      !                      cycle
-      !                   else                           
-      !                      res(i)   = res(i)   + 1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
-      !                      res(x+i) = res(x+i) + 1.d0/(dat%rms_map(i-1,map_n+1,j))*vec(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
-      !                   end if
-      !                end do
-      !             end do
-      !             w = w + 2*x
-      !          end if
-      !       end if
-      !    end do
-      !    do n = 1, self%ntemp
-      !       if (trim(self%joint_comp(m)) == trim(self%temp_label(n))) then
-      !          if (.not. self%joint_pol) then
-      !             l = 1
-      !             do j = 1, z
-      !                if (self%temp_corr(n,j)) then
-      !                   do i = 1, x
-      !                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-      !                      res(w+l) = res(w+l)+1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*&
-      !                           dat%temps(i-1,map_n,n)
-      !                   end do
-      !                   l = l + 1
-      !                end if
-      !             end do
-      !             w = w + self%temp_nfit(n)
-      !          else if (self%joint_pol) then
-      !             ! If sampling Q and U jointly
-      !             l = 1
-      !             do j = 1, z
-      !                if (self%temp_corr(n,j)) then
-      !                   do i = 1, x
-      !                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-      !                      res(w+l) = res(w+l)+1.d0/(dat%rms_map(i-1,map_n,j))*vec(i)*&
-      !                           dat%temps(i-1,map_n,n)
-      !                      res(w+l) = res(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j))*vec(i)*&
-      !                           dat%temps(i-1,map_n+1,n)
-      !                   end do
-      !                   l = l + 1
-      !                end if
-      !             end do
-      !             w = w + self%temp_nfit(n)
-      !          end if
-      !       end if
-      !    end do
-      ! end do
-
     end function compute_sample_vec
 
     subroutine multiply_with_A(self, dat, compo, vec, nbands, map_n)
       implicit none
-      type(params)                           :: self
-      type(data)                             :: dat
-      type(component)                        :: compo
+      type(dang_params)                      :: self
+      type(dang_data)                        :: dat
+      type(dang_comps)                       :: compo
 
       real(dp), dimension(:), intent(inout)  :: vec
       real(dp), allocatable, dimension(:)    :: temp1, temp2, temp3, res
@@ -726,9 +656,9 @@ contains
 
     function return_Ax(self, dat, compo, vec, nbands, map_n) result(res)
       implicit none
-      type(params)                           :: self
-      type(data)                             :: dat
-      type(component)                        :: compo
+      type(dang_params)                      :: self
+      type(dang_data)                        :: dat
+      type(dang_comps)                       :: compo
 
       real(dp), dimension(:), intent(in)     :: vec
       real(dp), allocatable, dimension(:)    :: temp1, temp2, temp3, res
