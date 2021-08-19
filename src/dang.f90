@@ -93,38 +93,6 @@ program dang
         end if
      end do
      write(*,*) ''
-
-     ! All here and below (to call comp sep) is just for testing purposes!!!
-     !----------------------------------------------------------------------------------------------------------
-     ! ! 1.00 sim
-     ! ddata%temp_amps(1,:,1) = 0.41957897*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(2,:,1) = 0.17704154*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(3,:,1) = 0.09161571*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(4,:,1) = 0.12402716*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(5,:,1) = 0.20367266*ddata%temp_norm(:,1)
-
-     ! ! 0.50 sim
-     ! ddata%temp_amps(1,:,1) = 0.20019717*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(2,:,1) = 0.0709024475*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(3,:,1) = 0.0136504706*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(4,:,1) = 7.42349435d-4*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(5,:,1) = 3.57833056d-4*ddata%temp_norm(:,1)
- 
-     ! ddata%temp_amps(1,:,1) = 0.196d-2*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(2,:,1) = 0.475d-2*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(3,:,1) = 0.000d0*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(4,:,1) = 0.283d-2*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(5,:,1) = -0.104d-01*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(6,:,1) = 0.000d0*ddata%temp_norm(:,1)
-     ! ddata%temp_amps(7,:,1) = 0.110d-1*ddata%temp_norm(:,1)
-
-     ! Extrapolating solved for bands for ze cleaning
-     ! do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-     !    call extrapolate_template(dpar,ddata,dcomps,1,k)
-     !    call extrapolate_foreground(dpar,ddata,dcomps,1,k)
-     ! end do
-
-     !----------------------------------------------------------------------------------------------------------
      call comp_sep
   
   !------------------------------------------------------------------------------------------------
@@ -147,7 +115,17 @@ program dang
            ddata%masks(i,1) = 1.d0
         end if
      end do
-
+     nump = 0
+     do i = 0, npix-1
+        do j = 1, nmaps
+           if (ddata%masks(i,j) == 0.d0 .or. ddata%masks(i,j) == missval) then
+              ddata%masks(i,j) = missval
+           else 
+              nump = nump + 1
+           end if
+        end do
+     end do
+     
      call hi_fit 
   
   end if
@@ -333,6 +311,10 @@ contains
   ! Specifically for the hi_fitting mode
   ! ------------------------------------------------------------------------------------------ 
   subroutine hi_fit
+
+    npixpar    = nump
+    nglobalpar = nbands
+
     do iter = 1, dpar%ngibbs
 
        if (iter > 1) then

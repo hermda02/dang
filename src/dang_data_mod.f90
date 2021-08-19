@@ -357,7 +357,7 @@ contains
              self%chisq = self%chisq + (self%sig_map(i,map_n,j)-s)**2.d0/(self%rms_map(i,map_n,j)**2.d0)
           end do
        end do
-       self%chisq = self%chisq/(nump*nbands)
+       self%chisq = self%chisq/((nump*nbands)-npixpar-nglobalpar)
     end if
     
   end subroutine compute_chisq
@@ -515,16 +515,16 @@ contains
     else if (trim(dpar%mode) == 'hi_fit') then
 
        write(iter_str, '(i0.5)') iter
-       do j = 1, nbands
-          title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
-          map(:,1)   = comp%HI_amps(j)*comp%HI(:,1)
-          do i = 0, npix-1
-             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-                map(i,1) = missval
-             end if
-          end do
-          call write_bintab(map,npix,1, header, nlheader, trim(title))
-       end do
+       ! do j = 1, nbands
+       !    title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
+       !    map(:,1)   = comp%HI_amps(j)*comp%HI(:,1)
+       !    do i = 0, npix-1
+       !       if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+       !          map(i,1) = missval
+       !       end if
+       !    end do
+       !    call write_bintab(map,npix,1, header, nlheader, trim(title))
+       ! end do
 
        do j = 1, nbands
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
@@ -552,7 +552,7 @@ contains
              dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
           end do
        end do
-       dat%chi_map(:,1) = dat%chi_map(:,1)/(nbands+nfgs)
+       dat%chi_map(:,1) = dat%chi_map(:,1)/(nbands)
        title = trim(dpar%outdir) // 'chisq_k' // trim(iter_str) // '.fits'
        map(:,1)   = dat%chi_map(:,1)
        do i = 0, npix-1
@@ -561,7 +561,6 @@ contains
           end if
        end do
        call write_bintab(map,npix,1, header, nlheader, trim(title))
-          
     end if
     
   end subroutine write_maps
