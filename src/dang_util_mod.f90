@@ -28,12 +28,15 @@ module dang_util_mod
   integer(i4b) status(mpi_status_size)
   character(len=5)                  :: iter_str
   character(len=80), dimension(180) :: header
-  character(len=80), dimension(3)   :: tqu
+  character(len=80), dimension(3)   :: tqu 
   character(len=128)                :: title
   
   public    :: npix, nbands, nmaps, ordering, header, h, c, k_B, T_CMB
   public    :: npixpar, nglobalpar, title
   public    :: iter, iter_str, exist, tqu
+
+  
+
 
 contains 
   
@@ -44,6 +47,9 @@ contains
     call mpi_comm_size(MPI_COMM_WORLD, numprocs, ierr)
     !     if (rank == 0) then
     !        write(*,'(a,i8)') ' The number of processors available = ', numprocs
+    tqu(1)            = 'T'
+    tqu(2)            = 'Q'
+    tqu(3)            = 'U'
     !     end if
   end subroutine init_mpi
   

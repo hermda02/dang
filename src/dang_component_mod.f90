@@ -4,6 +4,7 @@ module dang_component_mod
   use fitstools
   use dang_util_mod
   use dang_param_mod
+  use dang_bp_mod
   implicit none
   
   type, public                              :: dang_comps
@@ -78,33 +79,61 @@ contains
     planck  = ((2.d0*h*fre**3.d0)/(c**2.d0))*(1.d0/(exp((h*fre)/(k_B*T))-1))
   end function planck
   
-  function compute_spectrum(param, self, ind, freq, pix, map_n, index)
+  ! function compute_spectrum(param, self, bp, ind, freq, pix, map_n, index)
+  function compute_spectrum(param, self, bp, ind, pix, map_n, index)
     ! always computed in RJ units
     
     implicit none
     class(dang_params)             :: param
     type(dang_comps)               :: self
-    real(dp),           intent(in) :: freq
+    type(bandinfo)                 :: bp
+    ! real(dp),           intent(in) :: freq
     integer(i4b),       intent(in) :: ind
     integer(i4b),       intent(in) :: pix
     integer(i4b),       intent(in) :: map_n
+    integer(i4b)                   :: i
     real(dp), optional             :: index
     real(dp)                       :: z, compute_spectrum
     
     !if (trim(param%fg_label(ind)) == 'power-law') then
-    if (ind == 1) then
-      if (present(index)) then
-          compute_spectrum = (freq/param%fg_nu_ref(ind))**index
-       else 
-          compute_spectrum = (freq/param%fg_nu_ref(ind))**self%beta_s(pix,map_n)
+    if (bp%id == 'delta') then
+       if (ind == 1) then
+          if (present(index)) then
+             compute_spectrum = (bp%nu_c/param%fg_nu_ref(ind))**index
+          else 
+             compute_spectrum = (bp%nu_c/param%fg_nu_ref(ind))**self%beta_s(pix,map_n)
+          end if
+          !else if (trim(param%fg_label(ind)) == 'mbb') then
+       else if (ind == 2) then
+          z = h / (k_B*self%T_d(pix,map_n))
+          !       compute_spectrum = (exp(z*param%fg_nu_ref(ind)*1d9)-1.d0) / &
+          !            (exp(z*bp%nu_c*1d9)-1.d0) * (bp%nu_c/param%fg_nu_ref(ind))**(self%beta_d(pix,map_n)+1.d0)!*rj_cmb
+          compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
+               (exp(z*bp%nu_c*1d9)-1.d0) * (bp%nu_c/353.d0)**(self%beta_d(pix,map_n)+1.d0)
        end if
-    !else if (trim(param%fg_label(ind)) == 'mbb') then
-    else if (ind == 2) then
-       z = h / (k_B*self%T_d(pix,map_n))
-!       compute_spectrum = (exp(z*param%fg_nu_ref(ind)*1d9)-1.d0) / &
-!            (exp(z*freq*1d9)-1.d0) * (freq/param%fg_nu_ref(ind))**(self%beta_d(pix,map_n)+1.d0)!*rj_cmb
-       compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
-            (exp(z*freq*1d9)-1.d0) * (freq/353.d0)**(self%beta_d(pix,map_n)+1.d0)
+    else
+       compute_spectrum = 0.d0
+       ! write(*,*) 'Compute for LFI bandpass'
+       if (ind == 1) then
+          if (present(index)) then
+             do i = 1, bp%n
+                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/param%fg_nu_ref(ind))**index
+             end do
+          else 
+             do i = 1, bp%n
+                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/param%fg_nu_ref(ind))**self%beta_s(pix,map_n)
+             end do
+          end if
+          !else if (trim(param%fg_label(ind)) == 'mbb') then
+       else if (ind == 2) then
+          z = h / (k_B*self%T_d(pix,map_n))
+          !       compute_spectrum = (exp(z*param%fg_nu_ref(ind)*1d9)-1.d0) / &
+          !            (exp(z*bp%nu_c*1d9)-1.d0) * (bp%nu_c/param%fg_nu_ref(ind))**(self%beta_d(pix,map_n)+1.d0)!*rj_cmb
+          do i = 1, bp%n
+             compute_spectrum = compute_spectrum + bp%tau0(i)*(exp(z*353.d0*1d9)-1.d0) / &
+               (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/353.d9)**(self%beta_d(pix,map_n)+1.d0)
+          end do
+       end if
     end if
   end function compute_spectrum
   

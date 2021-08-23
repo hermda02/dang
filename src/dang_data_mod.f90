@@ -161,7 +161,7 @@ contains
     write(*,'(a,a)') 'Dust correcting band ', trim(dpar%band_label(band))
     do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
        do i = 0, npix-1
-          thermal_map(i,k,band) = self%temps(i,k,1)*compute_spectrum(dpar,comp,2,dpar%band_nu(band),i,k)
+          thermal_map(i,k,band) = self%temps(i,k,1)*compute_spectrum(dpar,comp,bp(band),2,i,k)!dpar%band_nu(band),i,k)
           self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
        end do
     end do
@@ -184,7 +184,7 @@ contains
 
     do i = 0, npix-1
        do j = 1, nbands
-          dat%fg_map(i,map_n,j,ind) = dat%fg_map(i,map_n,dpar%fg_ref_loc(ind),ind)*compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n)
+          dat%fg_map(i,map_n,j,ind) = dat%fg_map(i,map_n,dpar%fg_ref_loc(ind),ind)*compute_spectrum(dpar,comp,bp(j),ind,i,map_n)!ind,dpar%band_nu(j),i,map_n)
        end do
     end do
 

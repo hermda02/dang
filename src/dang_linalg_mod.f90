@@ -480,8 +480,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp2(i) = temp1(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
-                     if (self%joint_pol) temp2(x+i) = temp1(x+i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
+                     temp2(i) = temp1(i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                     if (self%joint_pol) temp2(x+i) = temp1(x+i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n+1)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                   end do
                   !$OMP END DO
                   !$OMP END PARALLEL
@@ -584,8 +584,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp1(i) = compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)*vec(i)
-                     if (self%joint_pol) temp1(x+i) = compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)*vec(x+i)
+                     temp1(i) = vec(i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                     if (self%joint_pol) temp1(x+i) = vec(x+i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n+1)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                    end do
                    !$OMP END DO
                    !$OMP END PARALLEL
@@ -626,8 +626,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp3(i) = temp2(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
-                     if (self%joint_pol) temp3(x+i) = temp2(x+i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
+                     temp3(i) = temp2(i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                     if (self%joint_pol) temp3(x+i) = temp2(x+i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n+1)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                   end do
                   !$OMP END DO
                   !$OMP END PARALLEL
@@ -730,8 +730,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp1(i) = compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)*vec(i)
-                     if (self%joint_pol) temp1(x+i) = compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)*vec(x+i)
+                     temp1(i) = vec(i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                     if (self%joint_pol) temp1(x+i) = vec(x+i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n+1)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                   end do
                   !$OMP END DO
                   !$OMP END PARALLEL
@@ -774,8 +774,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp3(i) = temp2(i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
-                     if (self%joint_pol) temp3(x+i) = temp2(x+i)*compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
+                     temp3(i) = temp2(i)*compute_spectrum(self,compo,bp(j),n,i,map_n)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                     if (self%joint_pol) temp3(x+i) = temp2(x+i)*compute_spectrum(self,compo,bp(j),n,i,map_n+1)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                   end do
                   !$OMP END DO
                   !$OMP END PARALLEL

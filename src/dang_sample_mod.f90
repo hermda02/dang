@@ -8,6 +8,7 @@ module dang_sample_mod
   use dang_linalg_mod
   use dang_component_mod
   use dang_data_mod
+  use dang_bp_mod
   implicit none
   
   private :: i, j, k, l
@@ -98,7 +99,8 @@ contains
                          c(i) = 0.d0
                          cycle
                       else
-                         c(i) = c(i) +  (map2fit(i-1,map_n,j)*compute_spectrum(dpar,compo,n,dpar%band_nu(j),i-1,map_n))/(dat%rms_map(i-1,map_n,j)**2.d0)
+                         c(i) = c(i) +  (map2fit(i-1,map_n,j)*compute_spectrum(dpar,compo,bp(j),n,i-1,map_n) &!compute_spectrum(dpar,compo,n,dpar%band_nu(j),i-1,map_n) &
+                              &)/(dat%rms_map(i-1,map_n,j)**2.d0)
                       end if
                    end do
                 end do
@@ -111,8 +113,10 @@ contains
                          c(x+i) = 0.d0
                          cycle
                       else                           
-                         c(i)   = c(i)   + (map2fit(i-1,map_n,j)*compute_spectrum(dpar,compo,n,dpar%band_nu(j),i-1,map_n))/(dat%rms_map(i-1,map_n,j)**2.d0)
-                         c(x+i) = c(x+i) + (map2fit(i-1,map_n+1,j)*compute_spectrum(dpar,compo,n,dpar%band_nu(j),i-1,map_n+1))/(dat%rms_map(i-1,map_n+1,j)**2.d0)
+                         c(i)   = c(i)   + (map2fit(i-1,map_n,j)*compute_spectrum(dpar,compo,bp(j),n,i-1,map_n)  &!compute_spectrum(dpar,compo,n,dpar%band_nu(j),i-1,map_n) &
+                              &)/(dat%rms_map(i-1,map_n,j)**2.d0)
+                         c(x+i) = c(x+i) + (map2fit(i-1,map_n+1,j)*compute_spectrum(dpar,compo,bp(j),n,i-1,map_n+1)  &!compute_spectrum(dpar,compo,n,dpar%band_nu(j),i-1,map_n+1)&
+                              &)/(dat%rms_map(i-1,map_n+1,j)**2.d0)
                       end if
                    end do
                 end do
@@ -379,7 +383,7 @@ contains
        do i = 0, npix-1
           do j = 1, nbands
              do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                lnl_old = lnl_old + (dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind)*compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,spec) &
+                lnl_old = lnl_old + (dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind)*compute_spectrum(dpar,comp,bp(j),ind,i,k,spec)&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,spec) &
                      - map2fit(i,k,j))**2.d0/dat%rms_map(i,k,j)**2.d0
              end do
           end do
@@ -399,7 +403,7 @@ contains
           do i = 0, npix-1
              do j = 1, nbands
                 do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                   lnl_new = lnl_new + (dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind)*compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sample) &
+                   lnl_new = lnl_new + (dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind)*compute_spectrum(dpar,comp,bp(j),ind,i,k,sample) &!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sample) &
                         - map2fit(i,k,j))**2.d0/dat%rms_map(i,k,j)**2.d0
                 end do
              end do
@@ -611,7 +615,7 @@ contains
              local_a = 0.d0
              do j = 1, nbands
                 do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                   a = a + (((fg_map_low(i,k,dpar%fg_ref_loc(ind)) * compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
+                   a = a + (((fg_map_low(i,k,dpar%fg_ref_loc(ind)) * compute_spectrum(dpar,comp,bp(j),ind,i,k,sol)) & !compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
                         - data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                 end do
              end do
@@ -654,7 +658,7 @@ contains
                 b         = 0.d0
                 do j = 1, nbands
                    do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                      b = b + ((fg_map_low(i,k,dpar%fg_ref_loc(ind))*compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,t) &
+                      b = b + ((fg_map_low(i,k,dpar%fg_ref_loc(ind))*compute_spectrum(dpar,comp,bp(j),ind,i,k,t) & !compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,t) &
                            -data_low(i,k,j))**2.d0)/cov_low(i,k,j)
                    end do
                 end do
@@ -721,7 +725,7 @@ contains
              local_a = 0.d0
              !$OMP DO SCHEDULE(static)
              do j = 1, nbands
-                local_a = local_a + (((fg_map_low(i,map_n,dpar%fg_ref_loc(ind)) * compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,sol)) &
+                local_a = local_a + (((fg_map_low(i,map_n,dpar%fg_ref_loc(ind)) * compute_spectrum(dpar,comp,bp(j),ind,i,map_n,sol)) &!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,sol)) &
                      - data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
              end do
              !$OMP END DO
@@ -770,7 +774,7 @@ contains
                 local_b   = 0.d0
                 !$OMP DO SCHEDULE(static)
                 do j = 1, nbands
-                   local_b = local_b + ((fg_map_low(i,map_n,dpar%fg_ref_loc(ind))*compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,t) &
+                   local_b = local_b + ((fg_map_low(i,map_n,dpar%fg_ref_loc(ind))*compute_spectrum(dpar,comp,bp(j),ind,i,map_n,t)&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,t) &
                         -data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
                 end do
                 !$OMP END DO
@@ -861,7 +865,7 @@ contains
                 ! Chi-square from the most recent Gibbs chain update
                 do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
                    do j = 1, nbands
-                      local_a = local_a + (((dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
+                      local_a = local_a + (((dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,bp(j),ind,i,k,sol))&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
                            - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
                    end do
                 end do
@@ -909,7 +913,7 @@ contains
              if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
              do j = 1, nbands
                 do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                   local_a = local_a + (((dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
+                   local_a = local_a + (((dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,bp(j),ind,i,k,sol))&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
                         - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
                    ! local_a = local_a + (((fg_map_high(i,k,dpar%fg_ref_loc(1)) * compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
                    !      - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
@@ -966,7 +970,7 @@ contains
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                 do j = 1, nbands
                    do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                      local_b = local_b + (((dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,t)) &
+                      local_b = local_b + (((dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,bp(j),ind,i,k,t))&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,t)) &
                            - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
                    end do
                 end do
@@ -1049,7 +1053,7 @@ contains
              end if
              
              do j = 1, nbands
-                local_a = local_a + (((dat%fg_map(i,map_n,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,sol)) &
+                local_a = local_a + (((dat%fg_map(i,map_n,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,bp(j),ind,i,map_n,sol))&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,sol)) &
                      - map2fit(i,map_n,j))**2.d0)/dat%rms_map(i,map_n,j)**2.d0!cov(i,map_n,j)
              end do
           end do
@@ -1105,7 +1109,7 @@ contains
              do i = 0, npix-1
                 if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
                 do j = 1, nbands
-                   local_b = local_b + (((dat%fg_map(i,map_n,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,t)) &
+                   local_b = local_b + (((dat%fg_map(i,map_n,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,bp(j),ind,i,map_n,t))&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,t)) &
                         - map2fit(i,map_n,j))**2.d0)/dat%rms_map(i,map_n,j)**2.d0!cov(i,map_n,j)
                 end do
              end do
@@ -1220,7 +1224,7 @@ contains
        sum1    = 0.0d0
        sum2    = 0.0d0
        do j = 1, nbands
-          spec    = compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n)
+          spec    = compute_spectrum(dpar,comp,bp(j),ind,i,map_n)!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n)
           sum1    = sum1 + (map2fit(i,j)*spec)/dat%rms_map(i,map_n,j)**2.d0
           sum2    = sum2 + (spec)**2.d0/dat%rms_map(i,map_n,j)**2.d0
           norm(i) = norm(i) + spec/dat%rms_map(i,map_n,j)

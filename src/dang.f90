@@ -5,6 +5,7 @@ program dang
   use udgrade_nr
   use dang_util_mod
   use dang_param_mod
+  use dang_bp_mod
   use dang_linalg_mod
   use dang_data_mod
   use dang_component_mod
@@ -34,19 +35,25 @@ program dang
   integer(i4b)                          :: i, j, k, l, m, n
   integer(i4b)                          :: bp_iter
   real(dp), allocatable, dimension(:,:) :: map, rms, true_synch
-  
+      
   ! Object Orient
   type(dang_params) :: dpar
   type(dang_data)   :: ddata
   type(dang_comps)  :: dcomps
-  
+  ! type(dang_bp)     :: dbp 
+
+  ! allocate(dbp(dpar%numinc))
+
   call init_mpi()
   call read_param_file(dpar)
-  
-  tqu(1)            = 'T'
-  tqu(2)            = 'Q'
-  tqu(3)            = 'U'
-  
+  call init_bp_mod(dpar)
+
+  ! write(*,*) dpar%fg_nu_ref(1)
+  ! do i = 1, dpar%numinc
+  !    write(*,*) bp(i)%nu_c
+  ! end do
+  ! stop
+
   !----------------------------------------------------------------------------------------------------------
   ! General paramters
   if (trim(dpar%mode) == 'comp_sep') then
@@ -56,14 +63,14 @@ program dang
   else
      write(*,*) 'Unrecognized operational mode. Do better!'
   end if
-  ddata%npix    = nside2npix(nside) 
-  npix              = ddata%npix
-  nbands            = dpar%numinc
-  nfgs              = dpar%ncomp+dpar%ntemp
-  npixpar           = 0.d0
-  nglobalpar        = 0.d0
-  nump              = 0
-  nlheader          = size(header)
+  ddata%npix = nside2npix(nside) 
+  npix       = ddata%npix
+  nbands     = dpar%numinc
+  nfgs       = dpar%ncomp+dpar%ntemp
+  npixpar    = 0.d0
+  nglobalpar = 0.d0
+  nump       = 0
+  nlheader   = size(header)
   !----------------------------------------------------------------------------------------------------------
   !----------------------------------------------------------------------------------------------------------
 
@@ -197,7 +204,7 @@ contains
           write(*,*) ''
           ! Check to see if any swapped maps need to be dust corrected                               
           do j = 1, nbands
-             if ( dpar%bp_map(j)) then
+             if (dpar%bp_map(j)) then
                 if (dpar%dust_corr(j)) then
                    call dust_correct_band(ddata,dpar,dcomps,j,iter)
                 end if
