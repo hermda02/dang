@@ -70,13 +70,21 @@ contains
 
   end subroutine init_hi_fit
   
-  function planck(fre,T)
+  function planck(bp,T)
     implicit none
-    real(dp), intent(in)  :: fre
-    real(dp), intent(in)  :: T
-    real(dp)              :: planck
+    type(bandinfo), intent(in) :: bp
+    real(dp),       intent(in) :: T
+    real(dp)                   :: planck
+    integer(i4b)               :: i
     ! Output in units of [W sr^-1 m^-2 Hz^-1]
-    planck  = ((2.d0*h*fre**3.d0)/(c**2.d0))*(1.d0/(exp((h*fre)/(k_B*T))-1))
+    if (bp%id == 'delta') then
+       planck  = ((2.d0*h*(bp%nu_c)**3.d0)/(c**2.d0))*(1.d0/(exp((h*bp%nu_c)/(k_B*T))-1))
+    else
+       planck = 0.d0
+       do i = 1, bp%n
+          planck = planck + bp%tau0(i)*((2.d0*h*(bp%nu0(i))**3.d0)/(c**2.d0))*(1.d0/(exp((h*(bp%nu0(i)))/(k_B*T))-1))
+       end do
+    end if
   end function planck
   
   ! function compute_spectrum(param, self, bp, ind, freq, pix, map_n, index)
@@ -109,7 +117,7 @@ contains
           !       compute_spectrum = (exp(z*param%fg_nu_ref(ind)*1d9)-1.d0) / &
           !            (exp(z*bp%nu_c*1d9)-1.d0) * (bp%nu_c/param%fg_nu_ref(ind))**(self%beta_d(pix,map_n)+1.d0)!*rj_cmb
           compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
-               (exp(z*bp%nu_c*1d9)-1.d0) * (bp%nu_c/353.d0)**(self%beta_d(pix,map_n)+1.d0)
+               (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(353.d0*1d9))**(self%beta_d(pix,map_n)+1.d0)
        end if
     else
        compute_spectrum = 0.d0

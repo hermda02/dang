@@ -49,8 +49,8 @@ program dang
   call init_bp_mod(dpar)
 
   ! write(*,*) dpar%fg_nu_ref(1)
-  ! do i = 1, dpar%numinc
-  !    write(*,*) bp(i)%nu_c
+  ! do j = 1, dpar%numinc
+  !    write(*,*) bp(j)%nu_c, bp(j)%nu0(1)
   ! end do
   ! stop
 
@@ -251,7 +251,7 @@ contains
           if (dpar%fg_samp_amp(n)) then
              write(*,*) "Sample "//trim(dpar%fg_label(n))//" amplitudes."
              do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                ddata%fg_map(:,k,dpar%fg_ref_loc(n),n) = sample_fg_amp(dpar,ddata,dcomps,n,k)
+                ddata%fg_map(:,k,0,n) = sample_fg_amp(dpar,ddata,dcomps,n,k)
                 call extrapolate_foreground(dpar,ddata,dcomps,n,k)
              end do
           end if
@@ -296,7 +296,7 @@ contains
        ddata%res_map = ddata%sig_map
        do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
           do j = 1, nfgs
-             ddata%res_map(:,k,:)  = ddata%res_map(:,k,:) - ddata%fg_map(:,k,:,j)
+             ddata%res_map(:,k,:)  = ddata%res_map(:,k,:) - ddata%fg_map(:,k,1:,j)
           end do
           if (rank == master) then
              call write_data(dpar,ddata,dcomps,k)
@@ -345,7 +345,7 @@ contains
           do i = 0, npix-1
              if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
              ddata%res_map(i,1,j) = (ddata%sig_map(i,1,j)-ddata%offset(j))/ddata%gain(j) &
-                  - dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(dpar%band_nu(j)*1d9,dcomps%T_d(i,1))
+                  - dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))
           end do
        end do
 

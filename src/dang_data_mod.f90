@@ -22,6 +22,7 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:)     :: chi_map    ! Chisq map (for outputs)
     real(dp), allocatable, dimension(:,:,:,:) :: fg_map     ! Component maps
 
+
     real(dp), allocatable, dimension(:)       :: gain       ! Where band gains are stored
     real(dp), allocatable, dimension(:)       :: offset     ! Where band offsets are stored
     
@@ -46,7 +47,7 @@ contains
     class(dang_data),       intent(inout) :: self
     type(dang_params),      intent(in)    :: dpar
     
-    allocate(self%fg_map(0:npix-1,nmaps,nbands,nfgs))    
+    allocate(self%fg_map(0:npix-1,nmaps,0:nbands,nfgs))    
     self%fg_map(:,:,:,:) = 0.d0
 
     allocate(self%masks(0:npix-1,nmaps))
@@ -184,7 +185,7 @@ contains
 
     do i = 0, npix-1
        do j = 1, nbands
-          dat%fg_map(i,map_n,j,ind) = dat%fg_map(i,map_n,dpar%fg_ref_loc(ind),ind)*compute_spectrum(dpar,comp,bp(j),ind,i,map_n)!ind,dpar%band_nu(j),i,map_n)
+          dat%fg_map(i,map_n,j,ind) = dat%fg_map(i,map_n,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,i,map_n)!ind,dpar%band_nu(j),i,map_n)
        end do
     end do
 
@@ -353,7 +354,7 @@ contains
           if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
           do j = 1, nbands    
              s = 0.0
-             s = self%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(dpar%band_nu(j)*1d9,comp%T_d(i,1))+self%offset(j)
+             s = self%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))+self%offset(j)
              self%chisq = self%chisq + (self%sig_map(i,map_n,j)-s)**2.d0/(self%rms_map(i,map_n,j)**2.d0)
           end do
        end do
@@ -378,7 +379,7 @@ contains
              if (mod(iter, 1) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, a, f7.3, a, f8.4, a, 10e10.3)')&
                      iter, " - Poltype: "//trim(tqu(k)), " - A_s: ",&
-                     self%fg_map(23000,k,dpar%fg_ref_loc(1),1),  " - beta_s: ",&
+                     self%fg_map(23000,k,0,1),  " - beta_s: ",&
                      mask_avg(comp%beta_s(:,k),self%masks(:,1)), ' - A_d: ', &
                      self%temp_amps(:,k,1)/self%temp_norm(k,1)
                 write(*,fmt='(a)') '---------------------------------------------'
@@ -458,9 +459,9 @@ contains
           end do
        else 
           do n = 1, dpar%ncomp
-             title = trim(dpar%outdir) // trim(dpar%band_label(dpar%fg_ref_loc(n))) //'_'// trim(dpar%fg_label(n)) //&
+             title = trim(dpar%outdir) // 'reference_'// trim(dpar%fg_label(n)) //&
                   '_amplitude_k' // trim(iter_str) // '.fits'
-             map(:,:)   = dat%fg_map(:,:,dpar%fg_ref_loc(n),n)
+             map(:,:)   = dat%fg_map(:,:,0,n)
              do i = 0, npix-1
                 if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
                    map(i,:) = missval
@@ -547,8 +548,8 @@ contains
        dat%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
-             s = dat%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(dpar%band_nu(j)*1d9,comp%T_d(i,1))+dat%offset(j)
-             ! s =  comp%HI_amps(j)*comp%HI(i,1)*planck(dpar%band_nu(j)*1d9,comp%T_d(i,1))
+             s = dat%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))+dat%offset(j)
+             ! s =  comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))
              dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
           end do
        end do
