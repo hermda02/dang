@@ -97,10 +97,10 @@ contains
     type(bandinfo)                 :: bp
     ! real(dp),           intent(in) :: freq
     integer(i4b),       intent(in) :: ind
-    integer(i4b),       intent(in) :: pix
-    integer(i4b),       intent(in) :: map_n
+    integer(i4b),       optional   :: pix
+    integer(i4b),       optional   :: map_n
     integer(i4b)                   :: i
-    real(dp), optional             :: index
+    real(dp),           optional   :: index
     real(dp)                       :: z, compute_spectrum
     
     !if (trim(param%fg_label(ind)) == 'power-law') then

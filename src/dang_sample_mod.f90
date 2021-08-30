@@ -285,155 +285,6 @@ contains
     deallocate(c)
   end subroutine sample_joint_amp
 
-  subroutine sample_new_index(dpar, dat, comp, ind, map_n)
-    implicit none
-
-    class(dang_params)                                        :: dpar
-    type(dang_data)                                           :: dat
-    type(dang_comps),                           intent(inout) :: comp
-    integer(i4b),                               intent(in)    :: map_n, ind
-    real(dp), dimension(0:npix-1,nmaps,nbands)                :: map2fit 
-    real(dp), dimension(0:npix-1,nmaps)                       :: index_map
-    real(dp)                                                  :: lnl_old, lnl_new, ratio
-    real(dp)                                                  :: spec, sample, rand, scale
-    integer(i4b)                                              :: i, j, k, l, f
-
-    real(dp), dimension(1000)                                 :: beta_grid, like_grid
-    real(dp)                                                  :: lnl, lnl_sum
-    character(len=5)                                          :: iter_str
-    character(len=128)                                        :: title
-
-    ! Initialize our spectral parameter
-
-    index_map = comp%beta_s
-
-    map2fit = dat%sig_map(:,:,:)
-
-    do f = 1, nfgs
-       if (f /= ind) then
-          map2fit(:,:,:) = map2fit(:,:,:) - dat%fg_map(:,:,1:,f)
-       end if
-    end do
-
-    ! write(*,*) 'Index: ', ind
-    ! write(*,*) 'Ref: ', dpar%fg_ref_loc(ind)
-    ! write(*,*) 'Ref_nu: ', dpar%fg_nu_ref(ind)
-    ! write(*,*) '-----------------------------'
-    ! write(*,fmt='(a,f8.4)') 'fg estimate ',dat%fg_map(23000,2,dpar%fg_ref_loc(ind),ind)
-    ! write(*,fmt='(a,f8.4)') 'map2fit ',map2fit(23000,2,dpar%fg_ref_loc(ind))
-    ! write(*,fmt='(a,f8.4)') 'rms ',dat%rms_map(23000,2,dpar%fg_ref_loc(ind))
-    ! write(*,*) '-----------------------------'
-    ! write(*,*),dpar%band_nu(1), compute_spectrum(dpar,comp,ind,dpar%band_nu(1),i,k,-3.1d0)
-    ! write(*,fmt='(a,f8.4)') 'fg estimate ',dat%fg_map(23000,2,1,ind)
-    ! write(*,fmt='(a,f8.4)') 'map2fit ',map2fit(23000,2,1)
-    ! write(*,fmt='(a,f8.4)') 'rms ',dat%rms_map(23000,2,1)
-    ! write(*,*) '-----------------------------'
-
-    ! Compute the original lnl
-    if (map_n == -1) then
-
-       ! Grid out the likelihood and write to file
-
-       ! write(*,*) iter
-       ! write(iter_str, '(i0.5)') iter
-       
-       ! do l = 1, 1000
-       !    like_grid(l) = 0.d0
-       !    beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/1000
-
-       !    spec = beta_grid(l)
-
-       !    !$OMP PARALLEL PRIVATE(i,j,k,lnl), shared(lnl_sum)
-       !    lnl     = 0.d0
-       !    lnl_sum = 0.d0
-
-       !    !$OMP DO SCHEDULE(static) 
-       !    do i = 0, npix-1
-       !       do j = 1, nbands
-       !          do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-       !             lnl = lnl + (dat%fg_map(i,k,dpar%fg_ref_loc(ind),ind) * compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,spec) &
-       !                  - map2fit(i,k,j))**2.d0 / dat%rms_map(i,k,j)**2.d0
-       !          end do
-       !       end do
-       !    end do
-
-       !    !$OMP END DO
-       !    !$OMP CRITICAL
-       !    lnl_sum = lnl_sum + lnl
-       !    !$OMP END CRITICAL
-       !    !$OMP END PARALLEL
-
-       !    title = trim(dpar%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
-       !    inquire(file=title,exist=exist)
-       !    if (exist) then
-       !       open(12,file=title, status="old",position="append", action="write")
-       !    else
-       !       open(12,file=title, status="new", action="write")
-       !       write(12,*)  
-       !    endif
-       !    write(12,*) beta_grid(l), -0.5d0*lnl_sum
-       !    close(12)
-       ! end do
-
-       spec        = comp%beta_s(0,dpar%pol_type(1))
-
-       ! First calculate the old likelihood
-
-       lnl_old = 0.d0
-       do i = 0, npix-1
-          do j = 1, nbands
-             do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                lnl_old = lnl_old + (dat%fg_map(i,k,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,i,k,spec)&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,spec) &
-                     - map2fit(i,k,j))**2.d0/dat%rms_map(i,k,j)**2.d0
-             end do
-          end do
-       end do
-
-       lnl_old = -0.5d0*lnl_old
-
-       ! scale is the random draw scaling factor (can make variable)
-       scale = 0.5d0
-       
-       ! Draw samples and accept if exp(lnl_new-lnl_old)> some random number
-       do l = 1, dpar%nsample
-          sample = spec + rand_normal(0.d0,dpar%fg_gauss(ind,1,2))*scale
-
-          ! Calculate new likelihood
-          lnl_new = 0.d0
-          do i = 0, npix-1
-             do j = 1, nbands
-                do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                   lnl_new = lnl_new + (dat%fg_map(i,k,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,i,k,sample) &!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sample) &
-                        - map2fit(i,k,j))**2.d0/dat%rms_map(i,k,j)**2.d0
-                end do
-             end do
-          end do
-
-          lnl_new = -0.5d0*lnl_new
-
-          ratio = exp(lnl_new-lnl_old)
-
-          call RANDOM_NUMBER(rand)
-          if (ratio > rand) then
-             spec    = sample
-             lnl_old = lnl_new
-          end if
-       end do
-
-       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-          comp%beta_s(:,k) = spec
-       end do
-
-
-
-    else
-       spec = index_map(0,map_n)
-
-    end if
-
-
-  end subroutine sample_new_index
-
   subroutine sample_index(dpar, dat, comp, ind, map_n) 
     !------------------------------------------------------------------------
     ! Warning -- not set up for foregrounds with multiple spectral parameters yet
@@ -452,7 +303,7 @@ contains
     real(dp), dimension(0:npix-1)              :: indx_sample
     ! real(dp), allocatable, dimension(:,:,:)    :: fg_map_high
     real(dp), allocatable, dimension(:,:)      :: fg_map_high, fg_map_low
-    real(dp), allocatable, dimension(:,:,:)    :: data_low, cov_low
+    real(dp), allocatable, dimension(:,:,:)    :: data_low, cov_low, rms_low
     real(dp), allocatable, dimension(:,:)      :: indx_low, mask_low
     real(dp), allocatable, dimension(:)        :: indx_sample_low
     real(dp)                                   :: a, b, c, num, sam, t, p, sol
@@ -544,6 +395,7 @@ contains
        end if
        allocate(data_low(0:npix2-1,nmaps,nbands),fg_map_low(0:npix2-1,nmaps))
        allocate(indx_low(0:npix2-1,nmaps),cov_low(0:npix2-1,nmaps,nbands))
+       allocate(rms_low(0:npix2-1,nmaps,nbands))
        allocate(indx_sample_low(0:npix2-1))
        allocate(mask_low(0:npix2-1,nmaps))
        
@@ -555,6 +407,7 @@ contains
              do j = 1, nbands
                 call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
                 call udgrade_ring(cov(:,:,j),nside1,cov_low(:,:,j),nside2)
+                call udgrade_ring(dat%rms_map(:,:,j),nside1,rms_low(:,:,j),nside2)
              end do
           else
              call udgrade_nest(indx,nside1,indx_low,nside2)
@@ -563,9 +416,11 @@ contains
              do j = 1, nbands
                 call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
                 call udgrade_nest(cov(:,:,j),nside1,cov_low(:,:,j),nside2)
+                call udgrade_nest(dat%rms_map(:,:,j),nside1,rms_low(:,:,j),nside2)
              end do
           end if
           cov_low = sqrt(cov_low / (npix/npix2))
+          rms_low = sqrt(rms_low / (npix/npix2))
           do i = 0, npix2-1
              if (mask_low(i,1) .lt. 0.50) then
                 mask_low(i,:) = 0.d0
@@ -578,6 +433,7 @@ contains
           do j = 1, nbands
              data_low(:,:,j)   = map2fit(:,:,j)
              cov_low(:,:,j)    = cov(:,:,j)
+             rms_low(:,:,j)    = dat%rms_map(:,:,j)
           end do
           indx_low = indx
           mask_low = mask
@@ -594,34 +450,20 @@ contains
        !---------------------------|
        if (map_n == -1) then
           indx_sample_low = indx_low(:,dpar%pol_type(1))
-
-
           ! Parallelization breaks down for prior evaluation
-          ! !$OMP PARALLEL PRIVATE(i,j,k,l,a,b,sol,sam,lnl_old,lnl_new,ratio,s,t)
+          !$OMP PARALLEL PRIVATE(i,j,k,l,c,b,sol,sam,lnl_old,lnl_new,ratio,t)
 
-          ! !$OMP DO SCHEDULE(STATIC)
+          !$OMP DO SCHEDULE(STATIC)
           do i = 0, npix2-1
-             ! naccept   = 0.d0
-             ! paccept   = 0.d0
              a         = 0.d0
              sol       = indx_low(i,dpar%pol_type(1))
              sam       = sol
-             if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
-                cycle
-             end if
-             
+             if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) cycle
+                        
              ! First evaluate likelihood from previous sample
-             !-----------------------------------------------
+             c = eval_sample_lnL_pixel(dpar,comp,fg_map_low(i,:),data_low(i,:,:),rms_low(i,:,:),sol,ind,map_n)
              
-             local_a = 0.d0
-             do j = 1, nbands
-                do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                   a = a + (((fg_map_low(i,k) * compute_spectrum(dpar,comp,bp(j),ind,i,k,sol)) & !compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
-                        - data_low(i,k,j))**2.d0)/cov_low(i,k,j)
-                end do
-             end do
-             c = a
-             
+             ! Evaluate the prior as well
              if (dpar%fg_prior_type(ind,1) == 'gaussian') then
                 lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
              else if (dpar%fg_prior_type(ind,1) == 'uniform') then
@@ -636,34 +478,18 @@ contains
                 stop
              end if
 
-             ! s = 0.5d0
              do l = 1, dpar%nsample
-                ! Every 50 samples check acceptance rate, and adjust scaling factor
-                ! if (mod(l,50) == 0) then
-                !    if (paccept > 0.6d0) then
-                !       s = s*2.0
-                !    else if (paccept < 0.4d0) then
-                !       s = s/2.0
-                !    end if
-                ! end if
-                t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))!*s
+                t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))
                 
                 ! If sampled value is outside of uniform bounds, cycle
                 if (t .gt. dpar%fg_uni(ind,1,2) .or. t .lt. dpar%fg_uni(ind,1,1)) then
-                   ! paccept = naccept/l
                    cycle
                 end if
                 
                 ! Evaluate likelihood given this sample
-                !--------------------------------------
-                b         = 0.d0
-                do j = 1, nbands
-                   do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                      b = b + ((fg_map_low(i,k)*compute_spectrum(dpar,comp,bp(j),ind,i,k,t) & !compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,t) &
-                           -data_low(i,k,j))**2.d0)/cov_low(i,k,j)
-                   end do
-                end do
+                b = eval_sample_lnL_pixel(dpar,comp,fg_map_low(i,:),data_low(i,:,:),rms_low(i,:,:),t,ind,map_n)
                 
+                ! Evaluate the prior as well
                 if (dpar%fg_prior_type(ind,1) == 'gaussian') then
                    lnl_new = -0.5d0*b + log(eval_normal_prior(t,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
                 else if (dpar%fg_prior_type(ind,1) == 'uniform') then
@@ -678,6 +504,7 @@ contains
                    stop
                 end if
 
+                ! Take the ratio of the likelihoods
                 diff = lnl_new - lnl_old
                 ratio = exp(diff)
 
@@ -686,15 +513,14 @@ contains
                       sam      = t
                       c        = b
                       lnl_old = lnl_new
-                      ! naccept  = naccept + 1.0
                    end if
+                ! Accept if the ratio is greater than some random number
                 else if (trim(dpar%ml_mode) == 'sample') then
                    call RANDOM_NUMBER(num)
                    if (ratio > num) then
                       sam      = t
                       c        = b
                       lnl_old = lnl_new
-                      ! naccept  = naccept + 1.0
                    end if
                 end if
                 
@@ -703,12 +529,17 @@ contains
                 indx_sample_low(i) = sol
              end do
           end do
-          ! !$OMP END PARALLEL
+          !$OMP END PARALLEL
           
        !----------------------------|
        ! Sample for a single poltype|
        !----------------------------|
        else
+
+          ! Parallelization breaks down for prior evaluation
+          !$OMP PARALLEL PRIVATE(i,j,k,l,c,b,sol,sam,lnl_old,lnl_new,ratio,t)
+
+          !$OMP DO SCHEDULE(STATIC)
           do i = 0, npix2-1
              naccept   = 0.d0
              paccept   = 0.d0
@@ -720,22 +551,9 @@ contains
              end if
 
              ! First evaluate likelihood from previous sample
-             !-----------------------------------------------
+             c = eval_sample_lnL_pixel(dpar,comp,fg_map_low(i,:),data_low(i,:,:),rms_low(i,:,:),sol,ind,map_n)
              
-             !$OMP PARALLEL PRIVATE(j,k,local_a)
-             local_a = 0.d0
-             !$OMP DO SCHEDULE(static)
-             do j = 1, nbands
-                local_a = local_a + (((fg_map_low(i,map_n) * compute_spectrum(dpar,comp,bp(j),ind,i,map_n,sol)) &!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,sol)) &
-                     - data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
-             end do
-             !$OMP END DO
-             !$OMP CRITICAL
-             a = a + local_a
-             !$OMP END CRITICAL
-             !$OMP END PARALLEL
-             c = a
-
+             ! Evaluate the prior as well
              if (dpar%fg_prior_type(ind,1) == 'gaussian') then
                 lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
              else if (dpar%fg_prior_type(ind,1) == 'uniform') then
@@ -752,14 +570,6 @@ contains
              
              s = 0.5d0
              do l = 1, dpar%nsample
-                ! Every 50 samples check acceptance rate, and adjust scaling factor
-                if (mod(l,50) == 0) then
-                   if (paccept > 0.6d0) then
-                      s = s*2.0
-                   else if (paccept < 0.4d0) then
-                      s = s/2.0
-                   end if
-                end if
                 t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))*s
                 
                 ! If sampled value is outside of uniform bounds, cycle
@@ -769,23 +579,9 @@ contains
                 end if
                 
                 ! Evaluate likelihood given this sample
-                !--------------------------------------
-                b         = 0.d0
-                !$OMP PARALLEL PRIVATE(j,k,local_b)
-                local_b   = 0.d0
-                !$OMP DO SCHEDULE(static)
-                do j = 1, nbands
-                   local_b = local_b + ((fg_map_low(i,map_n)*compute_spectrum(dpar,comp,bp(j),ind,i,map_n,t)&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,t) &
-                        -data_low(i,map_n,j))**2.d0)/cov_low(i,map_n,j)
-                end do
-                !$OMP END DO
-                !$OMP CRITICAL
-                b = b + local_b
-                !$OMP END CRITICAL
-                !$OMP END PARALLEL
+                b = eval_sample_lnL_pixel(dpar,comp,fg_map_low(i,:),data_low(i,:,:),rms_low(i,:,:),t,ind,map_n)
                 
-                lnl_new = -0.5d0*b + log(eval_normal_prior(t,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
-
+                ! Evaluate the prior as well
                 if (dpar%fg_prior_type(ind,1) == 'gaussian') then
                    lnl_new = -0.5d0*b + log(eval_normal_prior(t,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
                 else if (dpar%fg_prior_type(ind,1) == 'uniform') then
@@ -800,23 +596,23 @@ contains
                    stop
                 end if
 
-
+                ! Take the ratio of the likelihoods
                 diff = lnl_new - lnl_old
                 ratio = exp(diff)
+
                 if (trim(dpar%ml_mode) == 'optimize') then
                    if (ratio > 1.d0) then
                       sam      = t
                       c        = b
                       lnl_old = lnl_new
-                      naccept  = naccept + 1.0
                    end if
+                ! Accept if the ratio is greater than some random number
                 else if (trim(dpar%ml_mode) == 'sample') then
                    call RANDOM_NUMBER(num)
                    if (ratio > num) then
                       sam      = t
                       c        = b
                       lnl_old = lnl_new
-                      naccept  = naccept + 1.0
                    end if
                 end if
                 
@@ -825,6 +621,7 @@ contains
                 indx_sample_low(i) = sol
              end do
           end do
+          !$OMP END PARALLEL
        end if
        if (nside1 /= nside2) then
           if (ordering == 1) then
@@ -904,30 +701,9 @@ contains
           sam         = sol
           
           ! First evaluate likelihood from previous sample
-          !-----------------------------------------------
-          
-          !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
-          a           = 0.d0
-          local_a     = 0.d0
-          !$OMP DO SCHEDULE(static)
-          do i = 0, npix-1
-             if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-             do j = 1, nbands
-                do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                   local_a = local_a + (((dat%fg_map(i,k,0,ind) * compute_spectrum(dpar,comp,bp(j),ind,i,k,sol))&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
-                        - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
-                   ! local_a = local_a + (((fg_map_high(i,k,dpar%fg_ref_loc(1)) * compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
-                   !      - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
-                end do
-             end do
-          end do
-          !$OMP END DO
-          !$OMP CRITICAL
-          a = a + local_a
-          !$OMP END CRITICAL
-          !$OMP END PARALLEL
-          c = a
+          c = eval_sample_lnL_fullsky(dpar,comp,dat%fg_map(:,:,0,ind),map2fit,mask,dat%rms_map,sol,ind,map_n)
 
+          ! Evaluate the prior as well
           if (dpar%fg_prior_type(ind,1) == 'gaussian') then
              lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
           else if (dpar%fg_prior_type(ind,1) == 'uniform') then
@@ -944,16 +720,6 @@ contains
 
           s = 0.5d0
           do l = 1, dpar%nsample
-             ! Every 50 samples check acceptance rate, and adjust scaling factor
-             ! if (mod(l,50) == 0) then
-             !    if (paccept > 0.6d0) then
-             !       write(*,*) paccept,l,'s = s*2.0'
-             !       s = s*2.0
-             !    else if (paccept < 0.4d0) then
-             !       write(*,*) paccept,l,'s = s/2.0'
-             !       s = s/2.0
-             !    end if
-             ! end if
              t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))*s
              
              ! If sampled value is outside of uniform bounds, cycle
@@ -962,26 +728,9 @@ contains
                 cycle
              end if
              ! Evaluate likelihood given this sample
-             !--------------------------------------
-             b         = 0.d0
-             !$OMP PARALLEL PRIVATE(i,j,k,local_b), SHARED(b)
-             local_b   = 0.d0
-             !$OMP DO SCHEDULE(static)
-             do i = 0, npix-1
-                if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-                do j = 1, nbands
-                   do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                      local_b = local_b + (((dat%fg_map(i,k,0,ind) * compute_spectrum(dpar,comp,bp(j),ind,i,k,t))&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,t)) &
-                           - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
-                   end do
-                end do
-             end do
-             !$OMP END DO
-             !$OMP CRITICAL
-             b = b + local_b
-             !$OMP END CRITICAL
-             !$OMP END PARALLEL
+             b = eval_sample_lnL_fullsky(dpar,comp,dat%fg_map(:,:,0,ind),map2fit,mask,dat%rms_map,t,ind,map_n)
 
+             ! Evaluate the prior as well
              if (dpar%fg_prior_type(ind,1) == 'gaussian') then
                 lnl_new = -0.5d0*b + log(eval_normal_prior(t,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
              else if (dpar%fg_prior_type(ind,1) == 'uniform') then
@@ -996,39 +745,29 @@ contains
                 stop
              end if
 
+             ! Take the ratio of the likelihoods
              diff = lnl_new - lnl_old
              ratio = exp(diff)
+             
              if (trim(dpar%ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
                    sam      = t
                    c        = b
                    lnl_old = lnl_new
-                   naccept  = naccept + 1.0
                 end if
+                ! Accept if the ratio is greater than some random number
              else if (trim(dpar%ml_mode) == 'sample') then
                 call RANDOM_NUMBER(num)
                 if (ratio > num) then
                    sam      = t
                    c        = b
                    lnl_old = lnl_new
-                   naccept  = naccept + 1.0
                 end if
-                ! write(*,fmt='(i6,6(f16.4))') l, t, lnl_new, lnl_old, ratio, num, naccept/l
              end if
              
              paccept = naccept/l
-             ! Adjust the step-size based on acceptance probability and document
+
           end do
-          title = trim(dpar%outdir) // 'synch_beta_paccept.dat'
-          inquire(file=title,exist=exist)
-          if (exist) then
-             open(12,file=title, status="old",position="append", action="write")
-          else
-             open(12,file=title, status="new", action="write")
-             write(12,*)  
-          endif
-          write(12,*) paccept, s
-          close(12)
           sol = sam
           indx_sample(:) = sol
           
@@ -1043,29 +782,9 @@ contains
           paccept     = 0.d0
 
           ! First evaluate likelihood from previous sample
-          !-----------------------------------------------
-          !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
-          a         = 0.d0
-          local_a   = 0.d0
-          !$OMP DO SCHEDULE(static)
-          do i = 0, npix-1
-             if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
-                cycle
-             end if
-             
-             do j = 1, nbands
-                local_a = local_a + (((dat%fg_map(i,map_n,0,ind) * compute_spectrum(dpar,comp,bp(j),ind,i,map_n,sol))&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,sol)) &
-                     - map2fit(i,map_n,j))**2.d0)/dat%rms_map(i,map_n,j)**2.d0!cov(i,map_n,j)
-             end do
-          end do
-          !$OMP END DO
-          !$OMP CRITICAL
-          a = a + local_a
-          !$OMP END CRITICAL
-          !$OMP END PARALLEL
-
-          c = a
+          c = eval_sample_lnL_fullsky(dpar,comp,dat%fg_map(:,:,0,ind),map2fit,mask,dat%rms_map,sol,ind,map_n)
           
+          ! Evaluate the prior as well
           if (dpar%fg_prior_type(ind,1) == 'gaussian') then
              lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
           else if (dpar%fg_prior_type(ind,1) == 'uniform') then
@@ -1082,16 +801,6 @@ contains
           
           s = 0.5d0
           do l = 1, dpar%nsample
-             ! Every 50 samples check acceptance rate, and adjust scaling factor
-             ! if (mod(l,50) == 0) then
-             !    if (paccept > 0.6d0) then
-             !       write(*,*) paccept,l,'s = s*2.0'
-             !       s = s*2.0
-             !    else if (paccept < 0.4d0) then
-             !       write(*,*) paccept,l,'s = s/2.0'
-             !       s = s/2.0
-             !    end if
-             ! end if
              t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))*s
              
              ! If sampled value is outside of uniform bounds, cycle
@@ -1099,30 +808,11 @@ contains
                 paccept = naccept/l
                 cycle
              end if
+
              ! Evaluate likelihood given this sample
-             !--------------------------------------
-
-
-             ! b = eval_sample_lnL_fullres(dpar,comp,dat%fg_map(:,:,0,ind),map2fit,mask,dat%rms_map,t,map_n)
-
-             b         = 0.d0
-
-             !$OMP PARALLEL PRIVATE(i,j,k,local_b), SHARED(b)
-             local_b   = 0.d0
-             !$OMP DO SCHEDULE(static)
-             do i = 0, npix-1
-                if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-                do j = 1, nbands
-                   local_b = local_b + (((dat%fg_map(i,map_n,0,ind) * compute_spectrum(dpar,comp,bp(j),ind,i,map_n,t))&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n,t)) &
-                        - map2fit(i,map_n,j))**2.d0)/dat%rms_map(i,map_n,j)**2.d0!cov(i,map_n,j)
-                end do
-             end do
-             !$OMP END DO
-             !$OMP CRITICAL
-             b = b + local_b
-             !$OMP END CRITICAL
-             !$OMP END PARALLEL
+             b = eval_sample_lnL_fullsky(dpar,comp,dat%fg_map(:,:,0,ind),map2fit,mask,dat%rms_map,t,ind,map_n)
              
+             ! Evaluate the prior as well
              if (dpar%fg_prior_type(ind,1) == 'gaussian') then
                 lnl_new = -0.5d0*b + log(eval_normal_prior(t,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
              else if (dpar%fg_prior_type(ind,1) == 'uniform') then
@@ -1193,49 +883,89 @@ contains
     
   end subroutine sample_index
 
-  ! function eval_sample_lnL_fullres(dpar,comp,fg_map,map2fit,mask,rms,sample,map_n) result(lnL)
-  !   implicit none
+  function eval_sample_lnL_fullsky(dpar,comp,fg_map,map2fit,mask,rms,sample,ind,map_n) result(lnL)
+    implicit none
 
-  !   real(dp), dimension(:,:,:), intent(in) :: map2fit, rms
-  !   real(dp), dimension(:,:),   intent(in) :: fg_map, mask
-  !   real(dp),                   intent(in) :: sample
-  !   real(dp)                               :: naccept, paccept
-  !   real(dp)                               :: lnL, local_lnL
-  !   integer(i4b)                           :: i, j, k
+    type(dang_params)                      :: dpar
+    type(dang_comps)                       :: comp
+    real(dp), dimension(:,:,:), intent(in) :: map2fit, rms
+    real(dp), dimension(:,:),   intent(in) :: fg_map, mask
+    real(dp),                   intent(in) :: sample
+    integer(i4b),               intent(in) :: map_n, ind
+    real(dp)                               :: naccept, paccept
+    real(dp)                               :: lnL, local_lnL
+    integer(i4b)                           :: i, j, k
 
-  !   naccept     = 0.d0
-  !   paccept     = 0.d0
+    naccept     = 0.d0
+    paccept     = 0.d0
               
-  !   !$OMP PARALLEL PRIVATE(i,j,k,local_lnL), SHARED(lnL)
-  !   lnL           = 0.d0
-  !   local_lnL     = 0.d0
-  !   !$OMP DO SCHEDULE(static)
-  !   if (map_n == -1) then
-  !      do i = 0, npix-1
-  !         if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-  !         do j = 1, nbands
-  !            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-  !               local_lnL = local_lnL + (((fg_map(i,k) * compute_spectrum(dpar,comp,bp(j),ind,i,k,sample))&
-  !                    - map2fit(i,k,j))**2.d0)/rms(i,k,j)**2.d0
-  !            end do
-  !         end do
-  !      end do
-  !   else
-  !      k = map_n
-  !      do i = 0, npix-1
-  !         if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-  !         do j = 1, nbands
-  !            local_lnL = local_lnL + (((fg_map(i,k) * compute_spectrum(dpar,comp,bp(j),ind,i,k,sample))&
-  !                 - map2fit(i,k,j))**2.d0)/rms(i,k,j)**2.d0
-  !         end do
-  !      end do
-  !   end if
-  !   !$OMP END DO
-  !   !$OMP CRITICAL
-  !   lnL = lnL + local_lnL
-  !   !$OMP END CRITICAL
-  !   !$OMP END PARALLEL
-  ! end function eval_sample_lnL_fullres
+    !$OMP PARALLEL PRIVATE(i,j,k,local_lnL), SHARED(lnL)
+    lnL           = 0.d0
+    local_lnL     = 0.d0
+    if (map_n == -1) then
+       !$OMP DO SCHEDULE(static)
+       do i = 0, npix-1
+          if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+          do j = 1, nbands
+             do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+                local_lnL = local_lnL + (((fg_map(i,k) * compute_spectrum(dpar,comp,bp(j),ind,index=sample))&
+                     - map2fit(i,k,j))**2.d0)/rms(i,k,j)**2.d0
+             end do
+          end do
+       end do
+       !$OMP END DO
+    else
+       k = map_n
+       !$OMP DO SCHEDULE(static)
+       do i = 0, npix-1
+          if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+          do j = 1, nbands
+             local_lnL = local_lnL + (((fg_map(i,k) * compute_spectrum(dpar,comp,bp(j),ind,index=sample))&
+                  - map2fit(i,k,j))**2.d0)/rms(i,k,j)**2.d0
+          end do
+       end do
+       !$OMP END DO
+    end if
+    !$OMP CRITICAL
+    lnL = lnL + local_lnL
+    !$OMP END CRITICAL
+    !$OMP END PARALLEL
+  end function eval_sample_lnL_fullsky
+
+  function eval_sample_lnL_pixel(dpar,comp,fg_map,map2fit,rms,sample,ind,map_n) result(lnL)
+    implicit none
+
+    type(dang_params)                      :: dpar
+    type(dang_comps)                       :: comp
+    real(dp), dimension(:,:),   intent(in) :: map2fit, rms
+    real(dp), dimension(:),     intent(in) :: fg_map
+    real(dp),                   intent(in) :: sample
+    integer(i4b),               intent(in) :: map_n, ind
+    real(dp)                               :: naccept, paccept
+    real(dp)                               :: lnL, local_lnL
+    integer(i4b)                           :: i, j, k
+
+    naccept     = 0.d0
+    paccept     = 0.d0
+              
+    lnL           = 0.d0
+    local_lnL     = 0.d0
+    if (map_n == -1) then
+       do j = 1, nbands
+          do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+             local_lnL = local_lnL + (((fg_map(k) * compute_spectrum(dpar,comp,bp(j),ind,index=sample))&
+                  - map2fit(k,j))**2.d0)/rms(k,j)**2.d0
+          end do
+       end do
+    else
+       k = map_n
+       do j = 1, nbands
+          local_lnL = local_lnL + (((fg_map(k) * compute_spectrum(dpar,comp,bp(j),ind,index=sample))&
+               - map2fit(k,j))**2.d0)/rms(k,j)**2.d0
+       end do
+    end if
+    lnL = lnL + local_lnL
+  end function eval_sample_lnL_pixel
 
   function sample_fg_amp(dpar, dat, comp, ind, map_n)
     !------------------------------------------------------------------------

@@ -15,13 +15,11 @@ module dang_data_mod
     integer(i4b)                              :: nmaps
     real(dp)                                  :: chisq
 
-
     real(dp), allocatable, dimension(:,:,:)   :: sig_map    ! data maps 
     real(dp), allocatable, dimension(:,:,:)   :: rms_map    ! noise maps
     real(dp), allocatable, dimension(:,:,:)   :: res_map    ! Residual maps
     real(dp), allocatable, dimension(:,:)     :: chi_map    ! Chisq map (for outputs)
     real(dp), allocatable, dimension(:,:,:,:) :: fg_map     ! Component maps
-
 
     real(dp), allocatable, dimension(:)       :: gain       ! Where band gains are stored
     real(dp), allocatable, dimension(:)       :: offset     ! Where band offsets are stored
@@ -389,7 +387,7 @@ contains
        call compute_chisq(self,dpar,comp,k)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
-             write(*,fmt='(i6,a,e10.3)') iter, " - Chisq: ", self%chisq
+             write(*,fmt='(i6,a,f10.5)') iter, " - Chisq: ", self%chisq
              write(*,fmt='(a)') '---------------------------------------------'
           end if
        end if
@@ -399,7 +397,7 @@ contains
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
              if (nbands .lt. 10) then
-                write(*,fmt='(i6, a, E10.3, a, e10.3, a, 10e10.3)')&
+                write(*,fmt='(i6, a, f10.5, a, f10.3, a, 10e10.3)')&
                      iter, " - chisq: " , self%chisq, " - T_d: ",&
                      mask_avg(comp%T_d(:,1),self%masks(:,1)), ' - A_HI: ', comp%HI_amps
                 write(*,fmt='(a)') '---------------------------------------------'
@@ -586,7 +584,7 @@ contains
        else
           open(30,file=title, status="new", action="write")
        endif
-       write(30,*) dat%fg_map(23000,map_n,dpar%fg_ref_loc(1),2)
+       write(30,*) dat%fg_map(23000,map_n,2,2)
        close(30)
        
        title = trim(dpar%outdir) // 'pixel_23000_A_s_' // trim(tqu(map_n)) // '.dat'
@@ -596,7 +594,7 @@ contains
        else
           open(31,file=title, status="new", action="write")
        endif
-       write(31,*) dat%fg_map(23000,map_n,dpar%fg_ref_loc(1),1)
+       write(31,*) dat%fg_map(23000,map_n,2,1)
        close(31)
        
        title = trim(dpar%outdir) // 'pixel_23000_beta_s_' // trim(tqu(map_n)) // '.dat'
