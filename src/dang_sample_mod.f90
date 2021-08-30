@@ -159,8 +159,6 @@ contains
           end if
        end do
     end do
-
-    ! write(*,*) c
     
     ! Computation
     if (trim(method) == 'cholesky') then
@@ -301,7 +299,6 @@ contains
     real(dp), dimension(0:npix-1,nmaps)        :: indx
     real(dp), dimension(0:npix-1,nmaps)        :: mask
     real(dp), dimension(0:npix-1)              :: indx_sample
-    ! real(dp), allocatable, dimension(:,:,:)    :: fg_map_high
     real(dp), allocatable, dimension(:,:)      :: fg_map_high, fg_map_low
     real(dp), allocatable, dimension(:,:,:)    :: data_low, cov_low, rms_low
     real(dp), allocatable, dimension(:,:)      :: indx_low, mask_low
@@ -353,7 +350,7 @@ contains
        write(*,*) "Fitting for synchrotron beta."
        indx     = comp%beta_s
     else if (trim(dpar%fg_label(ind)) == 'dust') then 
-       write(*,*) "Fitting for thermal dust"
+       write(*,*) "Fitting for thermal dust beta"
        indx     = comp%beta_d
     end if
     
@@ -544,7 +541,7 @@ contains
              naccept   = 0.d0
              paccept   = 0.d0
              a         = 0.d0
-             sol       = indx_low(i,dpar%pol_type(1))
+             sol       = indx_low(i,map_n)
              sam       = sol
              if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
                 cycle
@@ -568,9 +565,8 @@ contains
                 stop
              end if
              
-             s = 0.5d0
              do l = 1, dpar%nsample
-                t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))*s
+                t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))
                 
                 ! If sampled value is outside of uniform bounds, cycle
                 if (t .gt. dpar%fg_uni(ind,1,2) .or. t .lt. dpar%fg_uni(ind,1,1)) then
@@ -640,55 +636,6 @@ contains
        
        time1 = mpi_wtime()
        
-       if (.false.) then
-          
-          write(*,*) iter
-          write(iter_str, '(i0.5)') iter
-          
-          allocate(beta_grid(1000))
-          allocate(like_grid(1000))
-          
-          do l = 1, 1000
-             beta_grid(l) = -3.5 + (-2.0+3.5)*(l-1)/1000
-             sol       = beta_grid(l)
-             !$OMP PARALLEL PRIVATE(i,j,k,local_a), SHARED(a)
-             a         = 0.d0
-             local_a   = 0.d0
-             !$OMP DO SCHEDULE(static)
-             do i = 0, npix-1
-                if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
-                   cycle
-                end if
-                
-                ! Chi-square from the most recent Gibbs chain update
-                do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                   do j = 1, nbands
-                      local_a = local_a + (((dat%fg_map(i,k,0,ind) * compute_spectrum(dpar,comp,bp(j),ind,i,k,sol))&!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,k,sol)) &
-                           - map2fit(i,k,j))**2.d0)/dat%rms_map(i,k,j)**2.d0!cov(i,k,j)
-                   end do
-                end do
-             end do
-             !$OMP END DO
-             !$OMP CRITICAL
-             a = a + local_a
-             !$OMP END CRITICAL
-             !$OMP END PARALLEL
-             write(*,fmt='(i5,f8.4,f12.4, f12.4)') l, beta_grid(l), -0.5*a, log(eval_normal_prior(beta_grid(l),dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
-             
-             title = trim(dpar%outdir) // 'beta_grid_likelihood_k'//trim(iter_str)//'.dat'
-             inquire(file=title,exist=exist)
-             if (exist) then
-                open(12,file=title, status="old",position="append", action="write")
-             else
-                open(12,file=title, status="new", action="write")
-                write(12,*)  
-             endif
-             write(12,*) beta_grid(l), -0.5d0*a, log(eval_jeffreys_prior(dpar, dat, comp, map_n, ind, beta_grid(l)))
-             close(12)
-          end do
-       end if
-       ! indx_sample(:) = -3.1d0
-       
        !----------------------------|
        ! Sample for Q and U jointly |
        !----------------------------|
@@ -718,9 +665,8 @@ contains
              stop
           end if
 
-          s = 0.5d0
           do l = 1, dpar%nsample
-             t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))*s
+             t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))
              
              ! If sampled value is outside of uniform bounds, cycle
              if (t .gt. dpar%fg_uni(ind,1,2) .or. t .lt. dpar%fg_uni(ind,1,1)) then
@@ -799,9 +745,8 @@ contains
              stop
           end if
           
-          s = 0.5d0
           do l = 1, dpar%nsample
-             t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))*s
+             t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))
              
              ! If sampled value is outside of uniform bounds, cycle
              if (t .gt. dpar%fg_uni(ind,1,2) .or. t .lt. dpar%fg_uni(ind,1,1)) then
@@ -848,7 +793,6 @@ contains
              end if
              
              paccept = naccept/l
-             ! Adjust the step-size based on acceptance probability and document
           end do
           sol = sam
           indx_sample(:) = sol
@@ -1002,7 +946,7 @@ contains
        sum1    = 0.0d0
        sum2    = 0.0d0
        do j = 1, nbands
-          spec    = compute_spectrum(dpar,comp,bp(j),ind,i,map_n)!compute_spectrum(dpar,comp,ind,dpar%band_nu(j),i,map_n)
+          spec    = compute_spectrum(dpar,comp,bp(j),ind,i,map_n)
           sum1    = sum1 + (map2fit(i,j)*spec)/dat%rms_map(i,map_n,j)**2.d0
           sum2    = sum2 + (spec)**2.d0/dat%rms_map(i,map_n,j)**2.d0
           norm(i) = norm(i) + spec/dat%rms_map(i,map_n,j)
@@ -1025,7 +969,6 @@ contains
     type(dang_params)                       :: dpar
     type(dang_comps)                        :: comp
     type(dang_data)                         :: dat
-    !real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: dat, noise
     real(dp), dimension(0:npix-1,nbands)    :: cov, nos, map
     real(dp), allocatable, dimension(:,:,:) :: map2fit
     integer(i4b),                intent(in) :: map_n
@@ -1053,12 +996,10 @@ contains
           if (dpar%temp_corr(temp_num,j)) then
              ! Remove the other foregrounds from the input data before fitting
              do n = 1, dpar%ncomp
-                ! write(*,*) "remove for foreground ", trim(dpar%fg_label(n)), j
                 map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,n)
              end do
              do n = 1, dpar%ntemp
                 if (n == temp_num) cycle
-                ! write(*,*) "remove for template ", trim(dpar%temp_label(n))
                 map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,dpar%ncomp+n)
              end do
              ! Calculate template amplitude
@@ -1067,7 +1008,6 @@ contains
                 sum1 = sum1 + ((map2fit(i,map_n,j)*dat%temps(i,map_n,temp_num))/cov(i,j))
                 sum2 = sum2 + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
                 norm = norm + dat%temps(i,map_n,temp_num)/dat%rms_map(i,map_n,j)
-                ! norm = norm + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
              end do
              if (trim(dpar%ml_mode) == 'sample') then
                 dat%temp_amps(j,map_n,temp_num) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
@@ -1082,35 +1022,25 @@ contains
           sum2 = 0.d0
           norm = 0.d0
           temp = 0.d0
-
           xmax = 0.d0
           ymax = 0.d0
           xmin = 1.d20
           ymin = 1.d20
-
           if (dpar%temp_corr(1,j)) then
              do i = 0, npix-1
                 if (comp%HI(i,1) > dpar%thresh) cycle
                 if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-
                 temp = comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))
-
-                ! sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/cov(i,j)
                 sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/dat%rms_map(i,map_n,j)**2.d0
                 sum2 = sum2 + (temp)**2.d0/dat%rms_map(i,map_n,j)**2.d0
                 norm = norm + temp/dat%rms_map(i,map_n,j)
-
              end do
           end if
 
           if (trim(dpar%ml_mode) == 'sample') then
              sum1 = sum1 + norm*rand_normal(0.d0,1.d0)
           end if
-             ! comp%HI_amps(j) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
-             ! write(*,*) comp%HI_amps(j), sum1/sum2, comp%HI_amps(j) - sum1/sum2
-          ! else if (trim(dpar%ml_mode) == 'optimize') then
           comp%HI_amps(j) = sum1/sum2
-             ! end if
       end do
     end if
     
@@ -1528,9 +1458,9 @@ contains
        ! Is this evaluated for a single pixel?
        if (present(pixel)) then
           do j = 1, nbands
-             ss_Q  = dat%fg_map(pixel,2,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,pixel,2,val)!(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-             ss_U  = dat%fg_map(pixel,3,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,pixel,3,val)!(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-             sum = sum + val*compute_spectrum(dpar,comp,bp(j),ind,pixel,2,(3*val-1))&!((dpar%band_nu(j)/dpar%fg_nu_ref(ind))**(3*val-1))
+             ss_Q  = dat%fg_map(pixel,2,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,pixel,2,val)
+             ss_U  = dat%fg_map(pixel,3,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,pixel,3,val)
+             sum = sum + val*compute_spectrum(dpar,comp,bp(j),ind,pixel,2,(3*val-1))&
                   &/(dat%rms_map(pixel,2,j)*dat%rms_map(pixel,3,j))&
                   *sqrt(ss_Q**2/dat%rms_map(pixel,2,j)**2 + ss_U**2/dat%rms_map(pixel,3,j))
           end do
@@ -1538,16 +1468,11 @@ contains
           do i = 0, npix-1
              if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
              do j = 1, nbands
-                ss_Q  = dat%fg_map(i,2,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,i,2,val)!(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                ss_U  = dat%fg_map(i,3,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,i,3,val)!(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                sum = sum + val*compute_spectrum(dpar,comp,bp(j),ind,i,2,(3*val-1))&!((dpar%band_nu(j)/dpar%fg_nu_ref(ind))**(3*val-1))
+                ss_Q  = dat%fg_map(i,2,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,i,2,val)
+                ss_U  = dat%fg_map(i,3,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,i,3,val)
+                sum = sum + val*compute_spectrum(dpar,comp,bp(j),ind,i,2,(3*val-1))&
                      &/(dat%rms_map(i,2,j)*dat%rms_map(i,3,j))&
                      *sqrt(ss_Q**2/dat%rms_map(i,2,j)**2 + ss_U**2/dat%rms_map(i,3,j))
-                ! ss_Q  = dat%fg_map(i,2,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                ! ss_U  = dat%fg_map(i,3,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                ! sum = sum + val*((dpar%band_nu(j)/dpar%fg_nu_ref(ind))**(3*val-1))/(dat%rms_map(i,2,j)*dat%rms_map(i,3,j))&
-                !      *sqrt(ss_Q**2/dat%rms_map(i,2,j)**2 + ss_U**2/dat%rms_map(i,3,j))
-                ! ! sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
              end do
           end do
        end if
