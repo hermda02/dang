@@ -40,19 +40,10 @@ program dang
   type(dang_params) :: dpar
   type(dang_data)   :: ddata
   type(dang_comps)  :: dcomps
-  ! type(dang_bp)     :: dbp 
-
-  ! allocate(dbp(dpar%numinc))
 
   call init_mpi()
   call read_param_file(dpar)
   call init_bp_mod(dpar)
-
-  ! write(*,*) dpar%fg_nu_ref(1)
-  ! do j = 1, dpar%numinc
-  !    write(*,*) bp(j)%nu_c, bp(j)%nu0(1)
-  ! end do
-  ! stop
 
   !----------------------------------------------------------------------------------------------------------
   ! General paramters
@@ -175,7 +166,6 @@ contains
           end if
        end if
     end do
-    ! 
     do n = 1, dpar%ntemp
        if (ANY(dpar%joint_comp == trim(dpar%temp_label(n)))) then
           nglobalpar = nglobalpar + dpar%temp_nfit(n)
@@ -183,9 +173,6 @@ contains
           nglobalpar = nglobalpar + size(dpar%pol_type)*dpar%temp_nfit(n)
        end if
    end do
-
-   ! write(*,fmt='(a,i6)') 'npixpar: ', npixpar
-   ! write(*,fmt='(a,i6)') 'nglobalpar: ', nglobalpar
 
     !--------------------------------------------------------------|
     !                   Calculation portion                        |               

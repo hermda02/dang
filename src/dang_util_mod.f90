@@ -45,12 +45,9 @@ contains
     call mpi_init(ierr)
     call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)
     call mpi_comm_size(MPI_COMM_WORLD, numprocs, ierr)
-    !     if (rank == 0) then
-    !        write(*,'(a,i8)') ' The number of processors available = ', numprocs
     tqu(1)            = 'T'
     tqu(2)            = 'Q'
     tqu(3)            = 'U'
-    !     end if
   end subroutine init_mpi
   
   ! Small utility for converting an integer to a string                                              

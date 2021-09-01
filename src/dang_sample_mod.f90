@@ -161,26 +161,11 @@ contains
     end do
     
     ! Computation
-    if (trim(method) == 'cholesky') then
-       write(*,*) 'method: cholesky - Currently deprecated.'
-       stop
-       !mat_u(:,:)        = 0.d0
-       !if (rank == master) write(*,fmt='(a)') 'Joint sampling using Cholesky Decomposition.'
-       !call cholesky_decomp(A,mat_l)
-       !mat_u  = transpose(mat_l)
-       !call forward_sub(mat_l,d,c)
-       !call backward_sub(mat_u,b,d)
-    else if (trim(method) == 'cg') then
+    if (trim(method) == 'cg') then
        if (rank == master) write(*,*) 'Joint sampling using CG.'
        call sample_cg_vec(b,c,dpar,dat,compo,map_n)
-    else if (trim(method) == 'lu') then
-       write(*,*) 'method: lu - Currently deprecated.'
-       stop
-       !mat_u(:,:)        = 0.d0
-       if (rank == master) write(*,*) 'Joint sampling using LU Decomp'
-       !call LUDecomp(A,mat_l,mat_u,y)
-       !call forward_sub(mat_l,d,c)
-       !call backward_sub(mat_u,b,d)
+    else 
+       write(*,*) 'cg is the only currently available method for joint sampling'
     end if
     
     ! Solver returns a vector - first filled with component amplitudes, then template amplitudes
@@ -258,19 +243,6 @@ contains
        end do
     end if
 
-    title = trim(dpar%outdir) // '23000_samples.dat'
-    inquire(file=title,exist=exist)
-    if (exist) then
-       open(51,file=title, status="old",position="append", action="write")
-    else
-       open(51,file=title, status="new", action="write")
-    endif
-    write(51,fmt='(2(f16.8))') dat%fg_map(23000,2:3,0,1)
-    close(51)
-
-
-    ! Also checked and looks good ^^
-    
     if (rank == master) then
        t3 = mpi_wtime()
        write(*,fmt='(a,f10.3,a)') 'Joint Sampler completed in ', t3-t1, 's.'
@@ -939,8 +911,8 @@ contains
        end if
     end do
     
-    !         sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  |
-    !         sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  + (T_nu)^T N_nu^{-1/2} eta|
+    ! sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  |
+    ! sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  + (T_nu)^T N_nu^{-1/2} eta|
     
     do i = 0, npix-1
        sum1    = 0.0d0
@@ -1092,6 +1064,8 @@ contains
     
     ! Metropolis algorithm
     
+    !$OMP PARALLEL PRIVATE(i,j,k,l,c,b,sol,sam,lnl_old,lnl_new,ratio,t)
+    !$OMP DO SCHEDULE(STATIC)
     do i = 0, npix2-1
        naccept = 0.d0
        paccept = 0.d0
@@ -1113,13 +1087,13 @@ contains
           lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%HI_Td_mean, dpar%HI_Td_std))
           
           do l = 1, dpar%nsample
-             if (mod(l,50) == 0) then
-                if (paccept > 0.6d0) then
-                   s = s*2.0
-                else if (paccept < 0.4d0) then
-                   s = s/2.0
-                end if
-             end if
+             ! if (mod(l,50) == 0) then
+             !    if (paccept > 0.6d0) then
+             !       s = s*2.0
+             !    else if (paccept < 0.4d0) then
+             !       s = s/2.0
+             !    end if
+             ! end if
              ! Begin sampling from the prior
              t = sam + rand_normal(0.d0,dpar%HI_Td_std)
              b = 0.d0
@@ -1159,6 +1133,9 @@ contains
           sample_T_low(i) = sol
        end if
     end do
+    !$OMP END DO
+    !$OMP END PARALLEL
+
     ! if (nside1 /= nside2) then
     !    if (ordering == 1) then
     !       call udgrade_ring(sample_T_low, nside2, te_sample, nside1)

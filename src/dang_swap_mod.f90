@@ -13,39 +13,6 @@ module dang_swap_mod
 
 contains
 
-  ! subroutine swap_bp_maps(dat,dpar,iteration,chain)
-  !   type(dang_params)                                    :: dpar
-  !   type(dang_data),                       intent(inout) :: dat
-  !   integer(i4b),                     intent(in)    :: iteration
-  !   character(len=512),               intent(in)    :: chain
-  !   character(len=300), allocatable, dimension(:,:) :: bp_maps
-  !   integer(i4b)                                    :: i, j
-  !   character(len=6)                                :: iter_str
-  !   real(dp), allocatable, dimension(:,:)           :: map, rms
-    
-    
-  !   allocate(map(0:npix-1,3))
-  !   allocate(rms(0:npix-1,3))
-  !   allocate(bp_maps(dpar%numband,2))
-    
-  !   write(iter_str,'(i0.6)') iteration
-    
-
-  !   do j = 1, dpar%numband
-  !      if (dpar%bp_map(j)) then
-  !         bp_maps(j,1) = trim(dpar%bp_dir) // trim(dpar%band_label(j))//'_map_'//trim(chain)//'_n0064_60arcmin_k'//trim(iter_str)//'.fits'
-  !         bp_maps(j,2) = trim(dpar%bp_dir) // trim(dpar%band_label(j))//'_rms_'//trim(chain)//'_n0064_60arcmin_k'//trim(iter_str)//'.fits'
-  !         write(*,'(a,a,a)') 'Swapping band ', trim(dpar%band_label(j)), '.'
-  !         !write(*,*) trim(bp_maps(j,1))                                                             
-  !         !write(*,*) trim(bp_maps(j,2))                                                             
-  !         call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header)
-  !         dat%sig_map(:,:,j) = map
-  !         call read_bintab(trim(bp_maps(j,2)),rms,dat%npix,3,nullval,anynull,header=header)
-  !         dat%rms_map(:,:,j) = rms
-  !      end if
-  !   end do
-
-
   subroutine swap_bp_maps(dat,dpar)
     type(dang_params)                               :: dpar
     type(dang_data),                  intent(inout) :: dat

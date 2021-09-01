@@ -17,9 +17,8 @@ module dang_bp_mod
 
 contains
 
-  subroutine init_bp_mod(dpar)!,paramfile)
+  subroutine init_bp_mod(dpar)
     implicit none
-    ! class(bandinfo), intent(inout) :: self
     class(dang_params), intent(inout) :: dpar
     character(len=512)                :: paramfile
     character(len=3)                  :: itext

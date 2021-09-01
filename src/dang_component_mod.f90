@@ -28,6 +28,8 @@ contains
        write(*,fmt='(a,f8.4)') 'Full sky beta_s estimate ', param%fg_init(1,1)
        self%beta_s     = param%fg_init(1,1) ! Synchrotron beta initial guess
     else
+       write(*,*) "No init files found"
+       stop
        !call read_bintab(trim(param%fg_spec_file(1,1)),self%beta_s,npix,3,nullval,anynull,header=header)
     end if
     
@@ -95,7 +97,6 @@ contains
     class(dang_params)             :: param
     type(dang_comps)               :: self
     type(bandinfo)                 :: bp
-    ! real(dp),           intent(in) :: freq
     integer(i4b),       intent(in) :: ind
     integer(i4b),       optional   :: pix
     integer(i4b),       optional   :: map_n
@@ -114,14 +115,12 @@ contains
           !else if (trim(param%fg_label(ind)) == 'mbb') then
        else if (ind == 2) then
           z = h / (k_B*self%T_d(pix,map_n))
-          !       compute_spectrum = (exp(z*param%fg_nu_ref(ind)*1d9)-1.d0) / &
-          !            (exp(z*bp%nu_c*1d9)-1.d0) * (bp%nu_c/param%fg_nu_ref(ind))**(self%beta_d(pix,map_n)+1.d0)!*rj_cmb
           compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
                (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(353.d0*1d9))**(self%beta_d(pix,map_n)+1.d0)
        end if
     else
        compute_spectrum = 0.d0
-       ! write(*,*) 'Compute for LFI bandpass'
+       ! Compute for LFI bandpass
        if (ind == 1) then
           if (present(index)) then
              do i = 1, bp%n
@@ -135,8 +134,6 @@ contains
           !else if (trim(param%fg_label(ind)) == 'mbb') then
        else if (ind == 2) then
           z = h / (k_B*self%T_d(pix,map_n))
-          !       compute_spectrum = (exp(z*param%fg_nu_ref(ind)*1d9)-1.d0) / &
-          !            (exp(z*bp%nu_c*1d9)-1.d0) * (bp%nu_c/param%fg_nu_ref(ind))**(self%beta_d(pix,map_n)+1.d0)!*rj_cmb
           do i = 1, bp%n
              compute_spectrum = compute_spectrum + bp%tau0(i)*(exp(z*353.d0*1d9)-1.d0) / &
                (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/353.d9)**(self%beta_d(pix,map_n)+1.d0)
