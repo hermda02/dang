@@ -29,6 +29,8 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:,:)   :: temps      ! Where template maps are stored   
     real(dp), allocatable, dimension(:,:,:)   :: temp_amps  ! Where template amplitudes are stored
     real(dp), allocatable, dimension(:,:)     :: temp_norm  ! Where we store template normalizations
+
+    real(dp), allocatable, dimension(:)       :: amp_vec    ! Amplitude vector returned from the CG solver
   contains
     procedure :: init_data_maps
     procedure :: read_data_maps
@@ -644,7 +646,6 @@ contains
        else
           open(35,file=title,status="new",action="write")
        end if
-       ! write(35,'(20(E17.8))') comp%HI_amps
        write(35,fmt=fmt) comp%HI_amps
        close(35)
        
@@ -659,16 +660,15 @@ contains
        write(36,'(E17.8)') dat%chisq
        close(36)
 
-       ! title = trim(dpar%outdir)//'band_gains.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(37,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(37,file=title,status="new",action="write")
-       !    write(37,"(3x,8(A16))") dpar%band_label
-       ! end if
-       ! write(37,"(8(E16.4))") dat%gain
-       ! close(37)
+       title = trim(dpar%outdir)//'band_gains.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(37,file=title,status="old",position="append",action="write") 
+       else
+          open(37,file=title,status="new",action="write")
+       end if
+       write(37,fmt=fmt) dat%gain
+       close(37)
 
        title = trim(dpar%outdir)//'band_offsets.dat'
        inquire(file=title,exist=exist)
@@ -676,10 +676,8 @@ contains
           open(38,file=title,status="old",position="append",action="write") 
        else
           open(38,file=title,status="new",action="write")
-          write(38,"(3x,20(A16))") dpar%band_label
        end if
        write(38,fmt=fmt) dat%offset
-       ! write(38,"(20(E16.8))") dat%offset
        close(38)
        
     end if

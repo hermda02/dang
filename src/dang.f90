@@ -33,9 +33,9 @@ program dang
   !-----------------------------------------------------------------------------------------------------|  
   
   integer(i4b)                          :: i, j, k, l, m, n
-  integer(i4b)                          :: bp_iter
+  integer(i4b)                          :: bp_iter, namps
   real(dp), allocatable, dimension(:,:) :: map, rms, true_synch
-      
+
   ! Object Orient
   type(dang_params) :: dpar
   type(dang_data)   :: ddata
@@ -61,6 +61,7 @@ program dang
   npixpar    = 0.d0
   nglobalpar = 0.d0
   nump       = 0
+  namps      = 0
   nlheader   = size(header)
   !----------------------------------------------------------------------------------------------------------
   !----------------------------------------------------------------------------------------------------------
@@ -73,6 +74,8 @@ program dang
      ! Initialize ddata and components
      !----------------------------------------------------------------------------------------------------------
      call ddata%init_data_maps(dpar)
+
+     ! Initialize amplitude vector somewhere
 
      ! Initialize component
      call init_synch(dcomps,dpar,npix,nmaps)
@@ -142,8 +145,10 @@ contains
        if (ANY(dpar%joint_comp == trim(dpar%fg_label(n))) .and. dpar%joint_sample) then
           if (dpar%joint_pol) then
              npixpar = npixpar + 2*nump
+             namps   = namps + 2*nump
           else
              npixpar = npixpar + nump
+             namps   = namps + nump
           end if
        ! Count up foregrounds not included in the joint sampler
        else if (dpar%fg_samp_amp(n)) then
@@ -153,8 +158,9 @@ contains
        if (dpar%fg_samp_spec(n,1)) then
           if (index(dpar%fg_ind_region(n,1),'pix') /= 0) then
              ! Skip for now because the contribution is not trivial - esp with a mask
-             ! if (dpar%fg_spec_joint(n,1)) then
-
+             if (dpar%fg_spec_joint(n,1)) then
+                npixpar = npixpar + nump
+             end if
           else if (index(dpar%fg_ind_region(n,1),'full') /= 0) then
              if (dpar%fg_spec_joint(n,1)) then
                 ! Sampling fullsky jointly in Q and U
@@ -169,10 +175,18 @@ contains
     do n = 1, dpar%ntemp
        if (ANY(dpar%joint_comp == trim(dpar%temp_label(n)))) then
           nglobalpar = nglobalpar + dpar%temp_nfit(n)
+          namps      = namps + dpar%temp_nfit(n)
        else if (.not. ANY(dpar%joint_comp == trim(dpar%temp_label(n))) .or. .not. (dpar%joint_sample)) then
           nglobalpar = nglobalpar + size(dpar%pol_type)*dpar%temp_nfit(n)
        end if
    end do
+
+   ! write(*,*) 'namps : ', namps
+   ! write(*,*) 'npixpar : ', npixpar
+   ! write(*,*) 'nglobalpar : ', nglobalpar
+   allocate(ddata%amp_vec(namps))
+   ddata%amp_vec(:)  = 0.d0
+
 
     !--------------------------------------------------------------|
     !                   Calculation portion                        |               

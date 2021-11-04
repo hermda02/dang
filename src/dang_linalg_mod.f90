@@ -217,7 +217,7 @@ contains
       type(dang_data)                       :: dat
       type(dang_comps)                      :: compos
       real(dp), dimension(:), intent(in)    :: b
-      real(dp), dimension(:), intent(out)   :: x
+      real(dp), dimension(:), intent(inout) :: x
       integer(i4b),           intent(in)    :: map_n
       real(dp), allocatable, dimension(:)   :: r, q, d, s, b2, eta
       real(dp)                              :: converge
@@ -241,6 +241,7 @@ contains
       end if
 
       allocate(eta(n))
+      ! allocate(x(m))
 
       ! Draw a univariate
       do i = 1, n
@@ -255,10 +256,11 @@ contains
 
       ! Initial condition parameters
       !-----------------------------
-      x(:)     = 0.0d0
+      x        = dat%amp_vec
       i_max    = param%cg_iter
       converge = param%cg_converge
       !-----------------------------
+      ! call multiply_with_A(param, dat, compos, x, param%numinc, map_n)
 
       r  = b2 - return_Ax(param, dat, compos, x, param%numinc, map_n)
       d  = r
@@ -284,12 +286,13 @@ contains
          t4        = mpi_wtime()
          i         = i + 1
 
-         if (delta_new .gt. converge) then
-            write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-         else
+         write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+         if (delta_new .lt. converge) then
             write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
          end if
       end do
+
+      dat%amp_vec = x
 
       t6 = mpi_wtime()
       
@@ -301,97 +304,109 @@ contains
 
     end subroutine sample_cg_vec
 
-    subroutine compute_cg_precond(A,x,b,n,nnz_a,iters,converge)
-        
-      ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
-      ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"
+    subroutine sample_cg_vec_precond(x, b, param, dat, compos, map_n)
+
+      ! Implementation of the canned algorithm (B3) outlined in Jonathan Richard Shewuck (1994)          
+      ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"                    
 
       implicit none
-      real(dp), dimension(:,:), intent(in)  :: A
+      type(dang_params)                     :: param
+      type(dang_data)                       :: dat
+      type(dang_comps)                      :: compos
       real(dp), dimension(:), intent(in)    :: b
       real(dp), dimension(:), intent(out)   :: x
-      integer(i4b), intent(in)              :: n,iters
-      real(dp), intent(in)                  :: converge
-      integer(i4b), optional, intent(in)    :: nnz_a
-      real(dp), allocatable, dimension(:)   :: r, q, d, s, M 
-      real(dp)                              :: epsil, alpha, beta, delta_0
+      integer(i4b),           intent(in)    :: map_n
+      real(dp), allocatable, dimension(:)   :: r, q, d, s, b2, eta, prec
+      real(dp)                              :: converge
+      real(dp)                              :: alpha, beta, delta_0
       real(dp)                              :: delta_old, delta_new, t3, t4, t5, t6
-      integer(i4b)                          :: i_max, i, j
-        
-      real(dp),allocatable,dimension(:)     :: v
-      integer(i4b),allocatable,dimension(:) :: rp, ci
-      
-      t5 = mpi_wtime()
-      allocate(r(n),q(n),d(n),M(n),s(n))
-      
-      if(present(nnz_a)) then
-         allocate(v(nnz_a),rp(n+1),ci(nnz_a))
-         call A_to_CSR(A,rp,ci,v)
+      integer(i4b)                          :: i_max, i, j, n, m
+
+      real(dp), dimension(:), allocatable   :: test
+
+      m = size(b)
+
+      if (param%joint_pol) then
+         n = dat%npix*2
+      else
+         n = dat%npix
       end if
-      
-      x(:)     = 0.0d0
-      M(:)     = 1.d0
-      i_max = iters
-      
-      i = 0
 
-      write(*,*) 'Define preconditioner'
+      t5 = mpi_wtime()
+
+      allocate(r(m),q(m),d(m))
+      allocate(prec(m),s(m))
+      allocate(b2(m))
+      allocate(eta(n))
+
+      allocate(test(m))
+
+      ! Draw a univariate for sampling
       do i = 1, n
-         M(i) = 1.d0/A(i,i)
+         eta(i) = rand_normal(0.d0,1.d0)
       end do
 
-      i = 0
+      if (trim(param%ml_mode) == 'sample') then
+         b2 = b + compute_sample_vec(param, dat, compos, eta, param%numinc, map_n, b)
+      else if (trim(param%ml_mode) == 'optimize') then
+         b2 = b
+      end if
 
-      r = b
+      ! Initialize condition parameters
+      !--------------------------------
+      x(:)     = 0.0d0 
+      prec(:)  = 1.0d0
+      i_max    = param%cg_iter
+      converge = param%cg_converge
+      !--------------------------------
 
-      !$OMP PARALLEL PRIVATE(i)
-      !$OMP DO SCHEDULE(static)
-      do i = 1, n
-         d(i) = M(i)*r(i)
+      r = b2 - return_Ax(param, dat, compos, x, param%numinc, map_n)
+
+      write(*,*) 'Please dont use cg_precond - its broken still'
+      stop
+
+      Write(*,*) 'Initialize Preconditioner'
+
+      call create_inv_N_precond(param, dat, prec, map_n)
+
+      do j = 1, n
+         d(j) = r(j)*prec(j)
+         test(j) = r(j)*d(j)
       end do
-      !$OMP END DO
-      !$OMP END PARALLEL
-      delta_new = sum(r*d)
+      delta_new = sum(test)!sum(r*d)
       delta_0   = delta_new
-      write(*,*) delta_0
-      t3 = mpi_wtime()
-      do while( (i .lt. i_max) .and. (delta_new .gt. converge))!(epsil**2)*delta_0))
-         t3 = mpi_wtime()
-         if (present(nnz_a)) then
-            q = Ax_CSR(rp,ci,v,d)
-         else
-            q = matmul(A,d)
-         end if
+      i = 0
+      do while( (i .lt. i_max) .and. (delta_new .gt. converge))
+         t3    = mpi_wtime()
+         q     = return_Ax(param, dat, compos, d, param%numinc, map_n)
          alpha = delta_new/(sum(d*q))
-         x = x + alpha*d
+         x     = x + alpha*d
+
          if (mod(i,50) == 0) then
-            if (present(nnz_a)) then
-               r = b - Ax_CSR(rp,ci,v,x)
-            else
-               r = b - matmul(A,x)
-            end if
+            r = b2 - return_Ax(param, dat, compos, x, param%numinc, map_n)
          else
             r = r - alpha*q
          end if
-         !$OMP PARALLEL PRIVATE(i)
-         !$OMP DO SCHEDULE(static)
+
          do j = 1, n
-            s(j) = M(j)*r(j)
+            s(j) = r(j)*prec(j)
+            test(j) = r(j)*s(j)
          end do
-         !$OMP END DO
-         !$OMP END PARALLEL
+
          delta_old = delta_new
-         delta_new = sum(r*s)
-         beta = delta_new/delta_old
-         d  = s + beta*d
-         t4 = mpi_wtime()
-         i = i + 1
-         if (delta_new .gt. converge) then
-            write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-         else
+         delta_new = sum(test)
+
+         beta      = delta_new/delta_old
+         d         = s + beta*d
+         t4        = mpi_wtime()
+         i         = i + 1
+
+         write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+         if (delta_new .lt. converge) then
             write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
          end if
       end do
+
       t6 = mpi_wtime()
 
       write(*,fmt='(a,e12.5,a)') 'CG Total time: ', t6-t5, 's.'
@@ -399,8 +414,12 @@ contains
       deallocate(r)
       deallocate(q)
       deallocate(d)
+      deallocate(prec)
+      deallocate(s)
+      deallocate(b2)
+      deallocate(eta)
 
-    end subroutine compute_cg_precond
+    end subroutine sample_cg_vec_precond
 
     function compute_sample_vec(self, dat, compo, vec, nbands, map_n, rhs) result(res)
       !-----------------------------------------------------------------
@@ -422,10 +441,11 @@ contains
       integer(i4b)                           :: i, j, k, len, l, m, n, r, t, s
       integer(i4b)                           :: z, w, o
 
-      x = dat%npix
-      n = size(vec)
-      m = size(rhs)
+      x   = dat%npix
+      n   = size(vec)
+      m   = size(rhs)
       len = 0
+      l   = 1
 
       do i = 1, size(self%joint_comp)
          if (self%joint_comp(i) == 'synch') then
@@ -553,7 +573,7 @@ contains
       allocate(res(n))
 
       res     = 0.d0
-
+      
       !---------------------------------
       ! No multi-template handling yet
       ! l = 1
@@ -680,7 +700,7 @@ contains
          end if
       end do
 
-      ! How this works: result = sum_nu(T_nu^t N_nu^-1 T_nu)vec
+      ! How this works: result = sum_nu(T_nu^t N_nu^-1 T_nu)*vec
       !--------------------------------------------------------------
       ! Suppose T_nu is of size n, m, and input vector is of size m |
       ! Then N^-1 is of size n, n                                   |
@@ -774,8 +794,8 @@ contains
                   !$OMP DO SCHEDULE(static)
                   do i = 1, x
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-                     temp3(i) = temp2(i)*compute_spectrum(self,compo,bp(j),n,i,map_n)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
-                     if (self%joint_pol) temp3(x+i) = temp2(x+i)*compute_spectrum(self,compo,bp(j),n,i,map_n+1)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
+                     temp3(i) = temp2(i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
+                     if (self%joint_pol) temp3(x+i) = temp2(x+i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n+1)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
                   end do
                   !$OMP END DO
                   !$OMP END PARALLEL
@@ -802,6 +822,54 @@ contains
       end do
 
     end function return_Ax
+
+    subroutine create_inv_N_precond(self,dat,precond,map_n)
+      !--------------------------------------------------------------
+      ! Subroutine which takes in the preconditioner and spits out
+      ! a preconditioner vector which is just the sum (over bands) of 
+      ! the inverse noise covariance matrices.
+      !--------------------------------------------------------------
+      implicit none
+      type(dang_params)         :: self
+      type(dang_data)           :: dat
+      integer(i4b), intent(in)  :: map_n
+
+      real(dp), dimension(:), intent(inout) :: precond
+      integer(i4b)                          :: leng, mode, i, j
+
+      leng = size(precond)
+
+      if (leng < 2*dat%npix) then
+         mode = 1
+      else if (leng > 2*dat%npix) then
+         mode = 2
+      else
+         write(*,*) "Something wrong with the preconditioner"
+         write(*,*) leng
+         stop
+      end if
+
+      precond(:) = 0.d0
+
+      if (mode == 1) then
+         do i = 1, dat%npix
+            do j = 1, nbands
+               precond(i) = precond(i) + 1.d0/(dat%rms_map(i-1,map_n,j)**2.0)
+            end do
+         end do
+         precond(dat%npix:) = 1.d0
+      else if (mode == 2) then
+         do i = 1, dat%npix
+            do j = 1, nbands
+               precond(i) = precond(i) + 1.d0/(dat%rms_map(i-1,2,j)**2.0)
+               precond(i+dat%npix) = precond(i) + 1.d0/(dat%rms_map(i-1,3,j)**2.0)
+            end do
+         end do
+         precond(2*dat%npix:) = 1.d0
+      end if
+
+    end subroutine create_inv_N_precond
+
 
     !-------------------------------------------------------------------------------------
 

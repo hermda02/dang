@@ -163,9 +163,14 @@ contains
     ! Computation
     if (trim(method) == 'cg') then
        if (rank == master) write(*,*) 'Joint sampling using CG.'
+       ! call sample_cg_vec(c,dpar,dat,compo,map_n)
        call sample_cg_vec(b,c,dpar,dat,compo,map_n)
-    else 
+    else if (trim(method) == 'cg_precond') then
+       call sample_cg_vec_precond(b,c,dpar,dat,compo,map_n)
+    else
+       write(*,*) trim(method)
        write(*,*) 'cg is the only currently available method for joint sampling'
+       stop
     end if
     
     ! Solver returns a vector - first filled with component amplitudes, then template amplitudes
@@ -178,7 +183,7 @@ contains
           do n = 1, dpar%ncomp
              if (trim(dpar%joint_comp(m)) == trim(dpar%fg_label(n))) then
                 do i = 1, x
-                   dat%fg_map(i-1,map_n,0,n) = b(w+i)
+                   dat%fg_map(i-1,map_n,0,n) = dat%amp_vec(w+i)!b(w+i)
                 end do
                 w = w + x
              end if
@@ -189,7 +194,7 @@ contains
                 do while (l .lt. dpar%temp_nfit(n))
                    do j= 1, z
                       if (dpar%temp_corr(n,j)) then
-                         dat%temp_amps(j,map_n,n) = b(w+l)
+                         dat%temp_amps(j,map_n,n) = dat%amp_vec(w+l)!b(w+l)
                          l = l + 1
                       else
                          dat%temp_amps(j,map_n,n) = 0.d0
@@ -207,11 +212,11 @@ contains
           do n = 1, dpar%ncomp
              if (trim(dpar%joint_comp(m)) == trim(dpar%fg_label(n))) then
                 do i = 1, x
-                   dat%fg_map(i-1,map_n,0,n) = b(w+i)
+                   dat%fg_map(i-1,map_n,0,n) = dat%amp_vec(w+i)!b(w+i)
                 end do
                 w = w + x
                 do i = 1, x
-                   dat%fg_map(i-1,map_n+1,0,n) = b(w+i)
+                   dat%fg_map(i-1,map_n+1,0,n) = dat%amp_vec(w+i)!b(w+i)
                 end do
                 w = w + x
              end if
@@ -222,8 +227,8 @@ contains
                 do while (l .lt. dpar%temp_nfit(n))
                    do j = 1, z
                       if (dpar%temp_corr(n,j)) then
-                         dat%temp_amps(j,map_n,n)   = b(w+l)
-                         dat%temp_amps(j,map_n+1,n) = b(w+l)
+                         dat%temp_amps(j,map_n,n)   = dat%amp_vec(w+l)!b(w+l)
+                         dat%temp_amps(j,map_n+1,n) = dat%amp_vec(w+l)!b(w+l)
                          l = l + 1
                       end if
                    end do
@@ -231,8 +236,8 @@ contains
                 if (dpar%temp_nfit(n) == 1) then
                    do j = 1, z
                       if (dpar%temp_corr(n,j)) then
-                         dat%temp_amps(j,map_n,n)   = b(w+l)
-                         dat%temp_amps(j,map_n+1,n) = b(w+l)
+                         dat%temp_amps(j,map_n,n)   = dat%amp_vec(w+l)!b(w+l)
+                         dat%temp_amps(j,map_n+1,n) = dat%amp_vec(w+l)!b(w+l)
                          l = l + 1
                       end if
                    end do
