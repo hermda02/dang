@@ -1197,7 +1197,8 @@ contains
        map1 = dat%fg_map(:,map_n,band,fg)
     end if
     
-    map2  = dat%sig_map(:,map_n,band)-dat%offset(band)
+    map1  = dat%sig_map(:,map_n,1)
+    map2  = dat%sig_map(:,map_n,band)!-dat%offset(band)
     noise = dat%rms_map(:,map_n,band)
     N_inv = 1.d0/(noise**2)
     
@@ -1207,6 +1208,8 @@ contains
     gain = sum(mask*map1*N_inv*map2)/sum(mask*map1*N_inv*map1)
     
     norm = sqrt(sum(mask*map1*N_inv*map1))
+
+    write(*,*) gain, norm
     
     ! Sample variable can be any number. If it's present, we sample!
     if (present(sample)) then

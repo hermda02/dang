@@ -286,17 +286,17 @@ contains
          t4        = mpi_wtime()
          i         = i + 1
 
-         write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-         if (delta_new .lt. converge) then
-            write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-         end if
+         ! write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+         ! if (delta_new .lt. converge) then
+         !    write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+         ! end if
       end do
 
       dat%amp_vec = x
 
       t6 = mpi_wtime()
       
-      write(*,fmt='(a,e12.5,a)') 'CG Total time: ', t6-t5, 's.'
+      ! write(*,fmt='(a,e12.5,a)') 'CG Total time: ', t6-t5, 's.'
       
       deallocate(r)
       deallocate(q)

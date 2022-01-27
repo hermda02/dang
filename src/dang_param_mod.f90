@@ -467,8 +467,8 @@ contains
           par%bp_file(j) = ''
        else
           call get_parameter_hashtable(htbl, 'BP_FILE' // itext, par_string=par%bp_file(j))
+          write(*,*) par%bp_file(j)
        end if
-
 
        call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%band_label(j))
        call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%band_mapfile(j))
@@ -481,6 +481,7 @@ contains
        call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(j))
        call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(j))
        call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(j))
+       write(*,*) 'to the next one'
     end do
   end subroutine read_data_params
   

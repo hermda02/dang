@@ -26,6 +26,7 @@ contains
     write(*,*) 'Allocated synch parameter maps'
     if (trim(param%fg_spec_file(1,1)) == 'none') then 
        write(*,fmt='(a,f8.4)') 'Full sky beta_s estimate ', param%fg_init(1,1)
+       write(*,*) ''
        self%beta_s     = param%fg_init(1,1) ! Synchrotron beta initial guess
     else
        write(*,*) "No init files found"
@@ -44,7 +45,7 @@ contains
     allocate(self%beta_d(0:npix-1,nmaps))
     allocate(self%T_d(0:npix-1,nmaps))
     write(*,*) 'Allocated dust parameter maps!'
-
+    write(*,*) ''
     self%beta_d     = 1.53d0              ! Dust beta initial guess
     self%T_d        = 19.6d0
     
@@ -61,7 +62,7 @@ contains
     allocate(self%T_d(0:npix-1,nmaps))
     allocate(self%HI_amps(param%numinc))
     write(*,*) 'Allocated HI fitting maps!'
-
+    write(*,*) ''
     call read_bintab(trim(param%datadir)//trim(param%HI_file),self%HI,npix,1,nullval,anynull,header=head)
 
     if (trim(param%HI_Td_init) == 'none') then
