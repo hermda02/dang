@@ -1,22 +1,20 @@
 # New Makefile attempt for super-dope optimized sickness
 
-F90       = ifort
-MPF90     = mpiifort
-F90FLAGS  = -g -C -traceback
-
-LOCAL=/mn/stornext/u3/hke/owl/local
+F90       = gfortran
+MPF90     = mpifort
+F90FLAGS  = -g -C -traceback -03
 
 #LAPACK
 MKLPATH         = $(MKLROOT)
 LAPACK_INCLUDE  =
-LAPACK_LINK     = -shared-intel -Wl,-rpath,$(MKLPATH) -L$(MKLPATH)  -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread
+LAPACK_LINK     = -shared-intel -Wl,-rpath,$(MKLPATH) -L$(MKLPATH) -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread
 
 #CFITSIO
 CFITSIO_INCLUDE =
-CFITSIO_LINK    = -L$(LOCAL)/lib -lcfitsio
+CFITSIO_LINK    = -L/usr/lib -lcfitsio
 
 # HEALPIX
-HEALPIX         = /mn/stornext/u3/hke/owl/local/src/dagsshealpix
+HEALPIX         = /usr/local/src/Healpix_3.70
 HEALPIX_INCLUDE = -I$(HEALPIX)/include
 HEALPIX_LINK    = -L$(HEALPIX)/lib -lhealpix
 
@@ -32,7 +30,7 @@ dang :
 
 # Compilation stage
 %.o : %.f90
-	$(MPF90) -fpp $(F90COMP) -qopenmp -parallel -c $<
+	$(MPF90) -fpp $(F90COMP) -fopenmp -parallel -c $<
 
 # Cleaning command
 .PHONY: clean

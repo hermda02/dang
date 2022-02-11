@@ -9,7 +9,7 @@ LOCAL=/usr/local/src
 #LAPACK
 MKLPATH         = $(MKLROOT)
 LAPACK_INCLUDE  =
-LAPACK_LINK     = -shared-intel -Wl,-rpath,$(MKLPATH) -L$(MKLPATH)  -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread
+LAPACK_LINK     = -shared -Wl,-rpath,$(MKLPATH) -L$(MKLPATH)  -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread
 
 #CFITSIO
 CFITSIO_INCLUDE =
@@ -28,7 +28,7 @@ OUTPUT          = dang
 
 # Executable
 dang: $(OBJS)
-	$(MPF90) $(OBJS)  -o $(OUTPUT) $(LINK)
+	$(MPF90) $(OBJS) -fopenmp -fPIC -o $(OUTPUT) $(LINK)
 
 # Dependencies
 spline_1D_mod.o        : math_tools.o locate_mod.o
@@ -43,7 +43,7 @@ dang.o : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_linalg_mod.o dang_s
 
 # Compilation stage
 %.o : %.f90
-	$(MPF90) $(F90COMP) -c $<
+	$(MPF90) $(F90COMP) -fopenmp -fPIC -c $<
 
 # Cleaning command
 .PHONY: clean

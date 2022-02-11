@@ -1388,14 +1388,16 @@ contains
                 do j = 1, nbands
                    ! write(*,*) 'j = ', j
                    ss  = dat%fg_map(pixel,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                   sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,0,ind))*log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+                   sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,0,ind))*&
+                        log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
                 end do
                 ! write(*,*) ''
              end do
           else
              do j = 1, nbands
                 ss  = dat%fg_map(pixel,map_n,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                sum = sum + (((1.0/dat%rms_map(pixel,map_n,j))**2)*(ss/dat%fg_map(pixel,map_n,0,ind))*log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+                sum = sum + (((1.0/dat%rms_map(pixel,map_n,j))**2)*(ss/dat%fg_map(pixel,map_n,0,ind))*&
+                     log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
              end do
           end if
        else
@@ -1406,7 +1408,8 @@ contains
                    if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
                    do j = 1, nbands
                       ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                      sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+                      sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*&
+                           log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
                    end do
                 end do
              end do
@@ -1415,7 +1418,8 @@ contains
                 if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
                 do j = 1, nbands
                    ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                   sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+                   sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*&
+                        log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
                 end do
              end do
           end if
