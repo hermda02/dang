@@ -15,23 +15,32 @@ module dang_util_mod
   real(dp)           :: t1, t2, t3
   real(dp)           :: nullval
   real(dp)           :: missval = -1.6375d30
-  real(dp)           :: chisq
   integer(i4b)       :: ierr, rank, numprocs
   integer(i4b)       :: nbands, npix, nmaps, nside, nfgs, npar
+  integer(i4b)       :: npixpar, nglobalpar
   integer(i4b)       :: iter, niter, ordering, nlheader
   integer(i4b)       :: proc_per_band
   integer(i4b)       :: master      = 0 
   integer(i4b)       :: from_master = 1
   integer(i4b)       :: from_worker = 2
   integer(i4b)       :: nump ! Number of unmasked pixels
-  logical(lgt)       :: anynull
+  logical(lgt)       :: anynull, exist
   integer(i4b) status(mpi_status_size)
   character(len=5)                  :: iter_str
   character(len=80), dimension(180) :: header
-  character(len=80), dimension(3)   :: tqu
+  character(len=80), dimension(3)   :: tqu 
+  character(len=128)                :: title
   
+  real(dp), allocatable, dimension(:) :: amp_vec
+
   public    :: npix, nbands, nmaps, ordering, header, h, c, k_B, T_CMB
-  public    :: iter, iter_str, chisq
+  public    :: npixpar, nglobalpar, title
+  public    :: iter, iter_str, exist, tqu
+
+      
+  public    ::  amp_vec
+  
+
 
 contains 
   
@@ -40,9 +49,9 @@ contains
     call mpi_init(ierr)
     call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)
     call mpi_comm_size(MPI_COMM_WORLD, numprocs, ierr)
-    !     if (rank == 0) then
-    !        write(*,'(a,i8)') ' The number of processors available = ', numprocs
-    !     end if
+    tqu(1)            = 'T'
+    tqu(2)            = 'Q'
+    tqu(3)            = 'U'
   end subroutine init_mpi
   
   ! Small utility for converting an integer to a string                                              
