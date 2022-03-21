@@ -68,7 +68,7 @@ contains
     if (trim(param%HI_Td_init) == 'none') then
        self%T_d = param%HI_Td_mean
     else
-       call read_bintab(trim(param%HI_Td_init),self%T_d,npix,1,nullval,anynull,header=head)
+       call read_bintab(trim(param%datadir)//trim(param%HI_Td_init),self%T_d,npix,1,nullval,anynull,header=head)
     end if
 
   end subroutine init_hi_fit

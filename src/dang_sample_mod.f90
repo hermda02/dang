@@ -260,7 +260,7 @@ contains
     deallocate(c)
   end subroutine sample_joint_amp
 
-  subroutine sample_index(dpar, dat, comp, ind, map_n) 
+  subroutine sample_index(dpar, dat, comp, ind, map_n, output) 
     !------------------------------------------------------------------------
     ! Warning -- not set up for foregrounds with multiple spectral parameters yet
     ! I.e. will only sample beta_d, and not T_d
@@ -291,6 +291,16 @@ contains
     character(len=128)                         :: title    
     real(dp), allocatable, dimension(:,:)      :: chisq_map
     character(len=3)                           :: l_str
+
+    character(len=5)                           :: pxl_str
+    integer(i4b), optional, intent(in)         :: output
+
+    logical(lgt)                               :: test
+
+    test = .false.
+    if (present(output)) then
+       test = .true.
+    end if
     
     !------------------------------------------------------------------------
     ! Spectral index sampler, using the Metropolis approach.
@@ -425,14 +435,23 @@ contains
        if (map_n == -1) then
           indx_sample_low = indx_low(:,dpar%pol_type(1))
           ! Parallelization breaks down for prior evaluation
-          !$OMP PARALLEL PRIVATE(i,j,k,l,c,b,sol,sam,lnl_old,lnl_new,ratio,t)
+          !!$OMP PARALLEL PRIVATE(i,j,k,l,c,b,sol,sam,lnl_old,lnl_new,ratio,t)
 
-          !$OMP DO SCHEDULE(STATIC)
+          !!$OMP DO SCHEDULE(STATIC)
           do i = 0, npix2-1
+             write(*,*) i
              a         = 0.d0
              sol       = indx_low(i,dpar%pol_type(1))
              sam       = sol
              if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) cycle
+
+
+             write(pxl_str, '(i0.5)') i
+             if (test) then
+                open(41,file=trim(dpar%outdir)//'metrop_test_'//pxl_str//'.dat')
+                open(42,file=trim(dpar%outdir)//'lnls_'//pxl_str//'.dat')
+             end if
+
                         
              ! First evaluate likelihood from previous sample
              c = eval_sample_lnL_pixel(dpar,comp,fg_map_low(i,:),data_low(i,:,:),rms_low(i,:,:),sol,ind,map_n)
@@ -481,6 +500,10 @@ contains
                 ! Take the ratio of the likelihoods
                 diff = lnl_new - lnl_old
                 ratio = exp(diff)
+                
+                if (test) then
+                   write(42,fmt='(2(E17.8))') lnl_old, lnl_new
+                end if
 
                 if (trim(dpar%ml_mode) == 'optimize') then
                    if (ratio > 1.d0) then
@@ -497,13 +520,20 @@ contains
                       lnl_old = lnl_new
                    end if
                 end if
+                paccept = naccept/l
+                if (test) then
+                   write(41,fmt='(6(E17.8))') t, naccept, l, paccept, ratio, num
+                end if
                 
-                ! paccept = naccept/l
                 sol = sam
                 indx_sample_low(i) = sol
              end do
           end do
-          !$OMP END PARALLEL
+          if (test) then
+             close(41)
+             close(42)
+          end if
+          !!$OMP END PARALLEL
           
        !----------------------------|
        ! Sample for a single poltype|
@@ -804,6 +834,31 @@ contains
     
   end subroutine sample_index
 
+  ! function Inv_sample(dpar, dat, comp, ind, map_n, x_in, lnL, prior) result(val)
+  !   !------------------------------------------------------------------------
+  !   ! Framework for inversion sampling a parameters
+  !   !------------------------------------------------------------------------
+  !   implicit none
+    
+  !   class(dang_params)                         :: dpar
+  !   type(dang_comps),            intent(inout) :: comp
+  !   type(dang_data)                            :: dat
+  !   integer(i4b),                intent(in)    :: map_n, ind
+  !   real(dp),     dimension(:),  intent(in)    :: px
+  !   integer(i4b)                               :: nside1, nside2, npix2, f
+  !   real(dp),     dimension(2),  optional      :: prior
+  !   interface
+  !      function lnL(x)
+  !        use healpix_types
+  !        implicit none
+  !        real(dp), intent(in) :: x
+  !        real(dp)             :: lnL
+  !      end function lnL
+  !   end interface
+
+
+
+
   function eval_sample_lnL_fullsky(dpar,comp,fg_map,map2fit,mask,rms,sample,ind,map_n) result(lnL)
     implicit none
 
@@ -1024,7 +1079,7 @@ contains
   end subroutine template_fit
     
   ! This architecture of this function has not been verified yet
-  subroutine sample_HI_T(dpar, dat, comp, map_n)
+  subroutine sample_HI_T(dpar, dat, comp, map_n, output)
     implicit none
     
     class(dang_params)                         :: dpar
@@ -1043,6 +1098,15 @@ contains
     real(dp)                                   :: lnl_old, lnl_new
     real(dp)                                   :: diff, ratio
     real(dp)                                   :: paccept, naccept, s
+
+    integer(i4b), optional, intent(in)         :: output
+
+    logical(lgt)                               :: test
+
+    test = .false.
+    if (present(output)) then
+       test = .true.
+    end if
     
     te      = comp%T_d
     cov     = dat%rms_map*dat%rms_map
@@ -1090,7 +1154,12 @@ contains
           c   = a
           
           lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%HI_Td_mean, dpar%HI_Td_std))
-          
+
+          if (test) then
+             open(41,file='metrop_test.dat')
+             open(42,file='lnls.dat')
+          end if
+          s = dpar%HI_Td_step
           do l = 1, dpar%nsample
              ! if (mod(l,50) == 0) then
              !    if (paccept > 0.6d0) then
@@ -1098,9 +1167,10 @@ contains
              !    else if (paccept < 0.4d0) then
              !       s = s/2.0
              !    end if
+             !    write(*,*) paccept, s
              ! end if
-             ! Begin sampling from the prior
-             t = sam + rand_normal(0.d0,dpar%HI_Td_std)
+             ! Draw a sample
+             t = sam + rand_normal(0.d0,s)
              b = 0.d0
              do j = 1, nbands
                 b = b + (((comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),t)) &
@@ -1111,6 +1181,9 @@ contains
              lnl_new = -0.5d0*b + log(eval_normal_prior(sam,dpar%HI_Td_mean, dpar%HI_Td_std))
              diff = lnl_new - lnl_old
              ratio = exp(diff)
+             if (test) then
+                write(42,fmt='(2(E17.8))') lnl_old, lnl_new
+             end if
              if (trim(dpar%ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
                    sam      = t
@@ -1128,7 +1201,14 @@ contains
                 end if
              end if
              paccept = naccept/l
+             if (test) then
+                write(41,fmt='(4(E17.8))') t, paccept, ratio, num
+             end if
           end do
+          if (test) then
+             close(41)
+             close(42)
+          end if
           if (sam == 0.d0) then
              write(*,*) 'Error: T_d = 0.d0 accepted!'
              stop
@@ -1171,9 +1251,12 @@ contains
     integer(i4b), optional,  intent(in) :: sample
     real(dp), allocatable, dimension(:) :: map1, map2, mask, noise, N_inv
     real(dp)                            :: norm, gain
+
+    real(dp), allocatable, dimension(:,:) :: map3
     
     allocate(map1(0:dat%npix-1))
     allocate(map2(0:dat%npix-1))
+    allocate(map3(0:dat%npix-1,1))
     allocate(mask(0:dat%npix-1))
     allocate(noise(0:dat%npix-1))
     allocate(N_inv(0:dat%npix-1))
@@ -1183,6 +1266,13 @@ contains
     mask = 0.d0
     
     mask = dat%masks(:,1)
+
+    ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
+    do i = 0, dat%npix-1
+       if (mask(i) == missval) then
+          mask(i) = 0.d0
+       end if
+    end do
     
     ! map1 is the map we calibrate against here, being a component map.
     ! Must ensure the map is calculated prior to gain fitting
@@ -1197,8 +1287,7 @@ contains
        map1 = dat%fg_map(:,map_n,band,fg)
     end if
     
-    map1  = dat%sig_map(:,map_n,1)
-    map2  = dat%sig_map(:,map_n,band)!-dat%offset(band)
+    map2  = dat%sig_map(:,map_n,band)-dat%offset(band)
     noise = dat%rms_map(:,map_n,band)
     N_inv = 1.d0/(noise**2)
     
@@ -1206,16 +1295,13 @@ contains
     ! solution through a linear fit to the foreground map.
     
     gain = sum(mask*map1*N_inv*map2)/sum(mask*map1*N_inv*map1)
-    
-    norm = sqrt(sum(mask*map1*N_inv*map1))
-
-    write(*,*) gain, norm
+    norm = sqrt(sum(mask*map1*map1*N_inv))
     
     ! Sample variable can be any number. If it's present, we sample!
     if (present(sample)) then
        gain = gain + rand_normal(0.d0,1.d0)/norm
     end if
-    
+
     ! Save to data type variable corresponding to the band.
     dat%gain(band) = gain
     
@@ -1246,6 +1332,12 @@ contains
     allocate(mask(0:dat%npix-1))
     
     mask = dat%masks(:,1)
+
+    do i = 0, dat%npix-1
+       if (mask(i) == missval) then
+          mask(i) = 0.d0
+       end if
+    end do
     
     ! map1 is the map we calibrate against here, being a component map.
     ! Must ensure the map is calculated prior to gain fitting
@@ -1276,13 +1368,12 @@ contains
     
     offset = (y*x2 - x*xy)/(n*x2 - x**2)
     
-    ! stop
     
-    ! norm   = sum(mask(:))*sum(mask(:)*(map1(:)**2))-(sum(mask(:)*map1(:))**2)
+    norm   = sum(mask(:))*sum(mask(:)*(map1(:)**2))-(sum(mask(:)*map1(:))**2)
     
-    ! if (present(sample)) then
-    !    offset = offset + rand_normal(0.d0,1.d0)/norm
-    ! end if
+    if (present(sample)) then
+       offset = offset + rand_normal(0.d0,1.d0)/norm
+    end if
     
     dat%offset(band) = offset
     

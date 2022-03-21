@@ -85,8 +85,10 @@ module dang_param_mod
      real(dp)                                          :: thresh         ! Threshold for the HI fitting (sample pixels under thresh)
      character(len=512)                                :: HI_file        ! HI map filename
      character(len=512)                                :: HI_Td_init     ! HI fitting dust temp estimate
-     real(dp)                                          :: HI_Td_mean     ! HI Temperature sampling mean
-     real(dp)                                          :: HI_Td_std      ! HI Temperature sampling std
+     real(dp)                                          :: HI_Td_mean     ! HI Temperature prior mean
+     real(dp)                                          :: HI_Td_std      ! HI Temperature prior std
+     real(dp)                                          :: HI_Td_step     ! Td sampling step size
+
      
   end type dang_params
   
@@ -467,7 +469,7 @@ contains
           par%bp_file(j) = ''
        else
           call get_parameter_hashtable(htbl, 'BP_FILE' // itext, par_string=par%bp_file(j))
-          write(*,*) par%bp_file(j)
+          ! write(*,*) par%bp_file(j)
        end if
 
        call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%band_label(j))
@@ -481,7 +483,6 @@ contains
        call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(j))
        call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(j))
        call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(j))
-       write(*,*) 'to the next one'
     end do
   end subroutine read_data_params
   
@@ -639,6 +640,7 @@ contains
        call get_parameter_hashtable(htbl,'T_MAP_INIT',par_string=par%HI_Td_init)
        call get_parameter_hashtable(htbl,'T_MEAN',par_dp=par%HI_Td_mean)
        call get_parameter_hashtable(htbl,'T_STD',par_dp=par%HI_Td_std)
+       call get_parameter_hashtable(htbl,'T_STEP',par_dp=par%HI_Td_step)
        
        n2            = par%ntemp
        

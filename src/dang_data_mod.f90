@@ -3,6 +3,7 @@ module dang_data_mod
   use dang_util_mod
   use dang_param_mod
   use dang_component_mod
+  use dang_bp_mod
   implicit none
 
   type, public                                :: dang_data
@@ -31,6 +32,8 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:)     :: temp_norm  ! Where we store template normalizations
 
     real(dp), allocatable, dimension(:)       :: amp_vec    ! Amplitude vector returned from the CG solver
+    real(dp), allocatable, dimension(:)       :: band_chisq ! A variable to store the chisq of each band
+
   contains
     procedure :: init_data_maps
     procedure :: read_data_maps
@@ -64,7 +67,8 @@ contains
 
     allocate(self%gain(nbands))
     allocate(self%offset(nbands))
-
+    allocate(self%band_chisq(nbands))
+    
     self%gain   = 1.d0
     self%offset = 0.d0
 
@@ -253,7 +257,7 @@ contains
   end function a2t
 
   function f2t(nu)
-    ! [uK_cmb/MJysr-2]
+    ! [uK_cmb/MJysr-1]
     ! Assume that nu is in GHz
     implicit none
     real(dp), intent(in) :: nu
@@ -679,7 +683,27 @@ contains
        end if
        write(38,fmt=fmt) dat%offset
        close(38)
-       
+
+       title = trim(dpar%outdir)//'HI_Td_mean.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(39,file=title,status="old",position="append",action="write") 
+       else
+          open(39,file=title,status="new",action="write")
+       end if
+       write(39,'(E17.8)') mask_avg(comp%T_d(:,1),dat%masks(:,1))
+       close(39)
+
+       title = trim(dpar%outdir)//'band_chisq.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(40,file=title,status="old",position="append",action="write") 
+       else
+          open(40,file=title,status="new",action="write")
+       end if
+       write(40,fmt=fmt) dat%band_chisq
+       close(40)
+
     end if
     
   end subroutine write_data

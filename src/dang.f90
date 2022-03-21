@@ -181,183 +181,186 @@ contains
        end if
    end do
 
-   ! write(*,*) 'namps : ', namps
-   ! write(*,*) 'npixpar : ', npixpar
-   ! write(*,*) 'nglobalpar : ', nglobalpar
    allocate(ddata%amp_vec(namps))
    ddata%amp_vec(:)  = 0.d0
 
-
-    !--------------------------------------------------------------|
-    !                   Calculation portion                        |               
-    !--------------------------------------------------------------|
-
-    do iter = 1, dpar%ngibbs
-
-       !--------------------- BP SWAP CHUNK -----------------------|
-       ! -- Swap in a different BeyondPlanck map each iteration -- |
-       !-----------------------------------------------------------|
-       if (dpar%bp_swap) then
-          call swap_bp_maps(ddata,dpar)
-          write(*,*) ''
-          bp_iter = bp_iter + 1
-          call convert_maps_bp(ddata, dpar)
-          write(*,*) ''
-          ! Check to see if any swapped maps need to be dust corrected                               
-          do j = 1, nbands
-             if (dpar%bp_map(j)) then
-                if (dpar%dust_corr(j)) then
-                   call dust_correct_band(ddata,dpar,dcomps,j,iter)
-                end if
-             end if
-          end do
-          write(*,*) ''
-       end if       
-       ! --------------------------------------------------------------
-       ! Joint sampling section - checks for templates and foregrounds
-       ! in the joint sampling component list
-       ! --------------------------------------------------------------
-       if (dpar%joint_sample) then
-          if (dpar%joint_pol) then
-             call sample_joint_amp(dpar,ddata,dcomps,2,trim(dpar%solver))
-          else
-             do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                call sample_joint_amp(dpar,ddata,dcomps,k,trim(dpar%solver))
-             end do
-          end if             
-          do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-             do m = 1, size(dpar%joint_comp)
-                ! Extrapolate foreround solutions
-                do n = 1, dpar%ncomp
-                   if (trim(dpar%joint_comp(m)) == trim(dpar%fg_label(n))) then
-                      call extrapolate_foreground(dpar,ddata,dcomps,n,k)
-                   end if
-                end do
-                ! Extrapolate template solutions
-                do n = 1, dpar%ntemp
-                   if (trim(dpar%joint_comp(m)) == trim(dpar%temp_label(n))) then
-                      call extrapolate_template(dpar,ddata,dcomps,n,k)
-                   end if
-                end do
-             end do
-          end do
-          ! How good is the fit and what are the parameters looking like?
-          call write_stats_to_term(ddata,dpar,dcomps,iter)
+   !--------------------------------------------------------------|
+   !                   Calculation portion                        |               
+   !--------------------------------------------------------------|
+   
+   do iter = 1, dpar%ngibbs
+      
+      !--------------------- BP SWAP CHUNK -----------------------|
+      ! -- Swap in a different BeyondPlanck map each iteration -- |
+      !-----------------------------------------------------------|
+      if (dpar%bp_swap) then
+         call swap_bp_maps(ddata,dpar)
+         write(*,*) ''
+         bp_iter = bp_iter + 1
+         call convert_maps_bp(ddata, dpar)
+         write(*,*) ''
+         ! Check to see if any swapped maps need to be dust corrected                               
+         do j = 1, nbands
+            if (dpar%bp_map(j)) then
+               if (dpar%dust_corr(j)) then
+                  call dust_correct_band(ddata,dpar,dcomps,j,iter)
+               end if
+            end if
+         end do
+         write(*,*) ''
       end if
+      ! --------------------------------------------------------------
+      ! Joint sampling section - checks for templates and foregrounds
+      ! in the joint sampling component list
+      ! --------------------------------------------------------------
+      if (dpar%joint_sample) then
+         if (dpar%joint_pol) then
+            call sample_joint_amp(dpar,ddata,dcomps,2,trim(dpar%solver))
+         else
+            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+               call sample_joint_amp(dpar,ddata,dcomps,k,trim(dpar%solver))
+            end do
+         end if
+         do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+            do m = 1, size(dpar%joint_comp)
+               ! Extrapolate foreround solutions
+               do n = 1, dpar%ncomp
+                  if (trim(dpar%joint_comp(m)) == trim(dpar%fg_label(n))) then
+                     call extrapolate_foreground(dpar,ddata,dcomps,n,k)
+                  end if
+               end do
+               ! Extrapolate template solutions
+               do n = 1, dpar%ntemp
+                  if (trim(dpar%joint_comp(m)) == trim(dpar%temp_label(n))) then
+                     call extrapolate_template(dpar,ddata,dcomps,n,k)
+                  end if
+               end do
+            end do
+         end do
+         ! How good is the fit and what are the parameters looking like?
+         call write_stats_to_term(ddata,dpar,dcomps,iter)
+      end if
+      
+      ! ------------------------------------------------------------------------------------------
+      ! Sample amplitudes
+      ! ------------------------------------------------------------------------------------------
+      do n = 1, dpar%ncomp
+         if (dpar%fg_samp_amp(n)) then
+            write(*,*) "Sample "//trim(dpar%fg_label(n))//" amplitudes."
+            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+               ddata%fg_map(:,k,0,n) = sample_fg_amp(dpar,ddata,dcomps,n,k)
+               call extrapolate_foreground(dpar,ddata,dcomps,n,k)
+            end do
+         end if
+      end do
+      do n = 1, dpar%ntemp
+         if (.not. ANY(dpar%joint_comp == trim(dpar%temp_label(n))) .or. .not. (dpar%joint_sample)) then
+            if (dpar%temp_sample(n)) then
+               write(*,*) "Sample "//trim(dpar%fg_label(n))//" template amplitudes."
+               do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+                  call template_fit(dpar,ddata,dcomps,k,n)
+                  call extrapolate_template(dpar,ddata,dcomps,n,k)
+               end do
+            end if
+         end if
+      end do
+      
+      ! ------------------------------------------------------------------------------------------
+      ! Sample spectral parameters
+      ! ------------------------------------------------------------------------------------------
+      do n = 1, dpar%ncomp
+         if (dpar%fg_samp_spec(n,1)) then
+            if (dpar%fg_spec_joint(n,1)) then
+               write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta jointly."
+               write(*,*) "---------------------------------"
+               ! call sample_new_index(dpar,ddata,dcomps,n,-1)
+               call sample_index(dpar,ddata,dcomps,n,-1,1000)
+            else
+               do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+                  write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta for "//trim(tqu(k))//"."
+                  write(*,*) "---------------------------------"
+                  call sample_index(dpar,ddata,dcomps,n,k)
+               end do
+            end if
+            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+               call extrapolate_foreground(dpar,ddata,dcomps,n,k)
+            end do
+            ! How good is the fit and what are the parameters looking like?
+            call write_stats_to_term(ddata,dpar,dcomps,iter)
+         end if
+      end do
+      ! ------------------------------------------------------------------------------------------
+      ddata%res_map = ddata%sig_map
+      do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+         do j = 1, nfgs
+            ddata%res_map(:,k,:)  = ddata%res_map(:,k,:) - ddata%fg_map(:,k,1:,j)
+         end do
+         if (rank == master) then
+            call write_data(dpar,ddata,dcomps,k)
+         end if
+      end do
+      !-------------------------------------------------------------------------------------------
 
-       ! ------------------------------------------------------------------------------------------
-       ! Sample amplitudes
-       ! ------------------------------------------------------------------------------------------
-       do n = 1, dpar%ncomp
-          if (dpar%fg_samp_amp(n)) then
-             write(*,*) "Sample "//trim(dpar%fg_label(n))//" amplitudes."
-             do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                ddata%fg_map(:,k,0,n) = sample_fg_amp(dpar,ddata,dcomps,n,k)
-                call extrapolate_foreground(dpar,ddata,dcomps,n,k)
-             end do
-          end if
-       end do
-       do n = 1, dpar%ntemp
-          if (.not. ANY(dpar%joint_comp == trim(dpar%temp_label(n))) .or. .not. (dpar%joint_sample)) then
-             if (dpar%temp_sample(n)) then
-                write(*,*) "Sample "//trim(dpar%fg_label(n))//" template amplitudes."
-                do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                   call template_fit(dpar,ddata,dcomps,k,n)
-                   call extrapolate_template(dpar,ddata,dcomps,n,k)
-                end do
-             end if
-          end if
-       end do
+      ! How good is the fit and what are the parameters looking like?
+      call write_stats_to_term(ddata,dpar,dcomps,iter)
+      
+      if (mod(iter,dpar%iter_out) .EQ. 0) then
+         call write_maps(dpar,ddata,dcomps)
+      end if
+   end do
+   call mpi_finalize(ierr)
+ end subroutine comp_sep
 
-       ! ------------------------------------------------------------------------------------------
-       ! Sample spectral parameters
-       ! ------------------------------------------------------------------------------------------
-       do n = 1, dpar%ncomp
-          if (dpar%fg_samp_spec(n,1)) then
-             if (dpar%fg_spec_joint(n,1)) then
-                write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta jointly."
-                write(*,*) "---------------------------------"
-                ! call sample_new_index(dpar,ddata,dcomps,n,-1)
-                call sample_index(dpar,ddata,dcomps,n,-1)
-             else
-                do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta for "//trim(tqu(k))//"."
-                write(*,*) "---------------------------------"
-                   call sample_index(dpar,ddata,dcomps,n,k)
-                end do
-             end if
-             do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                call extrapolate_foreground(dpar,ddata,dcomps,n,k)
-             end do
-             ! How good is the fit and what are the parameters looking like?
-             call write_stats_to_term(ddata,dpar,dcomps,iter)
-          end if
-       end do
-       ! ------------------------------------------------------------------------------------------
-       ddata%res_map = ddata%sig_map
-       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-          do j = 1, nfgs
-             ddata%res_map(:,k,:)  = ddata%res_map(:,k,:) - ddata%fg_map(:,k,1:,j)
-          end do
-          if (rank == master) then
-             call write_data(dpar,ddata,dcomps,k)
-          end if
-       end do
-       !-------------------------------------------------------------------------------------------
-
-       ! How good is the fit and what are the parameters looking like?
-       call write_stats_to_term(ddata,dpar,dcomps,iter)
-
-       if (mod(iter,dpar%iter_out) .EQ. 0) then
-          call write_maps(dpar,ddata,dcomps)
-       end if
-    end do
-    call mpi_finalize(ierr)
-  end subroutine comp_sep
-
-  ! ------------------------------------------------------------------------------------------
-  ! Specifically for the hi_fitting mode
-  ! ------------------------------------------------------------------------------------------ 
-  subroutine hi_fit
-
-    npixpar    = nump
-    nglobalpar = nbands
-
-    do iter = 1, dpar%ngibbs
-
-       if (iter > 1) then
-          do j = 1, nbands
-             if (dpar%fit_gain(j)) then
-                call sample_band_gain(dpar, ddata, dcomps, 1, j, 1, 1)
-             end if
-             if (dpar%fit_offs(j)) then
-                call sample_band_offset(dpar, ddata, dcomps, 1, j, 1)
-             end if
-          end do
-       end if
-
-       write(*,*) 'Fit templates'
-       call template_fit(dpar, ddata, dcomps, 1)
-       call write_stats_to_term(ddata,dpar,dcomps,iter)
-       write(*,*) 'Sample Td'
-       call sample_HI_T(dpar, ddata, dcomps, 1)
-
-       do j = 1, nbands
-          do i = 0, npix-1
-             if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
-             ddata%res_map(i,1,j) = (ddata%sig_map(i,1,j)-ddata%offset(j))/ddata%gain(j) &
-                  - dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))
-          end do
-       end do
-
-       ! How good is the fit and what are the parameters looking like?
-       call write_stats_to_term(ddata,dpar,dcomps,iter)
-
-       if (mod(iter,dpar%iter_out) .EQ. 0) then
-          call write_maps(dpar,ddata,dcomps)
-       end if
-       call write_data(dpar,ddata,dcomps,1)
-       write(*,*) ''
-    end do
-  end subroutine hi_fit
+ ! ------------------------------------------------------------------------------------------
+ ! Specifically for the hi_fitting mode
+ ! ------------------------------------------------------------------------------------------ 
+ subroutine hi_fit
+   
+   npixpar    = nump
+   nglobalpar = nbands
+   
+   do iter = 1, dpar%ngibbs
+      
+      if (iter > 1) then
+         do j = 1, nbands
+            if (dpar%fit_gain(j)) then
+               call sample_band_gain(dpar, ddata, dcomps, 1, j, 1, 1)
+            end if
+            if (dpar%fit_offs(j)) then
+               call sample_band_offset(dpar, ddata, dcomps, 1, j, 1, 1)
+            end if
+         end do
+      end if
+      
+      write(*,*) 'Fit templates'
+      call template_fit(dpar, ddata, dcomps, 1)
+      call write_stats_to_term(ddata,dpar,dcomps,iter)
+      write(*,*) 'Sample Td'
+      call sample_HI_T(dpar, ddata, dcomps, 1)!, 1000)
+      
+      do j = 1, nbands
+         ! Compute the residual for each map
+         do i = 0, npix-1
+            if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
+            ddata%res_map(i,1,j) = (ddata%sig_map(i,1,j)-ddata%offset(j))/ddata%gain(j) &
+                 - dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))
+         end do
+         ! Compute the chisq for each band
+         ddata%band_chisq(j) = 0.d0
+         do i = 0, npix-1
+            if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
+            ddata%band_chisq(j) = ddata%band_chisq(j) + (ddata%res_map(i,1,j)/ddata%rms_map(i,1,j))**2
+         end do
+      end do
+      
+      ! How good is the fit and what are the parameters looking like?
+      call write_stats_to_term(ddata,dpar,dcomps,iter)
+      
+      if (mod(iter,dpar%iter_out) .EQ. 0) then
+         call write_maps(dpar,ddata,dcomps)
+      end if
+      call write_data(dpar,ddata,dcomps,1)
+      write(*,*) ''
+   end do
+ end subroutine hi_fit
 end program dang
