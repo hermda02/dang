@@ -197,7 +197,7 @@ contains
          call swap_bp_maps(ddata,dpar)
          write(*,*) ''
          bp_iter = bp_iter + 1
-         call convert_maps_bp(ddata, dpar)
+         call convert_bp_maps(ddata, dpar)
          write(*,*) ''
          ! Check to see if any swapped maps need to be dust corrected                               
          do j = 1, nbands
@@ -274,7 +274,7 @@ contains
                write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta jointly."
                write(*,*) "---------------------------------"
                ! call sample_new_index(dpar,ddata,dcomps,n,-1)
-               call sample_index(dpar,ddata,dcomps,n,-1,1000)
+               call sample_index(dpar,ddata,dcomps,n,-1)!,1000)
             else
                do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
                   write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta for "//trim(tqu(k))//"."
