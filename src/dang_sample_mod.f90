@@ -435,19 +435,19 @@ contains
        if (map_n == -1) then
           indx_sample_low = indx_low(:,dpar%pol_type(1))
           ! Parallelization breaks down for prior evaluation
-          !!$OMP PARALLEL PRIVATE(i,j,k,l,c,b,sol,sam,lnl_old,lnl_new,ratio,t)
 
-          !!$OMP DO SCHEDULE(STATIC)
+          !$OMP PARALLEL PRIVATE(i,j,k,l,c,b,sol,sam,lnl_old,lnl_new,ratio,t)
+
+          !$OMP DO SCHEDULE(STATIC)
           do i = 0, npix2-1
-             write(*,*) i
              a         = 0.d0
              sol       = indx_low(i,dpar%pol_type(1))
              sam       = sol
              if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) cycle
 
-
              write(pxl_str, '(i0.5)') i
              if (test) then
+                write(*,*) i
                 open(41,file=trim(dpar%outdir)//'metrop_test_'//pxl_str//'.dat')
                 open(42,file=trim(dpar%outdir)//'lnls_'//pxl_str//'.dat')
              end if
@@ -529,11 +529,12 @@ contains
                 indx_sample_low(i) = sol
              end do
           end do
+          !$OMP END DO
+          !$OMP END PARALLEL
           if (test) then
              close(41)
              close(42)
           end if
-          !!$OMP END PARALLEL
           
        !----------------------------|
        ! Sample for a single poltype|

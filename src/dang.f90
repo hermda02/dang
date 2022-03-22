@@ -273,8 +273,7 @@ contains
             if (dpar%fg_spec_joint(n,1)) then
                write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta jointly."
                write(*,*) "---------------------------------"
-               ! call sample_new_index(dpar,ddata,dcomps,n,-1)
-               call sample_index(dpar,ddata,dcomps,n,-1,1000)
+               call sample_index(dpar,ddata,dcomps,n,-1)!,1000)
             else
                do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
                   write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta for "//trim(tqu(k))//"."
