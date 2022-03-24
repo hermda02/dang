@@ -232,41 +232,6 @@ contains
 
   end function compute_bnu_prime
 
-  ! function a2f_old(nu)
-  !   ! [MJy/sr / uK_RJ]
-  !   ! Assume that nu is in GHz
-  !   implicit none
-  !   real(dp), intent(in) :: nu
-  !   real(dp)             :: a2f, y
-
-  !   a2f = compute_bnu_prime_RJ(nu)
-
-  ! end function a2f_old
-
-  ! function a2t_old(nu)
-  !   ! [uK_cmb/uK_RJ]
-  !   ! Assume that nu is in GHz
-  !   implicit none
-  !   real(dp), intent(in) :: nu
-  !   real(dp)             :: a2t, y
-
-  !   y = (h*nu)/(k_B*T_CMB)
-
-  !   a2t = (exp(y)-1.d0)**2/(y**2*exp(y))
-
-  ! end function a2t_old
-
-  ! function f2t_old(nu)
-  !   ! [uK_cmb/MJysr-1]
-  !   ! Assume that nu is in GHz
-  !   implicit none
-  !   real(dp), intent(in) :: nu
-  !   real(dp)             :: f2t, y
-
-  !   f2t = 1.d0/(compute_bnu_prime(nu))*1.0d-14
-
-  ! end function f2t_old
-
   function a2f(bp)
     ! [MJy/sr / uK_RJ]
     ! Assume that nu is in GHz
@@ -299,7 +264,11 @@ contains
     sum = 0.d0
 
     if (bp%id == 'delta') then
-       y = (h*bp%nu_c*1d9)/(k_B*T_CMB)
+       if (bp%nu_c > 1e7) then
+          y = (h*bp%nu_c)/(k_B*T_CMB)
+       else
+          y = (h*bp%nu_c*1d9)/(k_B*T_CMB)
+       end if
        sum = (exp(y)-1.d0)**2/(y**2*exp(y))
     else
        do i = 1, bp%n
@@ -323,10 +292,18 @@ contains
     sum = 0.d0
 
     if (bp%id == 'delta') then
-       sum = 1.d0/(compute_bnu_prime(bp%nu_c*1d9))*1.0d-14
+       if (bp%nu_c > 1e7) then
+          sum = 1.d0/(compute_bnu_prime(bp%nu_c))*1.0d-14
+       else
+          sum = 1.d0/(compute_bnu_prime(bp%nu_c*1d9))*1.0d-14
+       end if
     else
        do i = 1, bp%n 
-          sum = sum + bp%tau0(i)/(compute_bnu_prime(bp%nu0(i)*1d9))*1.0d-14
+          if (bp%nu0(i) > 1e7) then
+             sum = sum + bp%tau0(i)/(compute_bnu_prime(bp%nu0(i)))*1.0d-14
+          else
+             sum = sum + bp%tau0(i)/(compute_bnu_prime(bp%nu0(i)*1d9))*1.0d-14
+          end if
        end do
     end if
 
@@ -334,36 +311,62 @@ contains
 
   end function f2t
 
-  subroutine convert_maps(self,dpar)!,bp)
-    ! We want to run everything in uK_RJ, yeah?
+  subroutine convert_maps(self,dpar)
+    ! We want to run everything in uK_RJ (at least for compsep), yeah?
     implicit none
     type(dang_data),   intent(inout) :: self
     type(dang_params), intent(inout) :: dpar
-    ! type(bandinfo),    intent(in)    :: bp
     integer(i4b)                :: j
     
-    do j = 1, nbands
-       if (.not. dpar%bp_map(j)) then
-          if (trim(dpar%band_unit(j)) == 'uK_RJ') then
-             cycle
-          else if (trim(dpar%band_unit(j)) == 'uK_cmb') then
-             ! uK_cmb -> uK_RJ
-             ! Check bandpass type
-             write(*,*) 'Putting band ', trim(dpar%band_label(j)), ' from uK_cmb to uK_RJ.'
-             self%sig_map(:,:,j) = self%sig_map(:,:,j)/a2t(bp(j))
-             self%rms_map(:,:,j) = self%rms_map(:,:,j)/a2t(bp(j))
-          else if (trim(dpar%band_unit(j)) == 'MJy/sr') then
-             ! MJy/sr -> uK_RJ
-             write(*,*) 'Putting band ', trim(dpar%band_label(j)), ' from MJy/sr to uK_RJ'
-             self%sig_map(:,:,j) = self%sig_map(:,:,j)/a2f(bp(j))
-             self%rms_map(:,:,j) = self%rms_map(:,:,j)/a2f(bp(j))
-          else
-             write(*,*) 'Not a unit, dumbass!'
-             stop
+    if (dpar%mode == 'comp_sep') then
+
+       do j = 1, nbands
+          if (.not. dpar%bp_map(j)) then
+             if (trim(dpar%band_unit(j)) == 'uK_RJ') then
+                cycle
+             else if (trim(dpar%band_unit(j)) == 'uK_cmb') then
+                ! uK_cmb -> uK_RJ
+                ! Check bandpass type
+                write(*,*) 'Putting band ', trim(dpar%band_label(j)), ' from uK_cmb to uK_RJ.'
+                self%sig_map(:,:,j) = self%sig_map(:,:,j)/a2t(bp(j))
+                self%rms_map(:,:,j) = self%rms_map(:,:,j)/a2t(bp(j))
+             else if (trim(dpar%band_unit(j)) == 'MJy/sr') then
+                ! MJy/sr -> uK_RJ
+                write(*,*) 'Putting band ', trim(dpar%band_label(j)), ' from MJy/sr to uK_RJ'
+                self%sig_map(:,:,j) = self%sig_map(:,:,j)/a2f(bp(j))
+                self%rms_map(:,:,j) = self%rms_map(:,:,j)/a2f(bp(j))
+             else
+                write(*,*) 'Not a unit, dumbass! '//dpar%band_unit(j)
+                stop
+             end if
           end if
-       end if
-    end do
-    
+       end do
+       
+    else if (dpar%mode == 'hi_fit') then
+
+       do j = 1, nbands
+          if (.not. dpar%bp_map(j)) then
+             if (trim(dpar%band_unit(j)) == 'MJy/sr') then
+                cycle
+             else if (trim(dpar%band_unit(j)) == 'uK_cmb') then
+                ! uK_cmb -> MJy/sr
+                ! Check bandpass type
+                write(*,*) 'Putting band ', trim(dpar%band_label(j)), ' from uK_cmb to MJy/sr.'
+                self%sig_map(:,:,j) = self%sig_map(:,:,j)/f2t(bp(j))
+                self%rms_map(:,:,j) = self%rms_map(:,:,j)/f2t(bp(j))
+             else if (trim(dpar%band_unit(j)) == 'MJy/sr') then
+                ! uK_RJ -> MJy/sr
+                write(*,*) 'Putting band ', trim(dpar%band_label(j)), ' from uK_RJ to MJy/sr'
+                self%sig_map(:,:,j) = self%sig_map(:,:,j)*a2f(bp(j))
+                self%rms_map(:,:,j) = self%rms_map(:,:,j)*a2f(bp(j))
+             else
+                write(*,*) 'Not a unit, dumbass! '//dpar%band_unit(j)
+                stop
+             end if
+          end if
+       end do
+    end if
+
   end subroutine convert_maps
   
   subroutine convert_bp_maps(self,dpar)!,bp)

@@ -105,6 +105,8 @@ program dang
 
      call read_data_maps(ddata,dpar)
 
+     call convert_maps(ddata,dpar)
+
      do i = 0, npix-1
         if (dcomps%HI(i,1) > dpar%thresh) then
            ddata%masks(i,1) = missval
