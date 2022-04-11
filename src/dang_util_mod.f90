@@ -36,11 +36,7 @@ module dang_util_mod
   public    :: npix, nbands, nmaps, ordering, header, h, c, k_B, T_CMB
   public    :: npixpar, nglobalpar, title
   public    :: iter, iter_str, exist, tqu
-
-      
   public    ::  amp_vec
-  
-
 
 contains 
   

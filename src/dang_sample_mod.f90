@@ -15,7 +15,7 @@ module dang_sample_mod
   integer(i4b) :: i, j, k, l
   
 contains
-  
+
   subroutine sample_joint_amp(dpar, dat, compo, map_n, method)
     !------------------------------------------------------------------------
     ! Solving the matrix equation Ab = c                                    |
@@ -55,7 +55,7 @@ contains
     y = 0
     z = dpar%numinc
     
-    allocate(map2fit(0:npix-1,nmaps,nbands))
+    ! allocate(map2fit(0:npix-1,nmaps,nbands))
     
     map2fit = dat%sig_map
     
@@ -297,6 +297,7 @@ contains
     !------------------------------------------------------------------------    
     allocate(fg_map_high(0:npix-1,nmaps))
 
+    ! First initialize the noise and data with which to fit to
     do i = 0, npix-1
        do j = 1, nbands
           do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
@@ -310,6 +311,8 @@ contains
        end if
     end do
 
+    call update_map2fit
+    
     ! Correct the "map2fit" by removing all other foregrounds from the signal maps
     do f = 1, nfgs
        if (f /= ind) then
@@ -706,7 +709,9 @@ contains
 
           ! First evaluate likelihood from previous sample
           c = eval_sample_lnL_fullsky(dpar,comp,dat%fg_map(:,:,0,ind),map2fit,mask,dat%rms_map,sol,ind,map_n)
-          
+
+          ! c = eval_sample_lnL_fullsky(dpar,comp,dat,map2fit,mask,sol,ind,map_n)
+         
           ! Evaluate the prior as well
           if (dpar%fg_prior_type(ind,1) == 'gaussian') then
              lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
@@ -853,6 +858,56 @@ contains
     !$OMP END PARALLEL
   end function eval_sample_lnL_fullsky
 
+  ! function eval_sample_lnL_fullsky_smol(dpar,comp,ddata,map2fit,mask,sample,ind,map_n) result(lnL)
+  !   implicit none
+
+  !   type(dang_params)                      :: dpar
+  !   type(dang_comps)                       :: comp
+  !   real(dp), dimension(:,:,:), intent(in) :: map2fit, rms
+  !   real(dp), dimension(:,:),   intent(in) :: fg_map, mask
+  !   real(dp),                   intent(in) :: sample
+  !   integer(i4b),               intent(in) :: map_n, ind
+  !   real(dp)                               :: naccept, paccept
+  !   real(dp)                               :: lnL, local_lnL
+  !   integer(i4b)                           :: i, j, k
+
+  !   naccept     = 0.d0
+  !   paccept     = 0.d0
+              
+  !   !$OMP PARALLEL PRIVATE(i,j,k,local_lnL), SHARED(lnL)
+  !   lnL           = 0.d0
+  !   local_lnL     = 0.d0
+  !   if (map_n == -1) then
+  !      !$OMP DO SCHEDULE(static)
+  !      do i = 0, npix-1
+  !         if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+  !         do j = 1, nbands
+  !            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+  !               local_lnL = local_lnL + (((ddata%fg_map(i,k,0,ind) * compute_spectrum(dpar,comp,bp(j),ind,index=sample))&
+  !                    - map2fit(i,k,j))**2.d0)/rms(i,k,j)**2.d0
+  !            end do
+  !         end do
+  !      end do
+  !      !$OMP END DO
+  !   else
+  !      k = map_n
+  !      !$OMP DO SCHEDULE(static)
+  !      do i = 0, npix-1
+  !         if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
+  !         do j = 1, nbands
+  !            local_lnL = local_lnL + (((fg_map(i,k) * compute_spectrum(dpar,comp,bp(j),ind,index=sample))&
+  !                 - map2fit(i,k,j))**2.d0)/rms(i,k,j)**2.d0
+  !         end do
+  !      end do
+  !      !$OMP END DO
+  !   end if
+  !   !$OMP CRITICAL
+  !   lnL = lnL + local_lnL
+  !   !$OMP END CRITICAL
+  !   !$OMP END PARALLEL
+  ! end function eval_sample_lnL_fullsky_smol
+
+  
   function eval_sample_lnL_pixel(dpar,comp,fg_map,map2fit,rms,sample,ind,map_n) result(lnL)
     implicit none
 
@@ -959,7 +1014,7 @@ contains
 
     nos = dat%rms_map(:,map_n,:)
     cov = nos**2.d0
-    allocate(map2fit(0:npix-1,nmaps,nbands))
+    ! allocate(map2fit(0:npix-1,nmaps,nbands))
     
     map2fit = dat%sig_map
     
@@ -999,10 +1054,6 @@ contains
           sum2 = 0.d0
           norm = 0.d0
           temp = 0.d0
-          xmax = 0.d0
-          ymax = 0.d0
-          xmin = 1.d20
-          ymin = 1.d20
           if (dpar%temp_corr(1,j)) then
              do i = 0, npix-1
                 if (comp%HI(i,1) > dpar%thresh) cycle
@@ -1015,9 +1066,8 @@ contains
           end if
 
           if (trim(dpar%ml_mode) == 'sample') then
-             sum1 = sum1 + norm*rand_normal(0.d0,1.d0)
+             comp%HI_amps(j) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
           end if
-          comp%HI_amps(j) = sum1/sum2
       end do
     end if
     
@@ -1374,7 +1424,8 @@ contains
     integer(i4b),           intent(in)    :: map_n, ind
     integer(i4b), optional, intent(in)    :: pixel
     real(dp)                              :: prob, sum, ss
-
+    integer(i4b)                          :: i, j ,k
+    
     prob = 0.d0
     sum = 0.d0
 
@@ -1439,6 +1490,7 @@ contains
     integer(i4b),           intent(in)    :: map_n, ind
     integer(i4b), optional, intent(in)    :: pixel
     real(dp)                              :: prob, sum, ss_Q, ss_U
+    integer(i4b)                          :: i, j ,k
 
     prob = 0.d0
     sum = 0.d0
