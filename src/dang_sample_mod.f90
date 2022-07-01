@@ -260,6 +260,27 @@ contains
     deallocate(c)
   end subroutine sample_joint_amp
 
+  subroutine sample_index(dpar, ddat, dcomps, data, spectrum, index)
+    ! Inputs:
+    !
+    ! (dpar), data (dpar), and components (dcomps): classes for parameters
+    !
+    ! data: *array* (0:npix-1, nmaps); data we want to fit the spectrum to (raw data minus other foregrounds)
+    !
+    ! spectrum: *function*; the spectrum we want to fit
+    !
+    ! index: *integer*; which index number will be sampled (i.e. 1=\beta_s for synch, 2=T_d for MBB)
+    !------------------------------------------------------------------------
+    implicit none
+
+    class(dang_params)                         :: dpar
+    type(dang_comps),            intent(inout) :: comp
+    type(dang_data)                            :: dat
+
+    real(dp), dimension(0:npix-1,nmamps), intent(in) ::
+
+  end subroutine sample_index
+
   subroutine sample_index(dpar, dat, comp, ind, map_n, output) 
     !------------------------------------------------------------------------
     ! Warning -- not set up for foregrounds with multiple spectral parameters yet
