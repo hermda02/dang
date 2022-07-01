@@ -6,32 +6,32 @@ module dang_param_mod
   
   type, public :: dang_params
      ! Global parameters
-     integer(i4b)                                  :: ngibbs        ! Number of Gibbs iterations
-     integer(i4b)                                  :: nsample       ! For internal samplers (MH)
-     integer(i4b)                                  :: iter_out      ! Out put maps every <- iterations
-     integer(i4b)                                  :: cg_iter       ! Maximum cg iterations
-     integer(i4b)                                  :: bp_burnin     ! Number of burn in samples for BP chains
-     integer(i4b)                                  :: bp_max        ! Maximum number of maps from BP chains
-     integer(i4b)                                  :: num_chains    ! Number of bp chains used
-     logical(lgt)                                  :: bp_swap       ! Do the BP map swapping?
-     logical(lgt)                                  :: output_fg     ! Do we output the foregrounds at each frequency?
-     logical(lgt)                                  :: output_unc    ! Do we output uncertainty of template fit?
-     character(len=512)                            :: outdir        ! Output directory
-     character(len=512)                            :: bp_chains     ! bp chains, read as a string, moved to a 'list'
-     character(len=16)                             :: ml_mode       ! 'sample' or 'optimize'
-     character(len=16)                             :: solver        ! Linear system solver type 
-     character(len=16)                             :: mode          ! 'dang' mode ('comp_sep', 'HI_fit')
-     character(len=5)                              :: tqu           ! Which pol_type to sample
-     real(dp)                                      :: cg_converge   ! CG convergence criterion 
-     integer(i4b), allocatable, dimension(:)       :: pol_type      ! Points above to map number
-     character(len=512), allocatable, dimension(:) :: bp_chain_list ! This is where the bp_chains string goes
+     integer(i4b)                                  :: ngibbs           ! Number of Gibbs iterations
+     integer(i4b)                                  :: nsample          ! For internal samplers (MH)
+     integer(i4b)                                  :: iter_out         ! Out put maps every <- iterations
+     integer(i4b)                                  :: cg_iter          ! Maximum cg iterations
+     integer(i4b)                                  :: bp_burnin        ! Number of burn in samples for BP chains
+     integer(i4b)                                  :: bp_max           ! Maximum number of maps from BP chains
+     integer(i4b)                                  :: num_chains       ! Number of bp chains used
+     logical(lgt)                                  :: bp_swap          ! Do the BP map swapping?
+     logical(lgt)                                  :: output_fg        ! Do we output the foregrounds at each frequency?
+     logical(lgt)                                  :: output_unc       ! Do we output uncertainty of template fit?
+     character(len=512)                            :: outdir           ! Output directory
+     character(len=512)                            :: bp_chains        ! bp chains, read as a string, moved to a 'list'
+     character(len=16)                             :: ml_mode          ! 'sample' or 'optimize'
+     character(len=16)                             :: solver           ! Linear system solver type 
+     character(len=16)                             :: mode             ! 'dang' mode ('comp_sep', 'HI_fit')
+     character(len=5)                              :: tqu              ! Which pol_type to sample
+     real(dp)                                      :: cg_converge      ! CG convergence criterion 
+     integer(i4b), allocatable, dimension(:)       :: pol_type         ! Points above to map number
+     character(len=512), allocatable, dimension(:) :: bp_chain_list    ! This is where the bp_chains string goes
      
      ! Data parameters
-     integer(i4b)                                    :: numband       ! Number of bands total in parameter file
-     integer(i4b)                                    :: numinc        ! Number of bands to include in the fit
-     character(len=512)                              :: datadir       ! Directory to look for bandfiles in
-     character(len=512)                              :: bp_dir        ! Directory for BP swap maps
-     character(len=512)                              :: mask_file     ! Mask filename
+     integer(i4b)                                    :: numband        ! Number of bands total in parameter file
+     integer(i4b)                                    :: numinc         ! Number of bands to include in the fit
+     character(len=512)                              :: datadir        ! Directory to look for bandfiles in
+     character(len=512)                              :: bp_dir         ! Directory for BP swap maps
+     character(len=512)                              :: mask_file      ! Mask filename
      character(len=512), allocatable, dimension(:)   :: band_label     ! Band label
      character(len=512), allocatable, dimension(:)   :: band_mapfile   ! Band filename
      character(len=512), allocatable, dimension(:)   :: band_noisefile ! Band rms filename
@@ -39,12 +39,12 @@ module dang_param_mod
      character(len=512), allocatable, dimension(:)   :: bp_id          ! Band bandpass type
      character(len=512), allocatable, dimension(:)   :: bp_file        ! Band bandpass filename
      real(dp),           allocatable, dimension(:)   :: band_nu        ! Band frequency (in GHz)
-     real(dp),           allocatable, dimension(:)   :: init_gain     ! initial gain value for each band
-     real(dp),           allocatable, dimension(:)   :: init_offs     ! initial offset value for each band
-     logical(lgt),       allocatable, dimension(:)   :: bp_map        ! True false (know when to swap)
-     logical(lgt),       allocatable, dimension(:)   :: fit_gain      ! Do we fit the gain for this band?
-     logical(lgt),       allocatable, dimension(:)   :: fit_offs      ! Do we fit the offset for this band?
-     logical(lgt),       allocatable, dimension(:)   :: band_inc      ! Is this band included?
+     real(dp),           allocatable, dimension(:)   :: init_gain      ! initial gain value for each band
+     real(dp),           allocatable, dimension(:)   :: init_offset    ! initial offset value for each band
+     logical(lgt),       allocatable, dimension(:)   :: bp_map         ! True false (know when to swap)
+     logical(lgt),       allocatable, dimension(:)   :: fit_gain       ! Do we fit the gain for this band?
+     logical(lgt),       allocatable, dimension(:)   :: fit_offs       ! Do we fit the offset for this band?
+     logical(lgt),       allocatable, dimension(:)   :: band_inc       ! Is this band included?
      
      ! Component parameters
      integer(i4b)                                      :: ncomp          ! # of foregrounds
@@ -449,7 +449,7 @@ contains
     allocate(par%dust_corr(n2))
     
     allocate(par%init_gain(n2))
-    allocate(par%init_offs(n2))
+    allocate(par%init_offset(n2))
     allocate(par%fit_gain(n2))
     allocate(par%fit_offs(n2))
     
@@ -480,7 +480,7 @@ contains
        call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(j))
        call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(j))
        call get_parameter_hashtable(htbl, 'BAND_FIT_OFFSET'//itext, len_itext=len_itext, par_lgt=par%fit_offs(j))
-       call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(j))
+       call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offset(j))
        call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(j))
        call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(j))
     end do

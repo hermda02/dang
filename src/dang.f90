@@ -74,18 +74,9 @@ program dang
      ! Initialize ddata and components
      !----------------------------------------------------------------------------------------------------------
      call ddata%init_data_maps(dpar)
-
-     ! Initialize amplitude vector somewhere
-
-     ! Initialize component
      call init_synch(dcomps,dpar,npix,nmaps)
      call init_dust(dcomps,dpar,npix,nmaps)
-
-     !----------------------------------------------------------------------------------------------------------
-     !----------------------------------------------------------------------------------------------------------
-     ! Read maps
      call ddata%read_data_maps(dpar)
-     
      call convert_maps(ddata,dpar)
      do j = 1, nbands
         ! Check to see if any maps need to be dust corrected
@@ -98,39 +89,21 @@ program dang
   
   !------------------------------------------------------------------------------------------------
   else if (trim(dpar%mode) == 'hi_fit') then
+     
      ! Initialize ddata and components
-     !----------------------------------------------------------------------------------------------------------
      call ddata%init_data_maps(dpar)
      call init_hi_fit(dcomps, dpar, npix)
-
      call read_data_maps(ddata,dpar)
-
      call convert_maps(ddata,dpar)
-
-     do i = 0, npix-1
-        if (dcomps%HI(i,1) > dpar%thresh) then
-           ddata%masks(i,1) = missval
-        else if (ddata%masks(i,1) == missval) then
-           ddata%masks(i,1) = missval
-        else if (ddata%rms_map(i,1,1) == 0.d0) then
-           ddata%masks(i,1) = missval
-        else
-           ddata%masks(i,1) = 1.d0
-        end if
-     end do
-     nump = 0
-     do i = 0, npix-1
-        do j = 1, nmaps
-           if (ddata%masks(i,j) == 0.d0 .or. ddata%masks(i,j) == missval) then
-              ddata%masks(i,j) = missval
-           else 
-              nump = nump + 1
-           end if
-        end do
-     end do
+     call mask_hi(ddata, dpar, dcomps)
+     npixpar    = nump
+     nglobalpar = nbands
      
-     call hi_fit 
-  
+     ! Debug initialization here
+     dcomps%HI_amps(:) = 1.d-4
+
+     ! Start sampling routine
+     call hi_fit   
   end if
 
 contains
@@ -318,8 +291,21 @@ contains
  ! ------------------------------------------------------------------------------------------ 
  subroutine hi_fit
    
-   npixpar    = nump
-   nglobalpar = nbands
+   do j = 1, nbands
+      ! Compute the residual for each map
+      do i = 0, npix-1
+         if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
+         ddata%res_map(i,1,j) = (ddata%sig_map(i,1,j)-ddata%offset(j))/ddata%gain(j) &
+              - dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))
+      end do
+      ! Compute the chisq for each band
+      ddata%band_chisq(j) = 0.d0
+      do i = 0, npix-1
+         if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
+         ddata%band_chisq(j) = ddata%band_chisq(j) + (ddata%res_map(i,1,j)/ddata%rms_map(i,1,j))**2
+      end do
+   end do
+   call write_maps(dpar,ddata,dcomps)
    
    do iter = 1, dpar%ngibbs
       
@@ -335,10 +321,10 @@ contains
       end if
       
       write(*,*) 'Fit templates'
-      call template_fit(dpar, ddata, dcomps, 1)
+      ! call template_fit(dpar, ddata, dcomps, 1)
       call write_stats_to_term(ddata,dpar,dcomps,iter)
       write(*,*) 'Sample Td'
-      call sample_HI_T(dpar, ddata, dcomps, 1)!, 1000)
+      call sample_HI_T(dpar, ddata, dcomps, 1, 1000)
       
       do j = 1, nbands
          ! Compute the residual for each map

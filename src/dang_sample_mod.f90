@@ -1009,10 +1009,6 @@ contains
     real(dp)                                :: temp, sum1, sum2, norm
     integer(i4b)                            :: i, j, k, n
 
-
-    real(dp) :: xmax, ymax
-    real(dp) :: xmin, ymin
-
     nos = dat%rms_map(:,map_n,:)
     cov = nos**2.d0
     allocate(map2fit(0:npix-1,nmaps,nbands))
@@ -1055,10 +1051,6 @@ contains
           sum2 = 0.d0
           norm = 0.d0
           temp = 0.d0
-          xmax = 0.d0
-          ymax = 0.d0
-          xmin = 1.d20
-          ymin = 1.d20
           if (dpar%temp_corr(1,j)) then
              do i = 0, npix-1
                 if (comp%HI(i,1) > dpar%thresh) cycle
@@ -1139,7 +1131,7 @@ contains
     do i = 0, npix2-1
        naccept = 0.d0
        paccept = 0.d0
-       s       = 1.d0
+       ! s       = 1.d0
        if (dat%masks(i,1) == 0.d0  .or. dat%masks(i,1) == missval) then
           sample_T_low(i) = missval
           cycle
@@ -1161,6 +1153,7 @@ contains
              open(42,file='lnls.dat')
           end if
           s = dpar%HI_Td_step
+          write(*,*) s
           do l = 1, dpar%nsample
              ! if (mod(l,50) == 0) then
              !    if (paccept > 0.6d0) then
@@ -1173,15 +1166,18 @@ contains
              ! Draw a sample
              t = sam + rand_normal(0.d0,s)
              b = 0.d0
+             a = 0.d0
              do j = 1, nbands
                 b = b + (((comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),t)) &
                      - (maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/dat%rms_map(i,map_n,j)**2
              end do
-             b = b
              
              lnl_new = -0.5d0*b + log(eval_normal_prior(sam,dpar%HI_Td_mean, dpar%HI_Td_std))
              diff = lnl_new - lnl_old
              ratio = exp(diff)
+
+             write(*,*) sam, t
+
              if (test) then
                 write(42,fmt='(2(E17.8))') lnl_old, lnl_new
              end if
@@ -1201,11 +1197,15 @@ contains
                    naccept  = naccept + 1.0
                 end if
              end if
+             ! write(*,*) c, b
+             ! write(*,*) lnl_old, lnl_new
+             ! write(*,*)
              paccept = naccept/l
              if (test) then
                 write(41,fmt='(4(E17.8))') t, paccept, ratio, num
              end if
           end do
+          stop
           if (test) then
              close(41)
              close(42)
@@ -1218,6 +1218,7 @@ contains
           sol             = sam
           sample_T_low(i) = sol
        end if
+       ! stop
     end do
     !$OMP END DO
     !$OMP END PARALLEL

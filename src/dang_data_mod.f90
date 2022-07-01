@@ -133,6 +133,36 @@ contains
     end if
   end subroutine read_data_maps
 
+  subroutine mask_hi(self, dpar, dcomps)
+    implicit none
+    type(dang_data),             intent(inout) :: self
+    type(dang_params)                          :: dpar
+    type(dang_comps)                           :: dcomps
+    integer(i4b)                               :: i, j
+
+    do i = 0, npix-1
+       if (dcomps%HI(i,1) > dpar%thresh) then
+          self%masks(i,1) = missval
+       else if (self%masks(i,1) == missval) then
+          self%masks(i,1) = missval
+       else if (self%rms_map(i,1,1) == 0.d0) then
+          self%masks(i,1) = missval
+       else
+          self%masks(i,1) = 1.d0
+       end if
+    end do
+    nump = 0
+    do i = 0, npix-1
+       do j = 1, nmaps
+          if (self%masks(i,j) == 0.d0 .or. self%masks(i,j) == missval) then
+             self%masks(i,j) = missval
+          else 
+             nump = nump + 1
+          end if
+       end do
+    end do
+  end subroutine mask_hi
+  
   subroutine dust_correct_band(self,dpar,comp,band,iter)
     implicit none
     type(dang_data),             intent(inout) :: self
@@ -435,7 +465,7 @@ contains
              self%chisq = self%chisq + (self%sig_map(i,map_n,j)-s)**2.d0/(self%rms_map(i,map_n,j)**2.d0)
           end do
        end do
-       self%chisq = self%chisq/((nump*nbands)-npixpar-nglobalpar)
+       self%chisq = self%chisq!/((nump*nbands)-npixpar-nglobalpar)
     end if
     
   end subroutine compute_chisq
@@ -630,7 +660,7 @@ contains
              dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
           end do
        end do
-       dat%chi_map(:,1) = dat%chi_map(:,1)/(nbands)
+       dat%chi_map(:,1) = dat%chi_map(:,1)!/(nbands)
        title = trim(dpar%outdir) // 'chisq_k' // trim(iter_str) // '.fits'
        map(:,1)   = dat%chi_map(:,1)
        do i = 0, npix-1
