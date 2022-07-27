@@ -857,9 +857,6 @@ contains
   !      end function lnL
   !   end interface
 
-
-
-
   function eval_sample_lnL_fullsky(dpar,comp,fg_map,map2fit,mask,rms,sample,ind,map_n) result(lnL)
     implicit none
 
@@ -943,6 +940,84 @@ contains
     end if
     lnL = lnL + local_lnL
   end function eval_sample_lnL_pixel
+
+  ! Note that the other evaluation routines do NOT include the -0.5, working to make them obsolete
+  function evaluate_lnL(data,rms,model,map_n,pixel) result(lnL)
+    !==========================================================================
+    ! Inputs:
+    !         data:  array(real(dp)) - data with which we compare the model
+    !         rms:   array(real(dp)) - noise associated with the data
+    !         model: array(real(dp)) - the model to compare to the data
+    !         map_n: integer         - poltype for likelihood evaluation
+    !         pixel: integer         - pixel number for likelihood evaluation
+    !
+    ! Output:
+    !         lnL: real(dp)
+    !
+    ! if pixel < 0, sample full sky, otherwise sample that pixel
+    ! if map_n > 0, sample that poltype
+    ! if map_n = -1, sample Q+U jointly
+    ! if map_n = -2, sample T+Q+U jointly
+    !==========================================================================
+    implicit none
+
+    real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data, rms, model
+    integer(i4b),               intent(in) :: map_n, pixel
+    integer(i4b)                           :: i,j,k
+    real(dp)                               :: lnL
+
+    ! Initialize the result to null
+    lnL = 0.d0
+
+    ! For your simplest, pol type by pol type case
+    if (map_n > 0) then
+       if (pixel > -1) then
+          do j = 1, nbands
+             lnL = lnL - 0.5d0*((data(pixel,map_n,j)-model(pixel,map_n,j))/rms(pixel,map_n,j))**2
+          end do
+       else
+          do i = 0, npix-1
+             do j = 1, nbands
+                lnL = lnL - 0.5d0*((data(i,map_n,j)-model(i,map_n,j))/rms(i,map_n,j))**2
+             end do
+          end do
+       end if
+    ! For Q+U joint sampling
+    else if (map_n == -1) then
+       if (pixel > -1) then
+          do j = 1, nbands
+             do k = 2, 3
+                lnL = lnL - 0.5d0*((data(pixel,k,j)-model(pixel,k,j))/rms(pixel,k,j))**2
+             end do
+          end do
+       else
+          do i = 0, npix-1
+             do j = 1, nbands
+                do k = 2, 3
+                   lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
+                end do
+             end do
+          end do
+       end if
+    ! For T+Q+U joint sampling
+    else if (map_n == -2) then
+       if (pixel > -1) then
+          do j = 1, nbands
+             do k = 1, 3
+                lnL = lnL - 0.5d0*((data(pixel,k,j)-model(pixel,k,j))/rms(pixel,k,j))**2
+             end do
+          end do
+       else
+          do i = 0, npix-1
+             do j = 1, nbands
+                do k = 1, 3
+                   lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
+                end do
+             end do
+          end do
+       end if
+    end if
+  end function evaluate_lnL
 
   function sample_fg_amp(dpar, dat, comp, ind, map_n)
     !------------------------------------------------------------------------
@@ -1070,27 +1145,94 @@ contains
     end if
     
   end subroutine template_fit
+
+  subroutine sample_index_metropolis(data,rms,model,theta_0,p_theta,step,map_n,pixel,lnL,sample)
+    implicit none
+
+    real(dp), dimension(0:npix-1,nmaps,nbands), intent(in)    :: data, rms
+    real(dp), dimension(2),                     intent(in)    :: p_theta
+    real(dp),                                   intent(inout) :: theta_0
+    real(dp),                                   intent(inout) :: lnL
+    real(dp),                                   intent(in)    :: step
+    integer(i4b),                               intent(in)    :: pixel, map_n
+    logical(lgt),                               intent(in)    :: sample
+
+    real(dp), dimension(0:npix-1,nmaps,nbands)                :: model_map
+    real(dp)                                                  :: t, a, b, lnL_sample
+    real(dp)                                                  :: diff, ratio, num, lnl_new
+    integer(i4b)                                              :: j, k
+
+    interface 
+       function model(pixel,map_n,band,theta) 
+         use healpix_types
+         implicit none
+         real(dp),     intent(in) :: theta
+         integer(i4b), intent(in) :: pixel, map_n, band
+         real(dp)                 :: model
+       end function model
+    end interface
+
+    lnl_new = 0.d0
+    ! if map_n == -1, sample Q and U jointly
+    if (map_n == -1) then
+       do k = 2, 3
+          ! Draw a sample
+          t = theta_0 + rand_normal(0.d0,step)
+          ! Evaluate model
+          do j = 1, nbands
+             model_map(pixel,k,j) = model(pixel,k,j,t)
+          end do
+          ! Assess fit and consider the prior
+          lnl_new = lnl_new + evaluate_lnL(data,rms,model_map,k,pixel) + &
+               & log(eval_normal_prior(t,p_theta(1), p_theta(2)))
+       end do
+    else
+       ! Draw a sample
+       t = theta_0 + rand_normal(0.d0,step)
+       ! Evaluate model
+       do j = 1, nbands
+          model_map(pixel,map_n,j) = model(pixel,map_n,j,t)
+       end do
+       ! Assess fit and consider the prior
+       lnl_new = evaluate_lnL(data,rms,model_map,map_n,pixel) + &
+            & log(eval_normal_prior(t,p_theta(1), p_theta(2)))
+    end if
+    ! Compare to previous fit
+    diff = lnl_new - lnL
+    ratio = exp(diff)
+    
+    if (sample) then
+       call RANDOM_NUMBER(num)
+       if (ratio > num) then
+          theta_0  = t
+          lnL      = lnl_new
+       end if
+    else 
+       if (ratio > 1.d0) then
+          theta_0  = t
+          lnl      = lnl_new
+       end if
+    end if
+    
+  end subroutine sample_index_metropolis
     
   ! This architecture of this function has not been verified yet
-  subroutine sample_HI_T(dpar, dat, comp, map_n, output)
+  subroutine sample_HI_T(dpar, ddata, dcomps, map_n, output)
     implicit none
     
     class(dang_params)                         :: dpar
-    type(dang_data)                            :: dat
-    type(dang_comps)                           :: comp
+    type(dang_data)                            :: ddata
+    type(dang_comps)                           :: dcomps
     integer(i4b), intent(in)                   :: map_n
     integer(i4b)                               :: nside1, npix2, nside2
-    real(dp), dimension(0:npix-1,nmaps,nbands) :: cov
+    real(dp), dimension(0:npix-1,nmaps,nbands) :: cov, model
     real(dp), dimension(0:npix-1,nmaps)        :: te
     real(dp), dimension(0:npix-1)              :: te_sample
     real(dp), allocatable, dimension(:,:,:)    :: maps_low, cov_low
     real(dp), allocatable, dimension(:,:)      :: T_low
     real(dp), allocatable, dimension(:)        :: sample_T_low
-    real(dp)                                   :: a, b, c, num, sam
-    real(dp)                                   :: t, p, sol
-    real(dp)                                   :: lnl_old, lnl_new
-    real(dp)                                   :: diff, ratio
-    real(dp)                                   :: paccept, naccept, s
+    real(dp), dimension(2)                     :: p_Td
+    real(dp)                                   :: Td, lnl, s
 
     integer(i4b), optional, intent(in)         :: output
 
@@ -1101,12 +1243,13 @@ contains
        test = .true.
     end if
     
-    te      = comp%T_d
-    cov     = dat%rms_map*dat%rms_map
+    te      = dcomps%T_d
+    cov     = ddata%rms_map*ddata%rms_map
+
+    p_Td(1) = dpar%HI_Td_mean
+    p_Td(2) = dpar%HI_Td_std
     
-    sam = 0.0
-    
-    nside2 = 16!64
+    nside2 = 16
     
     nside1 = npix2nside(npix)
     if (nside1 == nside2) then
@@ -1119,109 +1262,39 @@ contains
     allocate(sample_T_low(0:npix2-1))
     
     do j = 1, nbands
-       maps_low(:,:,j)   = dat%sig_map(:,:,j)
+       maps_low(:,:,j)   = ddata%sig_map(:,:,j)
        cov_low(:,:,j)    = cov(:,:,j)
     end do
     T_low = te
     
     ! Metropolis algorithm
     
-    !$OMP PARALLEL PRIVATE(i,j,k,l,c,b,sol,sam,lnl_old,lnl_new,ratio,t)
-    !$OMP DO SCHEDULE(STATIC)
+    !!$OMP PARALLEL PRIVATE(i,j,k,l,Td,lnl,t)
+    !!$OMP DO SCHEDULE(STATIC)
     do i = 0, npix2-1
-       naccept = 0.d0
-       paccept = 0.d0
-       ! s       = 1.d0
-       if (dat%masks(i,1) == 0.d0  .or. dat%masks(i,1) == missval) then
+       if (ddata%masks(i,1) == 0.d0  .or. ddata%masks(i,1) == missval) then
           sample_T_low(i) = missval
           cycle
        else
-          a   = 0.d0
-          sol = T_low(i,map_n)
-          sam = sol
+          Td = T_low(i,map_n)
           ! Chi-square from the most recent Gibbs chain update
           do j = 1, nbands
-             a = a + (((comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),sol)) &
-                  - (maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/dat%rms_map(i,map_n,j)**2
+             model(i,map_n,j) = model_HI_Td(i,map_n,j,Td)
           end do
-          c   = a
           
-          lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%HI_Td_mean, dpar%HI_Td_std))
+          lnl = evaluate_lnL(maps_low,ddata%rms_map,model,1,i) + &
+               & log(eval_normal_prior(Td,dpar%HI_Td_mean, dpar%HI_Td_std))
 
-          if (test) then
-             open(41,file='metrop_test.dat')
-             open(42,file='lnls.dat')
-          end if
           s = dpar%HI_Td_step
-          write(*,*) s
           do l = 1, dpar%nsample
-             ! if (mod(l,50) == 0) then
-             !    if (paccept > 0.6d0) then
-             !       s = s*2.0
-             !    else if (paccept < 0.4d0) then
-             !       s = s/2.0
-             !    end if
-             !    write(*,*) paccept, s
-             ! end if
-             ! Draw a sample
-             t = sam + rand_normal(0.d0,s)
-             b = 0.d0
-             a = 0.d0
-             do j = 1, nbands
-                b = b + (((comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),t)) &
-                     - (maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/dat%rms_map(i,map_n,j)**2
-             end do
-             
-             lnl_new = -0.5d0*b + log(eval_normal_prior(sam,dpar%HI_Td_mean, dpar%HI_Td_std))
-             diff = lnl_new - lnl_old
-             ratio = exp(diff)
-
-             write(*,*) sam, t
-
-             if (test) then
-                write(42,fmt='(2(E17.8))') lnl_old, lnl_new
-             end if
-             if (trim(dpar%ml_mode) == 'optimize') then
-                if (ratio > 1.d0) then
-                   sam      = t
-                   c        = b
-                   lnl_old = lnl_new
-                   naccept  = naccept + 1.0
-                end if
-             else if (trim(dpar%ml_mode) == 'sample') then
-                call RANDOM_NUMBER(num)
-                if (ratio > num) then
-                   sam      = t
-                   c        = b
-                   lnl_old = lnl_new
-                   naccept  = naccept + 1.0
-                end if
-             end if
-             ! write(*,*) c, b
-             ! write(*,*) lnl_old, lnl_new
-             ! write(*,*)
-             paccept = naccept/l
-             if (test) then
-                write(41,fmt='(4(E17.8))') t, paccept, ratio, num
-             end if
+             call sample_index_metropolis(maps_low,ddata%rms_map,model_HI_Td,Td,p_Td,s,map_n,i,lnl,.true.)
           end do
-          stop
-          if (test) then
-             close(41)
-             close(42)
-          end if
-          if (sam == 0.d0) then
-             write(*,*) 'Error: T_d = 0.d0 accepted!'
-             stop
-          end if
-          
-          sol             = sam
-          sample_T_low(i) = sol
+          sample_T_low(i) = Td
        end if
        ! stop
     end do
-    !$OMP END DO
-    !$OMP END PARALLEL
+    !!$OMP END DO
+    !!$OMP END PARALLEL
 
     ! if (nside1 /= nside2) then
     !    if (ordering == 1) then
@@ -1233,13 +1306,28 @@ contains
     ! else
     te_sample =  sample_T_low
     ! end if
-    comp%T_d(:,1) = te_sample
+    dcomps%T_d(:,1) = te_sample
     
     deallocate(maps_low)
     deallocate(T_low)
     deallocate(cov_low)
     deallocate(sample_T_low)
-    
+
+  contains
+
+    function model_HI_Td(pixel,map_n,band,Td)
+      use healpix_types
+      implicit none
+      integer(i4b), intent(in) :: pixel, map_n, band
+      real(dp),     intent(in) :: Td
+
+      real(dp) :: model_HI_Td
+      
+      model_HI_Td = ddata%gain(band)*dcomps%HI_amps(band)*dcomps%HI(pixel,1)*&
+           & planck(bp(band),Td)+ddata%offset(band)
+
+    end function model_HI_Td
+
   end subroutine sample_HI_T
   ! ------------------------------------------------------------
   
@@ -1481,14 +1569,16 @@ contains
                 do j = 1, nbands
                    ! write(*,*) 'j = ', j
                    ss  = dat%fg_map(pixel,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                   sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,0,ind))*log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+                   sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,0,ind))*&
+                        & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
                 end do
                 ! write(*,*) ''
              end do
           else
              do j = 1, nbands
                 ss  = dat%fg_map(pixel,map_n,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                sum = sum + (((1.0/dat%rms_map(pixel,map_n,j))**2)*(ss/dat%fg_map(pixel,map_n,0,ind))*log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+                sum = sum + (((1.0/dat%rms_map(pixel,map_n,j))**2)*(ss/dat%fg_map(pixel,map_n,0,ind))*&
+                     & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
              end do
           end if
        else
@@ -1499,7 +1589,8 @@ contains
                    if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
                    do j = 1, nbands
                       ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                      sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+                      sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*&
+                           & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
                    end do
                 end do
              end do
@@ -1508,7 +1599,8 @@ contains
                 if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
                 do j = 1, nbands
                    ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                   sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+                   sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*& 
+                        & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
                 end do
              end do
           end if

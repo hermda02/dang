@@ -7,27 +7,118 @@ module dang_component_mod
   use dang_bp_mod
   implicit none
   
-  type, public                              :: dang_comps
+  type, public :: dang_comps
      
+     character(len=16)                            :: label, type
+     logical(lgt)                                 :: sample_amplitude
+     logical(lgt), allocatable, dimension(:)      :: sample_index
+
+     real(dp), allocatable, dimension(:,:)        :: spec_par
+     real(dp), allocatable, dimension(:)          :: temp_amps
+
      real(dp), allocatable, dimension(:,:)        :: beta_s, beta_d, T_d, HI
      real(dp), allocatable, dimension(:)          :: HI_amps
 
+     character(len=16), allocatable, dimension(:) :: prior_type
+     real(dp), allocatable, dimension(:,:)        :: gauss_prior
+     real(dp), allocatable, dimension(:,:)        :: uni_prior
+    
+   contains
+
+     procedure :: eval_sed
+
   end type dang_comps
+
+  interface dang_comp
+     procedure constructor
+  end interface dang_comp
+
+  type dang_comp_pts
+     type(dang_comps), pointer :: p => null()
+  end type dang_comp_pts
 
 contains 
 
-  subroutine init_synch(self,param,npix,nmaps)
+  function constructor(dpar,component)
+    ! The overall constructor for the component class
+    ! Takes the parameters as read in from the parameter 
+    ! file and sets them as attributes to the class
+    !
+    ! Input: 
+    !        dpar: class - dang_params
+    !        component: integer
+    !    
+    implicit none
+
+    type(dang_params), intent(in) :: dpar
+    class(dang_comps), pointer    :: constructor
+    integer(i4b),      intent(in) :: component
+
+    constructor%label            = dpar%fg_label(component)
+    constructor%type             = dpar%fg_type(component)
+    constructor%sample_amplitude = dpar%fg_samp_amp(component)
+
+    if (trim(constructor%type) == 'mbb') then
+       ! Allocate arrays to appropriate size for each component type
+       allocate(constructor%gauss_prior(2,2))
+       allocate(constructor%uni_prior(2,2))
+       allocate(constructor%sample_index(2))
+       allocate(constructor%prior_type(2))
+     
+       ! Bools for sampling indices
+       constructor%sample_index(1)  = dpar%fg_samp_spec(component,1)
+       constructor%sample_index(2)  = dpar%fg_samp_spec(component,2)
+
+       ! Define prior for likelihood evaluation
+       constructor%prior_type(1)    = dpar%fg_prior_type(component,1)
+       constructor%prior_type(2)    = dpar%fg_prior_type(component,2)
+
+       ! Define the Gaussian prior and bounds
+       constructor%gauss_prior(1,1) = dpar%fg_gauss(component,1,1)
+       constructor%gauss_prior(1,2) = dpar%fg_gauss(component,1,2)
+       constructor%gauss_prior(2,1) = dpar%fg_gauss(component,2,1)
+       constructor%gauss_prior(2,2) = dpar%fg_gauss(component,2,2)
+       
+       constructor%uni_prior(1,1)   = dpar%fg_uni(component,1,1)
+       constructor%uni_prior(1,2)   = dpar%fg_uni(component,1,2)
+       constructor%uni_prior(2,1)   = dpar%fg_uni(component,2,1)
+       constructor%uni_prior(2,2)   = dpar%fg_uni(component,2,2)
+
+    else if (trim(constructor%type) == 'power-law') then
+       ! Allocate arrays to appropriate size for each component type
+       allocate(constructor%gauss_prior(1,2))
+       allocate(constructor%uni_prior(1,2))
+       allocate(constructor%sample_index(1))
+       allocate(constructor%prior_type(1))
+       
+       ! Bools for sampling indices
+       constructor%sample_index(1)  = dpar%fg_samp_spec(component,1)
+
+       ! Define prior for likelihood evaluation
+       constructor%prior_type(1)    = dpar%fg_prior_type(component,1)
+       
+       ! Define the Gaussian prior and bounds
+       constructor%gauss_prior(1,1) = dpar%fg_gauss(component,1,1)
+       constructor%gauss_prior(1,2) = dpar%fg_gauss(component,1,2)
+
+       constructor%uni_prior(1,1)   = dpar%fg_uni(component,1,1)
+       constructor%uni_prior(1,2)   = dpar%fg_uni(component,1,2)
+
+    end if
+  end function constructor
+
+  subroutine init_synch(self,dpar,npix,nmaps)
     implicit none
     type(dang_comps)              :: self
-    type(dang_params)             :: param
+    type(dang_params)             :: dpar
     integer(i4b), intent(in)      :: npix, nmaps
     
     allocate(self%beta_s(0:npix-1,nmaps))
     write(*,*) 'Allocated synch parameter maps'
-    if (trim(param%fg_spec_file(1,1)) == 'none') then 
-       write(*,fmt='(a,f8.4)') 'Full sky beta_s estimate ', param%fg_init(1,1)
+    if (trim(dpar%fg_spec_file(1,1)) == 'none') then 
+       write(*,fmt='(a,f8.4)') 'Full sky beta_s estimate ', dpar%fg_init(1,1)
        write(*,*) ''
-       self%beta_s     = param%fg_init(1,1) ! Synchrotron beta initial guess
+       self%beta_s     = dpar%fg_init(1,1) ! Synchrotron beta initial guess
     else
        write(*,*) "No init files found"
        stop
@@ -36,10 +127,10 @@ contains
     
   end subroutine init_synch
   
-  subroutine init_dust(self,param,npix,nmaps)
+  subroutine init_dust(self,dpar,npix,nmaps)
     implicit none
     type(dang_comps)              :: self
-    type(dang_params)             :: param
+    type(dang_params)             :: dpar
     integer(i4b), intent(in)      :: npix, nmaps
     
     allocate(self%beta_d(0:npix-1,nmaps))
@@ -51,24 +142,24 @@ contains
     
   end subroutine init_dust
 
-  subroutine init_hi_fit(self, param, npix)
+  subroutine init_hi_fit(self, dpar, npix)
     implicit none
     type(dang_comps)         :: self
-    type(dang_params)        :: param
+    type(dang_params)        :: dpar
     integer(i4b), intent(in) :: npix
     character(len=80), dimension(180) :: head
 
     allocate(self%HI(0:npix-1,1))
     allocate(self%T_d(0:npix-1,nmaps))
-    allocate(self%HI_amps(param%numinc))
+    allocate(self%HI_amps(dpar%numinc))
     write(*,*) 'Allocated HI fitting maps!'
     write(*,*) ''
-    call read_bintab(trim(param%datadir)//trim(param%HI_file),self%HI,npix,1,nullval,anynull,header=head)
+    call read_bintab(trim(dpar%datadir)//trim(dpar%HI_file),self%HI,npix,1,nullval,anynull,header=head)
 
-    if (trim(param%HI_Td_init) == 'none') then
-       self%T_d = param%HI_Td_mean
+    if (trim(dpar%HI_Td_init) == 'none') then
+       self%T_d = dpar%HI_Td_mean
     else
-       call read_bintab(trim(param%datadir)//trim(param%HI_Td_init),self%T_d,npix,1,nullval,anynull,header=head)
+       call read_bintab(trim(dpar%datadir)//trim(dpar%HI_Td_init),self%T_d,npix,1,nullval,anynull,header=head)
     end if
 
   end subroutine init_hi_fit
@@ -89,14 +180,14 @@ contains
        end do
     end if
   end function planck
-  
-  ! function compute_spectrum(param, self, bp, ind, freq, pix, map_n, index)
-  function compute_spectrum(param, self, bp, ind, pix, map_n, index)
+  ! function compute_spectrum(dpar, self, bp, ind, freq, pix, map_n, index)
+
+  subroutine eval_sed(self, dpar, bp, ind, pix, map_n, index)
     ! always computed in RJ units
     
     implicit none
-    class(dang_params)             :: param
-    type(dang_comps)               :: self
+    class(dang_params)             :: dpar
+    class(dang_comps)              :: self
     type(bandinfo)                 :: bp
     integer(i4b),       intent(in) :: ind
     integer(i4b),       optional   :: pix
@@ -105,15 +196,15 @@ contains
     real(dp),           optional   :: index
     real(dp)                       :: z, compute_spectrum
     
-    if (trim(param%fg_label(ind)) == 'power-law') then
+    if (trim(dpar%fg_label(ind)) == 'power-law') then
        if (bp%id == 'delta') then
           if (ind == 1) then
              if (present(index)) then
-                compute_spectrum = (bp%nu_c/param%fg_nu_ref(ind))**index
+                compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**index
              else 
-                compute_spectrum = (bp%nu_c/param%fg_nu_ref(ind))**self%beta_s(pix,map_n)
+                compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
              end if
-             !else if (trim(param%fg_label(ind)) == 'mbb') then
+             !else if (trim(dpar%fg_label(ind)) == 'mbb') then
           else if (ind == 2) then
              z = h / (k_B*self%T_d(pix,map_n))
              compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
@@ -125,14 +216,14 @@ contains
           if (ind == 1) then
              if (present(index)) then
                 do i = 1, bp%n
-                   compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/param%fg_nu_ref(ind))**index
+                   compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**index
                 end do
              else 
                 do i = 1, bp%n
-                   compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/param%fg_nu_ref(ind))**self%beta_s(pix,map_n)
+                   compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
                 end do
              end if
-          else if (trim(param%fg_label(ind)) == 'mbb') then
+          else if (trim(dpar%fg_label(ind)) == 'mbb') then
              ! else if (ind == 2) then
              z = h / (k_B*self%T_d(pix,map_n))
              do i = 1, bp%n
@@ -141,6 +232,62 @@ contains
              end do
           end if
        end if
+    end if
+  end subroutine eval_sed
+
+  
+  ! function compute_spectrum(dpar, self, bp, ind, freq, pix, map_n, index)
+  function compute_spectrum(dpar, self, bp, ind, pix, map_n, index)
+    ! always computed in RJ units
+    
+    implicit none
+    class(dang_params)             :: dpar
+    type(dang_comps)               :: self
+    type(bandinfo)                 :: bp
+    integer(i4b),       intent(in) :: ind
+    integer(i4b),       optional   :: pix
+    integer(i4b),       optional   :: map_n
+    integer(i4b)                   :: i
+    real(dp),           optional   :: index
+    real(dp)                       :: z, compute_spectrum
+    
+    if (trim(dpar%fg_label(ind)) == 'power-law') then
+       if (bp%id == 'delta') then
+          if (ind == 1) then
+             if (present(index)) then
+                compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**index
+             else 
+                compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
+             end if
+             !else if (trim(dpar%fg_label(ind)) == 'mbb') then
+          else if (ind == 2) then
+             z = h / (k_B*self%T_d(pix,map_n))
+             compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
+                  (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(353.d0*1d9))**(self%beta_d(pix,map_n)+1.d0)
+          end if
+       else
+          compute_spectrum = 0.d0
+          ! Compute for LFI bandpass
+          if (ind == 1) then
+             if (present(index)) then
+                do i = 1, bp%n
+                   compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**index
+                end do
+             else 
+                do i = 1, bp%n
+                   compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
+                end do
+             end if
+          else if (trim(dpar%fg_label(ind)) == 'mbb') then
+             ! else if (ind == 2) then
+             z = h / (k_B*self%T_d(pix,map_n))
+             do i = 1, bp%n
+                compute_spectrum = compute_spectrum + bp%tau0(i)*(exp(z*353.d0*1d9)-1.d0) / &
+                     (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/353.d9)**(self%beta_d(pix,map_n)+1.d0)
+             end do
+          end if
+       end if
+    end if
   end function compute_spectrum
   
 end module dang_component_mod

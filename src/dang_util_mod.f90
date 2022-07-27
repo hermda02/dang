@@ -198,5 +198,26 @@ contains
     mask_avg = sum/mask_sum
     
   end function mask_avg
+
+  function mask_sum(array,mask)
+    real(dp), dimension(:), intent(in) :: array
+    real(dp), dimension(:), intent(in) :: mask
+    real(dp)                           :: sum, mask_sum
+    integer(i4b)                       :: i
+    
+    sum = 0.d0
+    
+    do i = 1, npix
+       if (mask(i) == missval .or. mask(i) == 0.d0) then
+          cycle
+       else
+          sum      = sum + array(i)
+       end if
+    end do
+    
+    mask_sum = sum
+    
+  end function mask_sum
+
   
 end module dang_util_mod

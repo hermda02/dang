@@ -2,7 +2,7 @@
 
 F90       = ifort
 MPF90     = mpiifort
-F90FLAGS  = -g -O2 -traceback
+F90FLAGS  = -g -C -traceback
 
 LOCAL=/mn/stornext/u3/hke/owl/local
 

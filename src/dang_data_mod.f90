@@ -45,6 +45,9 @@ module dang_data_mod
 
 contains
 
+  ! I think I want a constructor that creates a data object for each band
+
+
   subroutine init_data_maps(self,dpar)
     implicit none
     class(dang_data),       intent(inout) :: self
@@ -470,12 +473,12 @@ contains
     
   end subroutine compute_chisq
 
-  subroutine write_stats_to_term(self,dpar,comp,iter)
+  subroutine write_stats_to_term(self,dpar,dcomps,iter)
     implicit none
 
     type(dang_data)                     :: self
     type(dang_params)                   :: dpar
-    type(dang_comps)                    :: comp
+    type(dang_comps)                    :: dcomps
     integer(i4b),            intent(in) :: iter
     integer(i4b)                        :: k
 
@@ -487,13 +490,13 @@ contains
                 write(*,fmt='(i6, a, a, f7.3, a, f8.4, a, 10e10.3)')&
                      iter, " - Poltype: "//trim(tqu(k)), " - A_s: ",&
                      self%fg_map(23000,k,0,1),  " - beta_s: ",&
-                     mask_avg(comp%beta_s(:,k),self%masks(:,1)), ' - A_d: ', &
+                     mask_avg(dcomps%beta_s(:,k),self%masks(:,1)), ' - A_d: ', &
                      self%temp_amps(:,k,1)/self%temp_norm(k,1)
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
           end if
        end do
-       call compute_chisq(self,dpar,comp,k)
+       call compute_chisq(self,dpar,dcomps,k)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
              write(*,fmt='(i6,a,f10.5)') iter, " - Chisq: ", self%chisq
@@ -502,18 +505,18 @@ contains
        end if
        
     else if (trim(dpar%mode) == 'hi_fit') then
-       call compute_chisq(self,dpar,comp,1)
+       call compute_chisq(self,dpar,dcomps,1)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
              if (nbands .lt. 10) then
                 write(*,fmt='(i6, a, f10.5, a, f10.3, a, 10e10.3)')&
                      iter, " - chisq: " , self%chisq, " - T_d: ",&
-                     mask_avg(comp%T_d(:,1),self%masks(:,1)), ' - A_HI: ', comp%HI_amps
+                     mask_avg(dcomps%T_d(:,1),self%masks(:,1)), ' - A_HI: ', dcomps%HI_amps
                 write(*,fmt='(a)') '---------------------------------------------'
              else
                 write(*,fmt='(i6, a, E10.3, a, e10.3)')&
                      iter, " - chisq: " , self%chisq, " - T_d: ",&
-                     mask_avg(comp%T_d(:,1),self%masks(:,1))
+                     mask_avg(dcomps%T_d(:,1),self%masks(:,1))
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
           end if
@@ -523,12 +526,12 @@ contains
   end subroutine write_stats_to_term
 
   ! Data output routines
-  subroutine write_maps(dpar,dat,comp)
+  subroutine write_maps(dpar,dat,dcomps)
     implicit none
     
     type(dang_params)                   :: dpar
     type(dang_data)                     :: dat
-    type(dang_comps)                    :: comp
+    type(dang_comps)                    :: dcomps
     real(dp), dimension(0:npix-1,nmaps) :: map
     real(dp)                            :: s, signal
     integer(i4b)                        :: n, mn, i, j, k, l
@@ -588,7 +591,7 @@ contains
           call write_result_map(trim(title), nside, ordering, header, map)
        end do
        title = trim(dpar%outdir) // 'synch_beta_k' // trim(iter_str) // '.fits'
-       map(:,:)   = comp%beta_s(:,:)
+       map(:,:)   = dcomps%beta_s(:,:)
        do i = 0, npix-1
           if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
              map(i,:) = missval
@@ -625,7 +628,7 @@ contains
        write(iter_str, '(i0.5)') iter
        ! do j = 1, nbands
        !    title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
-       !    map(:,1)   = comp%HI_amps(j)*comp%HI(:,1)
+       !    map(:,1)   = dcomps%HI_amps(j)*dcomps%HI(:,1)
        !    do i = 0, npix-1
        !       if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
        !          map(i,1) = missval
@@ -634,6 +637,7 @@ contains
        !    call write_bintab(map,npix,1, header, nlheader, trim(title))
        ! end do
 
+       ! Write out residual maps
        do j = 1, nbands
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
           map(:,:)   = dat%res_map(:,:,j)
@@ -644,19 +648,22 @@ contains
           end do
           call write_bintab(map,npix,1, header, nlheader, trim(title))
        end do
+
+       ! Write out T_d map
        title = trim(dpar%outdir) // 'T_d_k'// trim(iter_str) // '.fits'
-       map(:,1)   = comp%T_d(:,1)
+       map(:,1)   = dcomps%T_d(:,1)
        do i = 0, npix-1
           if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
              map(i,1) = missval
           end if
        end do
        call write_bintab(map,npix,1, header, nlheader, trim(title))
+
+       ! Compute and write out \chi^2 map
        dat%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
-             s = dat%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))+dat%offset(j)
-             ! s =  comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))
+             s = dat%gain(j)*dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))+dat%offset(j)
              dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
           end do
        end do
@@ -673,11 +680,11 @@ contains
     
   end subroutine write_maps
   
-  subroutine write_data(dpar,dat,comp,map_n)
+  subroutine write_data(dpar,dat,dcomps,map_n)
     implicit none
     type(dang_params)                   :: dpar
     type(dang_data)                     :: dat
-    type(dang_comps)                    :: comp
+    type(dang_comps)                    :: dcomps
     integer(i4b),            intent(in) :: map_n
     integer(i4b)                        :: i
     character(len=2)                    :: temp_n
@@ -713,7 +720,7 @@ contains
        else
           open(32,file=title, status="new", action="write")
        endif
-       write(32,*) comp%beta_s(23000,map_n)
+       write(32,*) dcomps%beta_s(23000,map_n)
        close(32)
        
        title = trim(dpar%outdir) // 'total_chisq_' // trim(tqu(map_n)) // '.dat'
@@ -723,7 +730,7 @@ contains
        else
           open(33,file=title, status="new", action="write")
        endif
-       call compute_chisq(dat,dpar,comp,map_n)
+       call compute_chisq(dat,dpar,dcomps,map_n)
        write(33,*) dat%chisq
        close(33)
        
@@ -753,7 +760,7 @@ contains
        else
           open(35,file=title,status="new",action="write")
        end if
-       write(35,fmt=fmt) comp%HI_amps
+       write(35,fmt=fmt) dcomps%HI_amps
        close(35)
        
        title = trim(dpar%outdir)//'HI_chisq.dat'
@@ -763,7 +770,7 @@ contains
        else
           open(36,file=title,status="new",action="write")
        end if
-       call compute_chisq(dat,dpar,comp,1)
+       call compute_chisq(dat,dpar,dcomps,1)
        write(36,'(E17.8)') dat%chisq
        close(36)
 
@@ -794,7 +801,7 @@ contains
        else
           open(39,file=title,status="new",action="write")
        end if
-       write(39,'(E17.8)') mask_avg(comp%T_d(:,1),dat%masks(:,1))
+       write(39,'(E17.8)') mask_avg(dcomps%T_d(:,1),dat%masks(:,1))
        close(39)
 
        title = trim(dpar%outdir)//'band_chisq.dat'
@@ -810,5 +817,38 @@ contains
     end if
     
   end subroutine write_data
+
+  subroutine update_ddata(self,dpar,dcomps)
+    implicit none
+    type(dang_data), intent(inout) :: self
+    type(dang_params)              :: dpar
+    type(dang_comps)               :: dcomps
+    
+    integer(i4b)                   :: i,j
+    real(dp)                       :: s
+
+    call compute_chisq(self,dpar,dcomps,1)
+    self%chi_map = 0.d0
+    do j = 1, nbands
+       self%band_chisq(j) = 0.d0
+       ! Compute the residual for each map
+       do i = 0, npix-1
+          if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) then
+             self%res_map(i,1,j) = missval
+             self%chi_map(i,1)   = missval
+             cycle
+          end if
+          ! Declare the model value
+          s = self%gain(j)*dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))+self%offset(j)
+          ! Compute residual per band
+          self%res_map(i,1,j) = (self%sig_map(i,1,j)-s)
+          ! Compute the summed total chisq
+          self%chi_map(i,1) = self%chi_map(i,1) + self%masks(i,1)*(self%sig_map(i,1,j) - s)**2.d0/self%rms_map(i,1,j)**2.d0
+          ! Compute the chisq for each band
+          self%band_chisq(j) = self%band_chisq(j) + (self%res_map(i,1,j)/self%rms_map(i,1,j))**2
+       end do
+    end do
+
+  end subroutine update_ddata
 
 end module dang_data_mod
