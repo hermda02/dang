@@ -1374,7 +1374,8 @@ contains
     integer(i4b),           intent(in)    :: map_n, ind
     integer(i4b), optional, intent(in)    :: pixel
     real(dp)                              :: prob, sum, ss
-
+    integer(i4b)                          :: i, j, k
+    
     prob = 0.d0
     sum = 0.d0
 
@@ -1439,6 +1440,7 @@ contains
     integer(i4b),           intent(in)    :: map_n, ind
     integer(i4b), optional, intent(in)    :: pixel
     real(dp)                              :: prob, sum, ss_Q, ss_U
+    integer(i4b)                          :: i, j, k
 
     prob = 0.d0
     sum = 0.d0
