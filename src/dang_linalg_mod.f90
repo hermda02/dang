@@ -436,10 +436,9 @@ contains
       real(dp), dimension(:), intent(in)     :: vec
       real(dp), dimension(:), intent(in)     :: rhs
       real(dp), allocatable, dimension(:)    :: temp1, temp2, temp3, res
-      real(dp)                               :: x
       integer(i4b), intent(in)               :: nbands, map_n
       integer(i4b)                           :: i, j, k, len, l, m, n, r, t, s
-      integer(i4b)                           :: z, w, o
+      integer(i4b)                           :: z, w, o, x
 
       x   = dat%npix
       n   = size(vec)
@@ -536,10 +535,10 @@ contains
 
       real(dp), dimension(:), intent(inout)  :: vec
       real(dp), allocatable, dimension(:)    :: temp1, temp2, temp3, res
-      real(dp)                               :: x
       integer(i4b), intent(in)               :: nbands, map_n
       integer(i4b)                           :: n, i, j, k, len, l, m, r, t, s
-
+      integer(i4b)                           :: x
+      
       x = dat%npix
       n = size(vec)
       len = 0
@@ -682,9 +681,9 @@ contains
 
       real(dp), dimension(:), intent(in)     :: vec
       real(dp), allocatable, dimension(:)    :: temp1, temp2, temp3, res
-      real(dp)                               :: x
       integer(i4b), intent(in)               :: nbands, map_n
       integer(i4b)                           :: n, i, j, k, len, l, m, r, t, s
+      integer(i4b)                           :: x
 
       x = dat%npix
       n = size(vec)
