@@ -74,8 +74,8 @@ program dang
      ! Initialize ddata and components
      !----------------------------------------------------------------------------------------------------------
      call ddata%init_data_maps(dpar)
-     call init_synch(dcomps,dpar,npix,nmaps)
-     call init_dust(dcomps,dpar,npix,nmaps)
+     ! call init_synch(dcomps,dpar,npix,nmaps)
+     ! call init_dust(dcomps,dpar,npix,nmaps)
      call ddata%read_data_maps(dpar)
      call convert_maps(ddata,dpar)
      do j = 1, nbands
@@ -85,6 +85,7 @@ program dang
         end if
      end do
      write(*,*) ''
+     call init_components(dpar)
      call comp_sep
   
   !------------------------------------------------------------------------------------------------
@@ -101,6 +102,8 @@ program dang
      
      ! Debug initialization here
      dcomps%HI_amps(:) = 1.d-4
+
+     call init_components(dpar)
 
      ! Start sampling routine
      call hi_fit   
@@ -164,6 +167,8 @@ contains
    !--------------------------------------------------------------|
    
    do iter = 1, dpar%ngibbs
+
+      write(*,*) iter
       
       !--------------------- BP SWAP CHUNK -----------------------|
       ! -- Swap in a different BeyondPlanck map each iteration -- |
@@ -215,6 +220,14 @@ contains
          ! How good is the fit and what are the parameters looking like?
          call write_stats_to_term(ddata,dpar,dcomps,iter)
       end if
+
+      ! Now we'll change 'extrapolate_foreground' and 'extrapolate template' to 'update_sky_signal' 
+      ! or something similar
+
+      ! So now we want to combine the below chunk to look like
+      !
+      ! call sample_component_amplitudes (where both diffuse and template amplitudes are sampled)
+      ! call update_sky_signal(dpar,dcomps)
       
       ! ------------------------------------------------------------------------------------------
       ! Sample amplitudes
@@ -240,6 +253,11 @@ contains
          end if
       end do
       
+      ! Similarly here:
+      !
+      ! call sample_spectral_parameters
+      ! call update_sky_signal(ddata,dcomps)
+
       ! ------------------------------------------------------------------------------------------
       ! Sample spectral parameters
       ! ------------------------------------------------------------------------------------------

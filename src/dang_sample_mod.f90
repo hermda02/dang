@@ -159,6 +159,13 @@ contains
           end if
        end do
     end do
+
+    ! call sample_group_RHS(componentlist,sample_group,b)
+
+    ! open(55,file='sample_group_rhs_testing.txt')
+    ! write(55,fmt='(2(E16.8))') c, b
+    ! close(55)
+    ! stop
     
     ! Computation
     if (trim(method) == 'cg') then
@@ -259,6 +266,34 @@ contains
     deallocate(b)
     deallocate(c)
   end subroutine sample_joint_amp
+
+  subroutine pseudo_cg_group_code
+    implicit none
+
+    ! Solving Ax = b
+    ! call sample_group_RHS(sampe_group)
+    
+    ! ! Computation
+    ! if (trim(method) == 'cg') then
+    !    if (rank == master) write(*,*) 'Joint sampling using CG.'
+    !    ! call sample_cg_vec(c,dpar,dat,compo,map_n)
+    !    call sample_cg_vec(b,c,dpar,dat,compo,map_n)
+    ! else if (trim(method) == 'cg_precond') then
+    !    call sample_cg_vec_precond(b,c,dpar,dat,compo,map_n)
+    ! else
+    !    write(*,*) trim(method)
+    !    write(*,*) 'cg is the only currently available method for joint sampling'
+    !    stop
+    ! end if
+
+    ! call cg_solution_to_amps(sample_group)
+
+
+
+
+  end subroutine pseudo_cg_group_code
+
+
 
   subroutine sample_index(dpar, dat, comp, ind, map_n, output) 
     !------------------------------------------------------------------------

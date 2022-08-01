@@ -207,6 +207,17 @@ contains
 
     end subroutine backward_sub
 
+    ! subroutine sample_group_RHS(componentlist,sample_group)
+    !   implicit none
+
+    !   integer(i4b)   :: i, j, k
+
+    !   do i = 1, sample_group%ncomp
+         
+
+
+    ! end subroutine sample_group_RHS
+
     subroutine sample_cg_vec(x, b, param, dat, compos, map_n)
         
       ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)
