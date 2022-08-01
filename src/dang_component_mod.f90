@@ -273,42 +273,42 @@ contains
     integer(i4b)                   :: i
     real(dp),           optional   :: index
     real(dp)                       :: z, compute_spectrum
-    
-    if (trim(dpar%fg_label(ind)) == 'power-law') then
-       if (bp%id == 'delta') then
-          if (ind == 1) then
-             if (present(index)) then
-                compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**index
-             else 
-                compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
-             end if
-             !else if (trim(dpar%fg_label(ind)) == 'mbb') then
-          else if (ind == 2) then
-             z = h / (k_B*self%T_d(pix,map_n))
-             compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
-                  (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(353.d0*1d9))**(self%beta_d(pix,map_n)+1.d0)
+
+    ! if (trim(dpar%fg_label(ind)) == 'power-law') then
+    if (bp%id == 'delta') then
+       if (ind == 1) then
+          if (present(index)) then
+             compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**index
+          else 
+             compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
           end if
-       else
-          compute_spectrum = 0.d0
-          ! Compute for LFI bandpass
-          if (ind == 1) then
-             if (present(index)) then
-                do i = 1, bp%n
-                   compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**index
-                end do
-             else 
-                do i = 1, bp%n
-                   compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
-                end do
-             end if
-          else if (trim(dpar%fg_label(ind)) == 'mbb') then
-             ! else if (ind == 2) then
-             z = h / (k_B*self%T_d(pix,map_n))
+          !else if (trim(dpar%fg_label(ind)) == 'mbb') then
+       else if (ind == 2) then
+          write(*,*) 'yuh'
+          z = h / (k_B*self%T_d(pix,map_n))
+          compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
+               (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(353.d0*1d9))**(self%beta_d(pix,map_n)+1.d0)
+       end if
+    else
+       compute_spectrum = 0.d0
+       ! Compute for LFI bandpass
+       if (ind == 1) then
+          if (present(index)) then
              do i = 1, bp%n
-                compute_spectrum = compute_spectrum + bp%tau0(i)*(exp(z*353.d0*1d9)-1.d0) / &
-                     (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/353.d9)**(self%beta_d(pix,map_n)+1.d0)
+                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**index
+             end do
+          else 
+             do i = 1, bp%n
+                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
              end do
           end if
+       ! else if (trim(dpar%fg_label(ind)) == 'mbb') then
+       else if (ind == 2) then
+          z = h / (k_B*self%T_d(pix,map_n))
+          do i = 1, bp%n
+             compute_spectrum = compute_spectrum + bp%tau0(i)*(exp(z*353.d0*1d9)-1.d0) / &
+                  (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/353.d9)**(self%beta_d(pix,map_n)+1.d0)
+          end do
        end if
     end if
   end function compute_spectrum

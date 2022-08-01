@@ -205,6 +205,7 @@ contains
           self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
        end do
     end do
+
     if (present(iter)) then
        write(iter_str, '(i0.5)') iter
        title = trim(dpar%outdir)//trim(dpar%band_label(band))//'_thermal_map_k' // trim(iter_str) // '.fits'
@@ -307,8 +308,13 @@ contains
        sum = (exp(y)-1.d0)**2/(y**2*exp(y))
     else
        do i = 1, bp%n
-          y = (h*bp%nu0(i)*1d9)/(k_B*T_CMB)
-          sum = sum + bp%tau0(i)*(exp(y)-1.d0)**2/(y**2*exp(y))
+          if (bp%nu0(i) > 1e7) then
+             y = (h*bp%nu0(i))/(k_B*T_CMB)
+             sum = sum + bp%tau0(i)*(exp(y)-1.d0)**2/(y**2*exp(y))
+          else
+             y = (h*bp%nu0(i)*1d9)/(k_B*T_CMB)
+             sum = sum + bp%tau0(i)*(exp(y)-1.d0)**2/(y**2*exp(y))
+          end if
        end do
     end if
 

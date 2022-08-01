@@ -83,8 +83,6 @@ program dang
            call dust_correct_band(ddata,dpar,dcomps,j)
         end if
      end do
-
-     write(*,*) ddata%sig_map(0,2,1)
      write(*,*) ''
      ! call init_components(dpar)
      call comp_sep
@@ -169,7 +167,7 @@ contains
    
    do iter = 1, dpar%ngibbs
 
-      write(*,*) iter
+      write(*,*) 'iter = ', iter
       
       !--------------------- BP SWAP CHUNK -----------------------|
       ! -- Swap in a different BeyondPlanck map each iteration -- |

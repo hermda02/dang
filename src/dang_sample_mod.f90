@@ -58,9 +58,6 @@ contains
     allocate(map2fit(0:npix-1,nmaps,nbands))
     
     map2fit = dat%sig_map
-
-    write(*,*) map2fit(0,map_n,1)
-
     
     do n = 1, dpar%ncomp
        if (ANY(dpar%joint_comp == trim(dpar%fg_label(n)))) then
@@ -90,8 +87,9 @@ contains
 
     write(*,*) map2fit(0,map_n,1)
     write(*,*) compute_spectrum(dpar,compo,bp(1),1,0,map_n)
+    write(*,*) dat%rms_map(0,map_n,1)
+    write(*,*) dat%temps(0,map_n,1)
 
-    
     write(*,*) 'Compute RHS of matrix eqn.'
     ! Computing the LHS and RHS of the linear equation
     ! RHS
@@ -100,6 +98,7 @@ contains
        do n = 1, dpar%ncomp
           if (trim(dpar%joint_comp(m)) == trim(dpar%fg_label(n))) then
              if (.not. dpar%joint_pol) then
+                write(*,*) 'somethings wrong'
                 do j = 1, z
                    do i = 1, x
                       if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
@@ -124,6 +123,13 @@ contains
                               &)/(dat%rms_map(i-1,map_n,j)**2.d0)
                          c(x+i) = c(x+i) + (map2fit(i-1,map_n+1,j)*compute_spectrum(dpar,compo,bp(j),n,i-1,map_n+1)  &!compute_spectrum(dpar,compo,n,dpar%band_nu(j),i-1,map_n+1)&
                               &)/(dat%rms_map(i-1,map_n+1,j)**2.d0)
+                         if (i == 1) then
+                            write(*,*) '============='
+                            write(*,*) c(i)
+                            write(*,*) map2fit(i-1,map_n,j)
+                            write(*,*) compute_spectrum(dpar,compo,bp(j),n,i-1,map_n)
+                            write(*,*) '============='
+                         end if
                       end if
                    end do
                 end do
