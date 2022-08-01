@@ -58,6 +58,9 @@ contains
     allocate(map2fit(0:npix-1,nmaps,nbands))
     
     map2fit = dat%sig_map
+
+    write(*,*) map2fit(0,map_n,1)
+
     
     do n = 1, dpar%ncomp
        if (ANY(dpar%joint_comp == trim(dpar%fg_label(n)))) then
@@ -84,6 +87,10 @@ contains
     ! Initialize arrays
     b(:)              = 0.d0
     c(:)              = 0.d0
+
+    write(*,*) map2fit(0,map_n,1)
+    write(*,*) compute_spectrum(dpar,compo,bp(1),1,0,map_n)
+
     
     write(*,*) 'Compute RHS of matrix eqn.'
     ! Computing the LHS and RHS of the linear equation

@@ -83,6 +83,8 @@ program dang
            call dust_correct_band(ddata,dpar,dcomps,j)
         end if
      end do
+
+     write(*,*) ddata%sig_map(0,2,1)
      write(*,*) ''
      ! call init_components(dpar)
      call comp_sep
@@ -194,9 +196,11 @@ contains
       ! --------------------------------------------------------------
       if (dpar%joint_sample) then
          if (dpar%joint_pol) then
+            write(*,*) 2
             call sample_joint_amp(dpar,ddata,dcomps,2,trim(dpar%solver))
          else
             do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+               write(*,*) k
                call sample_joint_amp(dpar,ddata,dcomps,k,trim(dpar%solver))
             end do
          end if
