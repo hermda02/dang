@@ -31,7 +31,6 @@ program dang
   ! Once this has been done, estimates to the level of AME polarization will be made using the lowest   |
   ! frequency bands used here.                                                                          |
   !-----------------------------------------------------------------------------------------------------|  
-  
   integer(i4b)                          :: i, j, k, l, m, n
   integer(i4b)                          :: bp_iter, namps
   real(dp), allocatable, dimension(:,:) :: map, rms, true_synch
@@ -74,8 +73,8 @@ program dang
      ! Initialize ddata and components
      !----------------------------------------------------------------------------------------------------------
      call ddata%init_data_maps(dpar)
-     ! call init_synch(dcomps,dpar,npix,nmaps)
-     ! call init_dust(dcomps,dpar,npix,nmaps)
+     call init_synch(dcomps,dpar,npix,nmaps)
+     call init_dust(dcomps,dpar,npix,nmaps)
      call ddata%read_data_maps(dpar)
      call convert_maps(ddata,dpar)
      do j = 1, nbands
@@ -85,7 +84,7 @@ program dang
         end if
      end do
      write(*,*) ''
-     call init_components(dpar)
+     ! call init_components(dpar)
      call comp_sep
   
   !------------------------------------------------------------------------------------------------
@@ -103,7 +102,7 @@ program dang
      ! Debug initialization here
      dcomps%HI_amps(:) = 1.d-4
 
-     call init_components(dpar)
+     ! call init_components(dpar)
 
      ! Start sampling routine
      call hi_fit   

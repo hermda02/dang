@@ -42,6 +42,7 @@ contains
   
   subroutine init_mpi()
     implicit none
+
     call mpi_init(ierr)
     call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)
     call mpi_comm_size(MPI_COMM_WORLD, numprocs, ierr)
