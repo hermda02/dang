@@ -174,10 +174,6 @@ contains
 
     ! call sample_group_RHS(componentlist,sample_group,b)
 
-    open(55,file='sample_group_rhs_testing.txt')
-    write(55,fmt='(2(E16.8))') c, b
-    close(55)
-    stop
     
     ! Computation
     if (trim(method) == 'cg') then
@@ -191,6 +187,11 @@ contains
        write(*,*) 'cg is the only currently available method for joint sampling'
        stop
     end if
+
+    open(55,file='sample_group_rhs_testing.txt')
+    write(55,fmt='(2(E16.8))') c, b
+    close(55)
+    stop
     
     ! Solver returns a vector - first filled with component amplitudes, then template amplitudes
     ! So unpack in order
