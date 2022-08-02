@@ -98,7 +98,6 @@ contains
        do n = 1, dpar%ncomp
           if (trim(dpar%joint_comp(m)) == trim(dpar%fg_label(n))) then
              if (.not. dpar%joint_pol) then
-                write(*,*) 'somethings wrong'
                 do j = 1, z
                    do i = 1, x
                       if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
