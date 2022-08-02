@@ -7,25 +7,26 @@ module dang_component_mod
   use dang_bp_mod
   implicit none
   
-  public dang_comps, component_pointer
+  public dang_comps, component_pointer, component_list
 
   type :: dang_comps
      
-     character(len=16)                            :: label, type
-     logical(lgt)                                 :: sample_amplitude
-     logical(lgt), allocatable, dimension(:)      :: sample_index
+     character(len=16)                              :: label, type
+     logical(lgt)                                   :: sample_amplitude
+     logical(lgt),      allocatable, dimension(:)   :: sample_index
+     real(dp)                                       :: nu_ref
+     integer(i4b)                                   :: cg_group
+     logical(lgt)                                   :: polfit
 
-     real(dp), allocatable, dimension(:,:)        :: spec_par
-     real(dp), allocatable, dimension(:)          :: temp_amps
+     real(dp),          allocatable, dimension(:,:) :: spec_par
+     real(dp),          allocatable, dimension(:)   :: temp_amps
 
-     real(dp), allocatable, dimension(:,:)        :: beta_s, beta_d, T_d, HI
-     real(dp), allocatable, dimension(:)          :: HI_amps
+     real(dp),          allocatable, dimension(:,:) :: beta_s, beta_d, T_d, HI
+     real(dp),          allocatable, dimension(:)   :: HI_amps
 
-     character(len=16), allocatable, dimension(:) :: prior_type
-     real(dp), allocatable, dimension(:,:)        :: gauss_prior
-     real(dp), allocatable, dimension(:,:)        :: uni_prior
-
-     real(dp)                                     :: nu_ref
+     character(len=16), allocatable, dimension(:)   :: prior_type
+     real(dp),          allocatable, dimension(:,:) :: gauss_prior
+     real(dp),          allocatable, dimension(:,:) :: uni_prior
     
    contains
 
@@ -33,15 +34,103 @@ module dang_component_mod
 
   end type dang_comps
 
-  interface dang_comp
+  interface dang_comps
      procedure constructor
-  end interface dang_comp
+  end interface dang_comps
 
   type component_pointer
      type(dang_comps), pointer :: p => null()
   end type component_pointer
 
+  type(component_pointer), allocatable, dimension(:) :: component_list 
+
+  ! ! ====================================================================
+  ! ! Now define cg_group class
+  ! ! ====================================================================
+
+  ! public cg_groups
+
+  ! type :: dang_cg_group
+
+  !    integer(i4b) :: ncg_components
+  !    type(component_pointer), allocatable, dimension(:) :: cg_component
+
+  !  contains
+
+  !    procedure :: compute_rhs
+
+  ! end type dang_cg_group
+
+  ! interface dang_cg
+  !    procedure constructor_cg
+  ! end interface dang_cg
+
+  ! type cg_pointer
+  !    type(dang_cg_group), pointer :: p => null()
+  ! end type cg_pointer
+
+  ! type(cg_pointer), allocatable, dimension(:) :: cg_groups
+
+  ! ! ====================================================================
+
+
 contains 
+
+  ! subroutine compute_rhs(self,b)
+  !   implicit none
+
+  !   class(dang_cg_group)                  :: self
+  !   real(dp), dimension(:), intent(inout) :: b
+
+  !   ! First compute the data which is being fit to
+    
+  !   ! Then determine conditions based on the types of components
+  !   ! - per-pixel sampling for diffuse components
+  !   ! - template fitting
+  !   ! - is template fitting done jointly?
+
+
+  ! end subroutine compute_rhs
+
+
+  ! function constructor_cg(dpar, cg_group)
+  !   implicit none
+
+  !   type(dang_params), intent(in) :: dpar
+  !   class(dang_cg_group), pointer :: constructor_cg
+  !   integer(i4b),      intent(in) :: cg_group
+
+  !   integer(i4b)                  :: i, count
+
+  !   allocate(constructor_cg)
+
+  !   constructor_cg%ncg_components = 0
+
+  !   do i = 1, dpar%ncomp
+  !      if (component_list(i)%p%cg_group == cg_group) then
+  !         constructor_cg%ncg_components = constructor_cg%ncg_components + 1
+  !      end if
+  !   end do
+
+  !   if (constructor_cg%ncg_components == 0) then
+  !      write(*,*) "Woah there, number of CG components = 0"
+  !      write(*,*) "for CG group ", cg_group
+  !      stop
+  !   end if
+
+  !   allocate(constructor_cg%cg_component(constructor_cg%ncg_components))
+
+  !   count = 1
+  !   do i = 1, dpar%ncomp
+  !      if (component_list(i)%p%cg_group == cg_group) then
+  !         constructor_cg%cg_component(count)%p => component_list(i)%p
+  !         count = count + 1
+  !      end if
+  !   end do
+
+
+  ! end function constructor_cg
+
 
   function constructor(dpar,component)
     ! The overall constructor for the component class
@@ -50,7 +139,7 @@ contains
     !
     ! Input: 
     !        dpar: class - dang_params
-    !        component: integer
+    !        component: integer - which component are we initializing?
     !    
     implicit none
 
@@ -58,9 +147,12 @@ contains
     class(dang_comps), pointer    :: constructor
     integer(i4b),      intent(in) :: component
 
-    constructor%label            = dpar%fg_label(component)
+    allocate(constructor)
+
+    constructor%label            = trim(dpar%fg_label(component))
     constructor%type             = dpar%fg_type(component)
     constructor%sample_amplitude = dpar%fg_samp_amp(component)
+    constructor%cg_group         = dpar%fg_cg_group(component)
 
     if (trim(constructor%type) == 'mbb') then
        ! Allocate arrays to appropriate size for each component type
@@ -116,8 +208,30 @@ contains
 
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
 
+    else if (trim(constructor%type) == 'template') then
+       
+       constructor%polfit           = .true. ! WARNING HARD CODED TO .true. FOR NOW
+
+    else
+       write(*,*) "Warning - unrecognized component type detected"
+       stop
+
     end if
   end function constructor
+
+  subroutine initialize_components(dpar)
+    implicit none
+    type(dang_params)             :: dpar
+    integer(i4b)                  :: i
+
+    allocate(component_list(dpar%ncomp))
+
+    do i = 1, dpar%ncomp
+       write(*,*) 'Initialize component ', i
+       component_list(i)%p => dang_comps(dpar,i)
+    end do
+
+  end subroutine initialize_components
 
   subroutine init_synch(self,dpar,npix,nmaps)
     implicit none

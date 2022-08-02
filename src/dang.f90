@@ -10,6 +10,7 @@ program dang
   use dang_data_mod
   use dang_component_mod
   use dang_sample_mod
+  use dang_cg_mod
   use dang_swap_mod
   implicit none
   
@@ -84,7 +85,8 @@ program dang
         end if
      end do
      write(*,*) ''
-     ! call init_components(dpar)
+     call initialize_components(dpar)
+     call initialize_cg_groups(dpar)
      call comp_sep
   
   !------------------------------------------------------------------------------------------------

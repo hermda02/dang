@@ -55,15 +55,18 @@ module dang_param_mod
      
      character(len=512), allocatable, dimension(:)     :: temp_file      ! Template Filename
      character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
+     character(len=10),  allocatable, dimension(:)     :: temp_polfit    ! Which poltypes are fit jointly for the template? ex. 'T', 'QU'
      logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates fit
      integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
      logical(lgt),       allocatable, dimension(:)     :: temp_sample    ! Storing which bands should have templates fit
      
-     character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label
+     integer(i4b),       allocatable, dimension(:)     :: fg_cg_group    ! Which cg group is this component in?
      logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
      real(dp),           allocatable, dimension(:,:)   :: fg_init        ! Initialized parameter value (fullsky)
      character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral parameter input map
      real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling parameters
+     character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label
+     real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
      character(len=512), allocatable, dimension(:,:)   :: fg_prior_type  ! Fg spectral parameter input map
      integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
      logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_spec   ! Logical - sample fg parameter?
@@ -72,7 +75,6 @@ module dang_param_mod
      logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_joint  ! Logical - sample fg spec param jointly in Q and U?
      character(len=512), allocatable, dimension(:,:)   :: fg_spec_file   ! Fg spectral parameter input map
      character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
-     real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
      real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
      
      integer(i4b)                                      :: njoint         ! # of components to jointly sample 
@@ -89,6 +91,8 @@ module dang_param_mod
      real(dp)                                          :: HI_Td_std      ! HI Temperature prior std
      real(dp)                                          :: HI_Td_step     ! Td sampling step size
 
+     integer(i4b)                                      :: ncggroup
+     logical(lgt),       allocatable, dimension(:)     :: cg_group_sample ! Do we sample that cg group?
      
   end type dang_params
   
@@ -492,7 +496,7 @@ contains
     type(hash_tbl_sll), intent(in)    :: htbl
     type(dang_params),       intent(inout) :: par
     
-    integer(i4b)     :: i, j, n, n2, n3
+    integer(i4b)     :: i, j, n, n2, n3, n4
     integer(i4b)     :: len_itext, len_jtext
     character(len=2) :: itext
     character(len=3) :: jtext
@@ -501,12 +505,12 @@ contains
     
     len_itext = len(trim(itext))
     len_jtext = len(trim(jtext))
-    
-    
+
     if (trim(par%mode) == 'comp_sep') then
        call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
        call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
        call get_parameter_hashtable(htbl, 'NUMJOINT', par_int=par%njoint)
+       call get_parameter_hashtable(htbl, 'NUM_CG_GROUPS', par_int=par%ncggroup)
        call get_parameter_hashtable(htbl, 'JOINT_SAMPLE', par_lgt=par%joint_sample)
        call get_parameter_hashtable(htbl, 'JOINT_POL', par_lgt=par%joint_pol)
        call get_parameter_hashtable(htbl, 'DUST_CORR_TYPE', par_string=par%dust_corr_type)
@@ -521,6 +525,7 @@ contains
        n  = par%ncomp
        n2 = par%ntemp
        n3 = par%njoint
+       n4 = par%ncggroup
        
        allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
        allocate(par%fg_inc(n),par%fg_samp_amp(n))
@@ -531,6 +536,7 @@ contains
        allocate(par%fg_ind_region(n,2))
        allocate(par%fg_prior_type(n,2))
        allocate(par%fg_init(n,2))
+       allocate(par%fg_cg_group(n))
        par%temp_nfit = 0
        
        allocate(par%temp_file(n2))
@@ -538,8 +544,16 @@ contains
        allocate(par%temp_nfit(n2))
        allocate(par%temp_label(n2))
        allocate(par%temp_corr(n2,par%numband))
+       allocate(par%temp_polfit(n2))
        
        allocate(par%joint_comp(n3))
+
+       allocate(par%cg_group_sample(n4))
+
+       do i = 1, n4
+          call int2string(i, itext)
+          call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%cg_group_sample(i))
+       end do
        
        do i = 1, n2
           call int2string(i, itext)
@@ -567,13 +581,13 @@ contains
           call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i))
           if (trim(par%fg_type(i)) /= 'template') then
              call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
-             if (par%fg_nu_ref(i) < 1d9) then
+             if (par%fg_nu_ref(i) < 1d7) then
                 par%fg_nu_ref(i) = par%fg_nu_ref(i)*1d9
              end if
           end if
           call get_parameter_hashtable(htbl, 'COMP_INCLUDE'//itext, len_itext=len_itext, par_lgt=par%fg_inc(i))
           call get_parameter_hashtable(htbl, 'COMP_SAMPLE_AMP'//itext, len_itext=len_itext, par_lgt=par%fg_samp_amp(i))
-          
+          call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
           if (trim(par%fg_type(i)) == 'power-law') then
              call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                   par_dp=par%fg_gauss(i,1,1))
@@ -625,6 +639,10 @@ contains
                   par_lgt=par%fg_samp_spec(i,2))
              call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
                   par_string=par%fg_spec_file(i,2))
+          else if (trim(par%fg_type(i)) == 'template') then
+             call get_parameter_hashtable(htbl, 'COMP_POLFIT'//itext, len_itext=len_itext,&
+                  par_string=par%temp_polfit(i))
+
           end if
           if (trim(par%fg_type(i)) /= 'template') then
              par%fg_ref_loc(i) = minloc(abs(par%band_nu-par%fg_nu_ref(i)),1)
