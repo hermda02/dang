@@ -11,22 +11,27 @@ module dang_component_mod
 
   type :: dang_comps
      
-     character(len=16)                              :: label, type
-     logical(lgt)                                   :: sample_amplitude
-     logical(lgt),      allocatable, dimension(:)   :: sample_index
-     real(dp)                                       :: nu_ref
-     integer(i4b)                                   :: cg_group
-     logical(lgt)                                   :: polfit
+     character(len=16)                                :: label, type
+     logical(lgt)                                     :: sample_amplitude
+     logical(lgt),      allocatable, dimension(:)     :: sample_index
+     real(dp)                                         :: nu_ref
+     integer(i4b)                                     :: cg_group
+     logical(lgt)                                     :: polfit
+     logical(lgt),      allocatable, dimension(:)     :: corr             ! Do we correct this band?
+     integer(i4b)                                     :: nfit
 
-     real(dp),          allocatable, dimension(:,:) :: spec_par
-     real(dp),          allocatable, dimension(:)   :: temp_amps
+     real(dp),          allocatable, dimension(:,:,:) :: indices
+     real(dp),          allocatable, dimension(:,:)   :: amplitude
 
-     real(dp),          allocatable, dimension(:,:) :: beta_s, beta_d, T_d, HI
-     real(dp),          allocatable, dimension(:)   :: HI_amps
+     real(dp),          allocatable, dimension(:,:)   :: spec_par
+     real(dp),          allocatable, dimension(:)     :: temp_amps
 
-     character(len=16), allocatable, dimension(:)   :: prior_type
-     real(dp),          allocatable, dimension(:,:) :: gauss_prior
-     real(dp),          allocatable, dimension(:,:) :: uni_prior
+     real(dp),          allocatable, dimension(:,:)   :: beta_s, beta_d, T_d, HI
+     real(dp),          allocatable, dimension(:)     :: HI_amps
+
+     character(len=16), allocatable, dimension(:)     :: prior_type
+     real(dp),          allocatable, dimension(:,:)   :: gauss_prior
+     real(dp),          allocatable, dimension(:,:)   :: uni_prior
     
    contains
 
@@ -44,93 +49,7 @@ module dang_component_mod
 
   type(component_pointer), allocatable, dimension(:) :: component_list 
 
-  ! ! ====================================================================
-  ! ! Now define cg_group class
-  ! ! ====================================================================
-
-  ! public cg_groups
-
-  ! type :: dang_cg_group
-
-  !    integer(i4b) :: ncg_components
-  !    type(component_pointer), allocatable, dimension(:) :: cg_component
-
-  !  contains
-
-  !    procedure :: compute_rhs
-
-  ! end type dang_cg_group
-
-  ! interface dang_cg
-  !    procedure constructor_cg
-  ! end interface dang_cg
-
-  ! type cg_pointer
-  !    type(dang_cg_group), pointer :: p => null()
-  ! end type cg_pointer
-
-  ! type(cg_pointer), allocatable, dimension(:) :: cg_groups
-
-  ! ! ====================================================================
-
-
 contains 
-
-  ! subroutine compute_rhs(self,b)
-  !   implicit none
-
-  !   class(dang_cg_group)                  :: self
-  !   real(dp), dimension(:), intent(inout) :: b
-
-  !   ! First compute the data which is being fit to
-    
-  !   ! Then determine conditions based on the types of components
-  !   ! - per-pixel sampling for diffuse components
-  !   ! - template fitting
-  !   ! - is template fitting done jointly?
-
-
-  ! end subroutine compute_rhs
-
-
-  ! function constructor_cg(dpar, cg_group)
-  !   implicit none
-
-  !   type(dang_params), intent(in) :: dpar
-  !   class(dang_cg_group), pointer :: constructor_cg
-  !   integer(i4b),      intent(in) :: cg_group
-
-  !   integer(i4b)                  :: i, count
-
-  !   allocate(constructor_cg)
-
-  !   constructor_cg%ncg_components = 0
-
-  !   do i = 1, dpar%ncomp
-  !      if (component_list(i)%p%cg_group == cg_group) then
-  !         constructor_cg%ncg_components = constructor_cg%ncg_components + 1
-  !      end if
-  !   end do
-
-  !   if (constructor_cg%ncg_components == 0) then
-  !      write(*,*) "Woah there, number of CG components = 0"
-  !      write(*,*) "for CG group ", cg_group
-  !      stop
-  !   end if
-
-  !   allocate(constructor_cg%cg_component(constructor_cg%ncg_components))
-
-  !   count = 1
-  !   do i = 1, dpar%ncomp
-  !      if (component_list(i)%p%cg_group == cg_group) then
-  !         constructor_cg%cg_component(count)%p => component_list(i)%p
-  !         count = count + 1
-  !      end if
-  !   end do
-
-
-  ! end function constructor_cg
-
 
   function constructor(dpar,component)
     ! The overall constructor for the component class
@@ -160,6 +79,10 @@ contains
        allocate(constructor%uni_prior(2,2))
        allocate(constructor%sample_index(2))
        allocate(constructor%prior_type(2))
+
+       ! Allocate maps for the components
+       allocate(constructor%amplitude(0:npix-1,nmaps))
+       allocate(constructor%indices(0:npix-1,nmaps,2))
      
        ! Bools for sampling indices
        constructor%sample_index(1)  = dpar%fg_samp_spec(component,1)
@@ -192,6 +115,10 @@ contains
        allocate(constructor%uni_prior(1,2))
        allocate(constructor%sample_index(1))
        allocate(constructor%prior_type(1))
+
+       ! Allocate maps for the components
+       allocate(constructor%amplitude(0:npix-1,nmaps))
+       allocate(constructor%indices(0:npix-1,nmaps,1))
        
        ! Bools for sampling indices
        constructor%sample_index(1)  = dpar%fg_samp_spec(component,1)
@@ -208,9 +135,15 @@ contains
 
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
 
+       constructor%indices          = dpar%fg_init(1,1)
+
     else if (trim(constructor%type) == 'template') then
        
+       allocate(constructor%corr(nbands))
+
        constructor%polfit           = .true. ! WARNING HARD CODED TO .true. FOR NOW
+       constructor%nfit             = dpar%fg_nfit(component) ! Also currently hardcoded
+       constructor%corr             = dpar%fg_temp_corr(component,:)
 
     else
        write(*,*) "Warning - unrecognized component type detected"
@@ -308,7 +241,7 @@ contains
   end function planck
   ! function compute_spectrum(dpar, self, bp, ind, freq, pix, map_n, index)
 
-  subroutine eval_sed(self, dpar, bp, ind, pix, map_n, index)
+  function eval_sed(self, dpar, bp, ind, pix, map_n, index)
     ! always computed in RJ units
     
     implicit none
@@ -321,7 +254,8 @@ contains
     integer(i4b)                       :: i
     real(dp), dimension(:), optional   :: index
     real(dp)                           :: z, compute_spectrum
-    
+    real(dp)                           :: eval_sed
+
     if (trim(self%type) == 'power-law') then
        if (bp%id == 'delta') then
           ! if (ind == 1) then
@@ -339,7 +273,7 @@ contains
              end do
           else 
              do i = 1, bp%n
-                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/self%nu_ref)**self%beta_s(pix,map_n)
+                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/self%nu_ref)**self%indices(pix,map_n,1)
              end do
           end if
        end if
@@ -371,7 +305,9 @@ contains
           end if
        end if
     end if
-  end subroutine eval_sed
+    eval_sed = compute_spectrum
+
+  end function eval_sed
   
   ! function compute_spectrum(dpar, self, bp, ind, freq, pix, map_n, index)
   function compute_spectrum(dpar, self, bp, ind, pix, map_n, index)

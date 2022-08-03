@@ -66,6 +66,7 @@ module dang_param_mod
      character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral parameter input map
      real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling parameters
      character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label
+     integer(i4b),       allocatable, dimension(:)     :: fg_nfit        ! How many bands are fit?
      real(dp),           allocatable, dimension(:)     :: fg_nu_ref      ! Fg reference frequency
      character(len=512), allocatable, dimension(:,:)   :: fg_prior_type  ! Fg spectral parameter input map
      integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
@@ -74,6 +75,7 @@ module dang_param_mod
      integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
      logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_joint  ! Logical - sample fg spec param jointly in Q and U?
      character(len=512), allocatable, dimension(:,:)   :: fg_spec_file   ! Fg spectral parameter input map
+     logical(lgt),       allocatable, dimension(:,:)   :: fg_temp_corr   ! Logical - do we template correct this band?
      character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
      real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
      
@@ -537,7 +539,11 @@ contains
        allocate(par%fg_prior_type(n,2))
        allocate(par%fg_init(n,2))
        allocate(par%fg_cg_group(n))
+       allocate(par%fg_temp_corr(n,par%numband))
+       allocate(par%fg_nfit(n))
+
        par%temp_nfit = 0
+       par%fg_nfit   = 0
        
        allocate(par%temp_file(n2))
        allocate(par%temp_sample(n2))
@@ -642,6 +648,15 @@ contains
           else if (trim(par%fg_type(i)) == 'template') then
              call get_parameter_hashtable(htbl, 'COMP_POLFIT'//itext, len_itext=len_itext,&
                   par_string=par%temp_polfit(i))
+             do j = 1, par%numband
+                call int2string(j,jtext)
+                call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
+                     len_itext=len_jtext,par_lgt=par%fg_temp_corr(i,j))
+                if (par%fg_temp_corr(i,j)) then
+                   par%fg_nfit(i) = par%fg_nfit(i) + 1
+                end if
+             end do
+
 
           end if
           if (trim(par%fg_type(i)) /= 'template') then

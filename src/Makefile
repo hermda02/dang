@@ -53,7 +53,7 @@ dang_data_mod.o        : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_com
 dang_linalg_mod.o      : spline_1D_mod.o dang_util_mod.o dang_param_mod.o dang_data_mod.o dang_component_mod.o
 dang_sample_mod.o      : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_data_mod.o dang_component_mod.o dang_linalg_mod.o  
 dang_cg_mod.o          : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_data_mod.o dang_component_mod.o 
-dang_swap_mod.o        : dang_util_mod.o dang_param_mod.o dang_data_mod.o dang_component_mod.o dang_linalg_mod.o  
+dang_swap_mod.o        : dang_util_mod.o dang_param_mod.o dang_data_mod.o dang_component_mod.o dang_linalg_mod.o dang_cg_mod.o  
 dang.o : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_linalg_mod.o dang_sample_mod.o dang_data_mod.o dang_swap_mod.o
 
 # Compilation stage
