@@ -85,11 +85,6 @@ contains
     b(:)              = 0.d0
     c(:)              = 0.d0
 
-    write(*,*) map2fit(0,map_n,1)
-    write(*,*) compute_spectrum(dpar,compo,bp(1),1,0,map_n)
-    write(*,*) dat%rms_map(0,map_n,1)
-    write(*,*) dat%temps(0,map_n,1)
-    
     write(*,*) 'Compute RHS of matrix eqn.'
     ! Computing the LHS and RHS of the linear equation
     ! RHS
