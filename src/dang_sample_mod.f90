@@ -84,6 +84,11 @@ contains
     ! Initialize arrays
     b(:)              = 0.d0
     c(:)              = 0.d0
+
+    write(*,*) map2fit(0,map_n,1)
+    write(*,*) compute_spectrum(dpar,compo,bp(1),1,0,map_n)
+    write(*,*) dat%rms_map(0,map_n,1)
+    write(*,*) dat%temps(0,map_n,1)
     
     write(*,*) 'Compute RHS of matrix eqn.'
     ! Computing the LHS and RHS of the linear equation
@@ -172,6 +177,13 @@ contains
        write(*,*) 'cg is the only currently available method for joint sampling'
        stop
     end if
+
+    open(55,file='sample_group_rhs_testing.txt')
+    do i = 1, size(b)
+       write(55,fmt='(2(E16.8))') c(i), b(i)
+    end do
+    close(55)
+    ! stop
     
     ! Solver returns a vector - first filled with component amplitudes, then template amplitudes
     ! So unpack in order

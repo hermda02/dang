@@ -197,7 +197,7 @@ contains
          call swap_bp_maps(ddata,dpar)
          write(*,*) ''
          bp_iter = bp_iter + 1
-         call convert_maps_bp(ddata, dpar)
+         call convert_bp_maps(ddata, dpar)
          write(*,*) ''
          ! Check to see if any swapped maps need to be dust corrected                               
          do j = 1, nbands
