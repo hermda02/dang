@@ -22,6 +22,8 @@ module dang_component_mod
 
      real(dp),          allocatable, dimension(:,:,:) :: indices
      real(dp),          allocatable, dimension(:,:)   :: amplitude
+     real(dp),          allocatable, dimension(:,:)   :: template
+     real(dp),          allocatable, dimension(:,:)   :: template_amplitudes
 
      real(dp),          allocatable, dimension(:,:)   :: spec_par
      real(dp),          allocatable, dimension(:)     :: temp_amps
@@ -107,7 +109,21 @@ contains
        constructor%uni_prior(2,1)   = dpar%fg_uni(component,2,1)
        constructor%uni_prior(2,2)   = dpar%fg_uni(component,2,2)
 
+       ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
+
+       ! Initialize index maps
+       constructor%indices(:,:,1)   = dpar%fg_init(component,1)
+       constructor%indices(:,:,2)   = dpar%fg_init(component,2)
+
+       ! Initialize an amplitude map, or don't
+       if (trim(dpar%fg_filename(component)) == 'none') then
+          constructor%amplitude = 0.d0
+       else
+          call read_bintab(trim(dpar%fg_filename(component)),constructor%amplitude, npix, &
+               & nmaps, nullval, anynull, header=header)
+       end if
+
 
     else if (trim(constructor%type) == 'power-law') then
        ! Allocate arrays to appropriate size for each component type
@@ -133,17 +149,41 @@ contains
        constructor%uni_prior(1,1)   = dpar%fg_uni(component,1,1)
        constructor%uni_prior(1,2)   = dpar%fg_uni(component,1,2)
 
+       ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
 
-       constructor%indices          = dpar%fg_init(1,1)
+       ! Initialize index maps
+       constructor%indices          = dpar%fg_init(component,1)
+
+       ! Initialize an amplitude map, or don't
+       if (trim(dpar%fg_filename(component)) == 'none') then
+          constructor%amplitude = 0.d0
+       else
+          call read_bintab(trim(dpar%fg_filename(component)),constructor%amplitude, npix, &
+               & nmaps, nullval, anynull, header=header)
+       end if
 
     else if (trim(constructor%type) == 'template') then
        
        allocate(constructor%corr(nbands))
+       allocate(constructor%amplitude(0:npix-1,nmaps)) ! Amplitude is given by the product of the template at the 
+                                                       ! fit template amplitude (template_amplitudes)
+       allocate(constructor%template_amplitudes(nbands,nmaps))
+       allocate(constructor%template(0:npix-1,nmaps))
 
-       constructor%polfit           = .true. ! WARNING HARD CODED TO .true. FOR NOW
-       constructor%nfit             = dpar%fg_nfit(component) ! Also currently hardcoded
-       constructor%corr             = dpar%fg_temp_corr(component,:)
+       constructor%polfit             = .true. ! WARNING HARD CODED TO .true. FOR NOW
+       constructor%nfit               = dpar%fg_nfit(component) ! Also currently hardcoded
+       constructor%corr               = dpar%fg_temp_corr(component,:)
+       
+       write(*,*) trim(dpar%fg_filename(component))
+
+       if (trim(dpar%fg_filename(component)) == 'none') then
+          write(*,*) "Error: template filename == 'none' "
+          stop
+       else
+          call read_bintab(trim(dpar%fg_filename(component)),constructor%template, npix, &
+               & nmaps, nullval, anynull, header=header)
+       end if
 
     else
        write(*,*) "Warning - unrecognized component type detected"
@@ -241,12 +281,12 @@ contains
   end function planck
   ! function compute_spectrum(dpar, self, bp, ind, freq, pix, map_n, index)
 
-  function eval_sed(self, ind, pix, map_n, index)
+  function eval_sed(self, band, pix, map_n, index)
     ! always computed in RJ units
     
     implicit none
     class(dang_comps)                  :: self
-    integer(i4b),           intent(in) :: ind
+    integer(i4b),           intent(in) :: band
     integer(i4b),           optional   :: pix
     integer(i4b),           optional   :: map_n
     integer(i4b)                       :: i
@@ -255,53 +295,55 @@ contains
     real(dp)                           :: eval_sed
 
     if (trim(self%type) == 'power-law') then
-       if (bp(ind)%id == 'delta') then
+       if (bp(band)%id == 'delta') then
           ! if (ind == 1) then
           if (present(index)) then
-             compute_spectrum = (bp(ind)%nu_c/self%nu_ref)**index(1)
+             compute_spectrum = (bp(band)%nu_c/self%nu_ref)**index(1)
           else 
-             compute_spectrum = (bp(ind)%nu_c/self%nu_ref)**self%indices(pix,map_n,1)
+             compute_spectrum = (bp(band)%nu_c/self%nu_ref)**self%indices(pix,map_n,1)
           end if
        else
           compute_spectrum = 0.d0
           ! Compute for LFI bandpass
           if (present(index)) then
-             do i = 1, bp(ind)%n
-                compute_spectrum = compute_spectrum + bp(ind)%tau0(i)*(bp(ind)%nu0(i)/self%nu_ref)**index(1)
+             do i = 1, bp(band)%n
+                compute_spectrum = compute_spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**index(1)
              end do
           else 
-             do i = 1, bp(ind)%n
-                compute_spectrum = compute_spectrum + bp(ind)%tau0(i)*(bp(ind)%nu0(i)/self%nu_ref)**self%indices(pix,map_n,1)
+             do i = 1, bp(band)%n
+                compute_spectrum = compute_spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**self%indices(pix,map_n,1)
              end do
           end if
        end if
     else if (trim(self%type) == 'mbb') then
-       if (bp(ind)%id == 'delta') then
+       if (bp(band)%id == 'delta') then
           if (present(index)) then
              z = h / (k_B*index(2))
              compute_spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / &
-                  & (exp(z*bp(ind)%nu_c)-1.d0) * (bp(ind)%nu_c/(self%nu_ref*1d9))**(index(1)+1.d0)
+                  & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref*1d9))**(index(1)+1.d0)
           else
              z = h / (k_B*self%indices(pix,map_n,2))
              compute_spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / &
-                  & (exp(z*bp(ind)%nu_c)-1.d0) * (bp(ind)%nu_c/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
+                  & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
           end if
        else
           compute_spectrum = 0.d0
           if (present(index)) then
              z = h / (k_B*index(2))
-             do i = 1, bp(ind)%n
-                compute_spectrum = compute_spectrum + bp(ind)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
-                     (exp(z*bp(ind)%nu0(i))-1.d0) * (bp(ind)%nu0(i)/(self%nu_ref*1d9))**(index(1)+1.d0)
+             do i = 1, bp(band)%n
+                compute_spectrum = compute_spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
+                     (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref*1d9))**(index(1)+1.d0)
              end do
           else
              z = h / (k_B*self%indices(pix,map_n,2))
-             do i = 1, bp(ind)%n
-                compute_spectrum = compute_spectrum + bp(ind)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
-                     (exp(z*bp(ind)%nu0(i))-1.d0) * (bp(ind)%nu0(i)/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
+             do i = 1, bp(band)%n
+                compute_spectrum = compute_spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
+                     (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
              end do
           end if
        end if
+    else if (trim(self%type) == 'template') then
+       compute_spectrum = 1.d0
     end if
     eval_sed = compute_spectrum
 

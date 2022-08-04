@@ -192,44 +192,17 @@ contains
          end do
          write(*,*) ''
       end if
-      ! --------------------------------------------------------------
-      ! Joint sampling section - checks for templates and foregrounds
-      ! in the joint sampling component list
-      ! --------------------------------------------------------------
-      if (dpar%joint_sample) then
-         if (dpar%joint_pol) then
-            call sample_joint_amp(dpar,ddata,dcomps,2,trim(dpar%solver))
-         else
-            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-               write(*,*) k
-               call sample_joint_amp(dpar,ddata,dcomps,k,trim(dpar%solver))
-            end do
-         end if
-         do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-            do m = 1, size(dpar%joint_comp)
-               ! Extrapolate foreround solutions
-               do n = 1, dpar%ncomp
-                  if (trim(dpar%joint_comp(m)) == trim(dpar%fg_label(n))) then
-                     call extrapolate_foreground(dpar,ddata,dcomps,n,k)
-                  end if
-               end do
-               ! Extrapolate template solutions
-               do n = 1, dpar%ntemp
-                  if (trim(dpar%joint_comp(m)) == trim(dpar%temp_label(n))) then
-                     call extrapolate_template(dpar,ddata,dcomps,n,k)
-                  end if
-               end do
-            end do
-         end do
-         ! How good is the fit and what are the parameters looking like?
-         call write_stats_to_term(ddata,dpar,dcomps,iter)
-      end if
+      
+      ! ------------------------------------------------------------------------------------------
+      ! Sample each CG group for amplitudes
+      ! ------------------------------------------------------------------------------------------
+      call sample_cg_groups(dpar,ddata,2)
+      call update_sky_model(ddata)
 
-      ! Now we'll change 'extrapolate_foreground' and 'extrapolate template' to 'update_sky_signal' 
-      ! or something similar
+      call write_stats_to_term(ddata,dpar,dcomps,iter)
+      call write_maps(dpar,ddata,dcomps)
+      stop
 
-      ! So now we want to combine the below chunk to look like
-      !
       ! call sample_component_amplitudes (where both diffuse and template amplitudes are sampled)
       ! call update_sky_signal(dpar,dcomps)
       

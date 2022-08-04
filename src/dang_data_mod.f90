@@ -20,7 +20,8 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:,:)   :: rms_map    ! noise maps
     real(dp), allocatable, dimension(:,:,:)   :: res_map    ! Residual maps
     real(dp), allocatable, dimension(:,:)     :: chi_map    ! Chisq map (for outputs)
-    real(dp), allocatable, dimension(:,:,:,:) :: fg_map     ! Component maps
+    real(dp), allocatable, dimension(:,:,:,:) :: fg_map     ! Component maps (npix, nmaps, nbands, nfgs)
+    real(dp), allocatable, dimension(:,:,:)   :: sky_model  ! Total sky model
 
     real(dp), allocatable, dimension(:)       :: gain       ! Where band gains are stored
     real(dp), allocatable, dimension(:)       :: offset     ! Where band offsets are stored
@@ -64,6 +65,9 @@ contains
     allocate(self%rms_map(0:npix-1,nmaps,nbands))
     allocate(self%res_map(0:npix-1,nmaps,nbands))
     allocate(self%chi_map(0:npix-1,nmaps))
+
+    allocate(self%sky_model(0:npix-1,nmaps,nbands))
+    self%sky_model(:,:,:) = 0.d0
 
     allocate(self%temps(0:npix-1,nmaps,dpar%ntemp))
     allocate(self%temp_amps(nbands,nmaps,dpar%ntemp))
@@ -137,6 +141,40 @@ contains
        end do
     end if
   end subroutine read_data_maps
+
+  subroutine update_sky_model(ddata)
+    implicit none
+    type(dang_data),   intent(inout) :: ddata
+    type(dang_comps),  pointer       :: c
+    integer(i4b)                     :: i, j, k, l
+
+    ddata%sky_model(:,:,:) = 0.d0
+    do l = 1, ncomp
+       c => component_list(l)%p
+       if (c%type /= 'template') then
+          do i = 0, npix-1
+             do k = 1, nmaps
+                do j = 1, nbands
+                   ddata%sky_model(i,k,j) = ddata%sky_model(i,k,j) + &
+                        & c%amplitude(i,k)*c%eval_sed(j,i-1,k)
+                end do
+             end do
+          end do
+       else
+          do i = 0, npix-1
+             do k = 1, nmaps
+                do j = 1, nbands
+                   ddata%sky_model(i,k,j) = ddata%sky_model(i,k,j) + &
+                        & c%template(i,k)*c%template_amplitudes(j,k)
+                end do
+             end do
+          end do
+       end if
+    end do
+
+    ddata%res_map = ddata%sig_map - ddata%sky_model
+
+  end subroutine update_sky_model
 
   subroutine mask_hi(self, dpar, dcomps)
     implicit none
@@ -440,44 +478,54 @@ contains
     
   end subroutine convert_bp_maps
 
-  subroutine compute_chisq(self,dpar,comp,map_n)
+  subroutine compute_chisq(self,dpar)!,comp,map_n)
     use healpix_types
     implicit none
     type(dang_data),                              intent(inout) :: self
     type(dang_params)                                           :: dpar
-    type(dang_comps)                                            :: comp
-    integer(i4b),                                 intent(in)    :: map_n
+    ! type(dang_comps)                                            :: comp
+    ! integer(i4b),                                 intent(in)    :: map_n
     real(dp)                                                    :: s, signal
-    integer(i4b)                                                :: i, j, w
-    
-    if (trim(dpar%mode) == 'comp_sep') then
-       self%chisq = 0.d0
+    integer(i4b)                                                :: i, j, k
+
+    self%chisq = 0.d0
+    do i = 0, npix-1
+       if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
        do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-          do i = 0, npix-1
-             if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
-             do j = 1, nbands
-                s = 0.d0
-                do w = 1, nfgs
-                   signal = self%fg_map(i,k,j,w)
-                   s = s + signal
-                end do
-                self%chisq = self%chisq + (((self%sig_map(i,k,j) - s)**2))/(self%rms_map(i,k,j)**2)
-             end do
+          do j = 1, nbands
+             self%chisq = self%chisq + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
+                  & (self%rms_map(i,k,j)**2.d0)
           end do
        end do
-       self%chisq = self%chisq/(size(dpar%pol_type)*(nump*nbands)-npixpar-nglobalpar)
-    else if (trim(dpar%mode) == 'hi_fit') then
-       self%chisq = 0.d0
-       do i = 0, npix-1
-          if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
-          do j = 1, nbands    
-             s = 0.0
-             s = self%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))+self%offset(j)
-             self%chisq = self%chisq + (self%sig_map(i,map_n,j)-s)**2.d0/(self%rms_map(i,map_n,j)**2.d0)
-          end do
-       end do
-       self%chisq = self%chisq!/((nump*nbands)-npixpar-nglobalpar)
-    end if
+    end do
+    ! if (trim(dpar%mode) == 'comp_sep') then
+    !    self%chisq = 0.d0
+    !    do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+    !       do i = 0, npix-1
+    !          if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
+    !          do j = 1, nbands
+    !             s = 0.d0
+    !             do w = 1, nfgs
+    !                signal = self%fg_map(i,k,j,w)
+    !                s = s + signal
+    !             end do
+    !             self%chisq = self%chisq + (((self%sig_map(i,k,j) - s)**2))/(self%rms_map(i,k,j)**2)
+    !          end do
+    !       end do
+    !    end do
+    !    self%chisq = self%chisq/(size(dpar%pol_type)*(nump*nbands)-npixpar-nglobalpar)
+    ! else if (trim(dpar%mode) == 'hi_fit') then
+    !    self%chisq = 0.d0
+    !    do i = 0, npix-1
+    !       if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
+    !       do j = 1, nbands    
+    !          s = 0.0
+    !          s = self%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))+self%offset(j)
+    !          self%chisq = self%chisq + (self%sig_map(i,map_n,j)-s)**2.d0/(self%rms_map(i,map_n,j)**2.d0)
+    !       end do
+    !    end do
+    !    self%chisq = self%chisq!/((nump*nbands)-npixpar-nglobalpar)
+    ! end if
     
   end subroutine compute_chisq
 
@@ -504,7 +552,7 @@ contains
              end if
           end if
        end do
-       call compute_chisq(self,dpar,dcomps,k)
+       call compute_chisq(self,dpar)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
              write(*,fmt='(i6,a,f10.5)') iter, " - Chisq: ", self%chisq
@@ -513,7 +561,7 @@ contains
        end if
        
     else if (trim(dpar%mode) == 'hi_fit') then
-       call compute_chisq(self,dpar,dcomps,1)
+       call compute_chisq(self,dpar)!,dcomps,1)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
              if (nbands .lt. 10) then
@@ -579,7 +627,7 @@ contains
           do n = 1, dpar%ncomp
              title = trim(dpar%outdir) // 'reference_'// trim(dpar%fg_label(n)) //&
                   '_amplitude_k' // trim(iter_str) // '.fits'
-             map(:,:)   = dat%fg_map(:,:,0,n)
+             map(:,:)   = component_list(n)%p%amplitude!dat%fg_map(:,:,0,n)
              do i = 0, npix-1
                 if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
                    map(i,:) = missval
@@ -597,6 +645,19 @@ contains
              end if
           end do
           call write_result_map(trim(title), nside, ordering, header, map)
+
+
+          title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_input_k' // trim(iter_str) // '.fits'
+          map(:,:)   = dat%sig_map(:,:,j)
+          do i = 0, npix-1
+             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                map(i,:) = missval
+             end if
+          end do
+          call write_result_map(trim(title), nside, ordering, header, map)
+
+
+
        end do
        title = trim(dpar%outdir) // 'synch_beta_k' // trim(iter_str) // '.fits'
        map(:,:)   = dcomps%beta_s(:,:)
@@ -611,11 +672,12 @@ contains
           do i = 0, npix-1
              do j = 1, nbands
                 s      = 0.d0
-                do l = 1, nfgs
-                   signal = dat%fg_map(i,mn,j,l)
-                   s      = s + signal
-                end do
-                dat%chi_map(i,mn) = dat%chi_map(i,mn) + dat%masks(i,1)*(dat%sig_map(i,mn,j) - s)**2.d0/dat%rms_map(i,mn,j)**2.d0
+                ! do l = 1, nfgs
+                !    signal = dat%fg_map(i,mn,j,l)
+                !    s      = s + signal
+                ! end do
+                dat%chi_map(i,mn) = dat%chi_map(i,mn) + dat%masks(i,1)*(dat%sig_map(i,mn,j) - dat%sky_model(i,mn,j))**2.d0&
+                     & /dat%rms_map(i,mn,j)**2.d0
              end do
           end do
        end do
@@ -738,7 +800,7 @@ contains
        else
           open(33,file=title, status="new", action="write")
        endif
-       call compute_chisq(dat,dpar,dcomps,map_n)
+       call compute_chisq(dat,dpar)!,dcomps,map_n)
        write(33,*) dat%chisq
        close(33)
        
@@ -778,7 +840,7 @@ contains
        else
           open(36,file=title,status="new",action="write")
        end if
-       call compute_chisq(dat,dpar,dcomps,1)
+       call compute_chisq(dat,dpar)!,dcomps,1)
        write(36,'(E17.8)') dat%chisq
        close(36)
 
@@ -835,7 +897,7 @@ contains
     integer(i4b)                   :: i,j
     real(dp)                       :: s
 
-    call compute_chisq(self,dpar,dcomps,1)
+    call compute_chisq(self,dpar)!,dcomps,1)
     self%chi_map = 0.d0
     do j = 1, nbands
        self%band_chisq(j) = 0.d0

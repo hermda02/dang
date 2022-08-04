@@ -222,5 +222,14 @@ contains
     
   end function mask_sum
 
+  subroutine read_map(filename,map_array)
+    implicit none
+    character(len=512),       intent(in)    :: filename
+    real(dp), dimension(:,:), intent(inout) :: map_array
+
+    call read_bintab(trim(filename), map_array, npix, nmaps, nullval, anynull, header=header)
+
+  end subroutine read_map
+
   
 end module dang_util_mod

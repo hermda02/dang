@@ -29,6 +29,7 @@ module dang_cg_mod
      procedure :: compute_rhs
      procedure :: compute_sample_vector
      procedure :: cg_search
+     procedure :: unpack_amplitudes
 
   end type dang_cg_group
 
@@ -51,7 +52,6 @@ contains
     type(dang_params), intent(in) :: dpar
     class(dang_cg_group), pointer :: constructor_cg
     integer(i4b),      intent(in) :: cg_group
-
     integer(i4b)                  :: i, count
 
     allocate(constructor_cg)
@@ -85,7 +85,6 @@ contains
 
   end function constructor_cg
 
-
   subroutine initialize_cg_groups(dpar)
     implicit none
     type(dang_params)             :: dpar
@@ -99,6 +98,33 @@ contains
        cg_groups(i)%p => dang_cg(dpar,i)
     end do
   end subroutine initialize_cg_groups
+
+  subroutine sample_cg_groups(dpar, ddata, map_n)
+    implicit none
+    type(dang_data),         intent(in)    :: ddata
+    type(dang_params)                      :: dpar
+    integer(i4b),            intent(in)    :: map_n 
+
+    integer(i4b)                           :: i, j
+    real(dp), allocatable, dimension(:)    :: b
+
+    do i = 1, ncg_groups
+       write(*,*) "Computing a CG search of CG group ", i
+       call cg_groups(i)%p%compute_rhs(ddata,b)
+       call cg_groups(i)%p%cg_search(dpar,ddata,map_n,b)
+       call cg_groups(i)%p%unpack_amplitudes(dpar,ddata,map_n)
+
+       if (i == 1) then
+          open(55,file='sampling_group_rhs_testing.txt')
+          do j = 1, size(b)
+             write(55,fmt='(2(E16.8))') b(j), cg_groups(1)%p%x(j)
+          end do
+          close(55)
+       end if
+       deallocate(b)
+    end do
+
+  end subroutine sample_cg_groups
 
   subroutine cg_search(self, dpar, ddata, map_n, b)
 
@@ -177,10 +203,10 @@ contains
        t4        = mpi_wtime()
        i         = i + 1
 
-       write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-       if (delta_new .lt. self%converge) then
-          write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-       end if
+       ! write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+       ! if (delta_new .lt. self%converge) then
+       !    write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+       ! end if
 
     end do
 
@@ -268,9 +294,9 @@ contains
                 do i = 1, l
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
-                        & data(i-1,map_n,j)*ddata%temps(i-1,map_n,1)
+                        & data(i-1,map_n,j)*self%cg_component(k)%p%template(i-1,map_n)
                    b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,map_n+1,j)**2.d0)*&
-                        & data(i-1,map_n+1,j)*ddata%temps(i-1,map_n+1,1)
+                        & data(i-1,map_n+1,j)*self%cg_component(k)%p%template(i-1,map_n+1)
                 end do
                 z = z + 1
              end if
@@ -345,15 +371,14 @@ contains
                 temp1(i)      = x(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
                 ! This is just for the joint stuff - add modularity later
                 temp1(npix+i) = x(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n+1)
-                ! write(*,*) x(i), x(npix+i)
-                ! write(*,*) self%cg_component(k)%p%eval_sed(j,i-1,map_n), self%cg_component(k)%p%eval_sed(j,i-1,map_n+1)
              end do
           else
              if (self%cg_component(k)%p%corr(j)) then
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp1(i)      = temp1(i) + x(offset+l)*ddata%temps(i-1,map_n,1)
-                   temp1(npix+i) = temp1(npix+i) + x(offset+l)*ddata%temps(i-1,map_n+1,1)
+                   temp1(i)      = temp1(i) + x(offset+l)*self%cg_component(k)%p%template(i-1,map_n)
+                   temp1(npix+i) = temp1(npix+i) + x(offset+l)*&
+                        & self%cg_component(k)%p%template(i-1,map_n+1)
                 end do
              end if
           end if
@@ -379,8 +404,9 @@ contains
              if (self%cg_component(k)%p%corr(j)) then
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp3(offset+l) = temp3(offset+l) + temp2(i)*ddata%temps(i-1,map_n,1)
-                   temp3(offset+l) = temp3(offset+l) + temp2(npix+i)*ddata%temps(i-1,map_n+1,1)
+                   temp3(offset+l) = temp3(offset+l) + temp2(i)*self%cg_component(k)%p%template(i-1,map_n)
+                   temp3(offset+l) = temp3(offset+l) + temp2(npix+i)*&
+                        & self%cg_component(k)%p%template(i-1,map_n+1)
                 end do
                 l = l + 1
              end if
@@ -464,9 +490,10 @@ contains
              if (self%cg_component(k)%p%corr(j)) then
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp2(offset+l) = temp2(offset+l) + temp1(i)*ddata%temps(i-1,map_n,1)
+                   temp2(offset+l) = temp2(offset+l) + temp1(i)*self%cg_component(k)%p%template(i-1,map_n)
                    ! This is just for the joint stuff - add modularity later
-                   temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*ddata%temps(i-1,map_n+1,1)
+                   temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*&
+                        & self%cg_component(k)%p%template(i-1,map_n+1)
                 end do
                 l = l + 1
              end if
@@ -476,5 +503,41 @@ contains
     end do
  end function compute_sample_vector
 
+  subroutine unpack_amplitudes(self, dpar, ddata, map_n)
+    implicit none
+    class(dang_cg_group)               :: self
+    type(dang_data),     intent(in)    :: ddata
+    type(dang_params)                  :: dpar
+    integer(i4b),        intent(in)    :: map_n 
+    
+    integer(i4b)                       :: offset, i, j, k, l
+
+    ! Let's unravel self%x such that the foreground amplitudes
+    ! are properly stored
+    do k = 1, self%ncg_components
+       if (self%cg_component(k)%p%type /= 'template') then
+          do i = 1, npix
+             self%cg_component(k)%p%amplitude(i-1,map_n) = self%x(offset+i)
+          end do
+          offset = offset + npix
+          do i = 1, npix
+             self%cg_component(k)%p%amplitude(i-1,map_n+1) = self%x(offset+i)
+          end do
+          offset = offset + npix
+       else
+          l = 1
+          do while (l .lt. self%cg_component(k)%p%nfit)
+             do j = 1, nbands
+                if (self%cg_component(k)%p%corr(j)) then
+                   self%cg_component(k)%p%template_amplitudes(j,map_n)   = self%x(offset+l)
+                   self%cg_component(k)%p%template_amplitudes(j,map_n+1) = self%x(offset+l)
+                   l = l + 1
+                end if
+             end do
+          end do
+          offset = offset + l - 1
+       end if
+    end do
+  end subroutine unpack_amplitudes
 
 end module dang_cg_mod

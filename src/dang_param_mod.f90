@@ -60,6 +60,7 @@ module dang_param_mod
      integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
      logical(lgt),       allocatable, dimension(:)     :: temp_sample    ! Storing which bands should have templates fit
      
+     character(len=512), allocatable, dimension(:)     :: fg_filename    ! Init filename for diffuse components, template filename for templates
      integer(i4b),       allocatable, dimension(:)     :: fg_cg_group    ! Which cg group is this component in?
      logical(lgt),       allocatable, dimension(:)     :: fg_inc         ! Logical - include fg?
      real(dp),           allocatable, dimension(:,:)   :: fg_init        ! Initialized parameter value (fullsky)
@@ -532,6 +533,7 @@ contains
        n3 = par%njoint
        n4 = par%ncggroup
        
+       allocate(par%fg_filename(n))
        allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
        allocate(par%fg_inc(n),par%fg_samp_amp(n))
        allocate(par%fg_spec_joint(n,2))
@@ -561,6 +563,7 @@ contains
        allocate(par%cg_max_iter(n4))
        allocate(par%cg_convergence(n4))
 
+       ! Load the CG group specific parameters
        do i = 1, n4
           call int2string(i, itext)
           call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%cg_group_sample(i))
@@ -568,6 +571,7 @@ contains
           call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, par_dp=par%cg_convergence(i))
        end do
        
+       ! Load the template specific parameter (TO BE DEPRECATED)
        do i = 1, n2
           call int2string(i, itext)
           call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext, len_itext=len_itext, par_string=par%temp_file(i))
@@ -583,11 +587,13 @@ contains
           end do
        end do
        
+       ! Also to be deprecated
        do i = 1, n3
           call int2string(i, itext)
           call get_parameter_hashtable(htbl, 'JOINT_SAMPLE_COMP'//itext, len_itext=len_itext, par_string=par%joint_comp(i))
        end do
        
+       ! Loop over and load all component information
        do i = 1, n
           call int2string(i, itext)
           call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
@@ -601,6 +607,7 @@ contains
           call get_parameter_hashtable(htbl, 'COMP_INCLUDE'//itext, len_itext=len_itext, par_lgt=par%fg_inc(i))
           call get_parameter_hashtable(htbl, 'COMP_SAMPLE_AMP'//itext, len_itext=len_itext, par_lgt=par%fg_samp_amp(i))
           call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
+          call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
           if (trim(par%fg_type(i)) == 'power-law') then
              call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
                   par_dp=par%fg_gauss(i,1,1))
@@ -640,12 +647,14 @@ contains
                   par_dp=par%fg_uni(i,2,1))
              call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_HIGH'//itext, len_itext=len_itext,&
                   par_dp=par%fg_uni(i,2,2))
+             call get_parameter_hashtable(htbl, 'COMP_BETA'//itext, len_itext=len_itext, par_dp=par%fg_init(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
                   par_string=par%fg_spec_file(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
                   par_int=par%fg_samp_nside(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
                   par_lgt=par%fg_samp_spec(i,1))
+             call get_parameter_hashtable(htbl, 'COMP_T'//itext, len_itext=len_itext, par_dp=par%fg_init(i,2))
              call get_parameter_hashtable(htbl, 'COMP_T_SAMP_NSIDE'//itext, len_itext=len_itext,&
                   par_int=par%fg_samp_nside(i,2))
              call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
