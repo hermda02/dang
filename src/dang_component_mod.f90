@@ -171,9 +171,10 @@ contains
        allocate(constructor%template_amplitudes(nbands,nmaps))
        allocate(constructor%template(0:npix-1,nmaps))
 
-       constructor%polfit             = .true. ! WARNING HARD CODED TO .true. FOR NOW
-       constructor%nfit               = dpar%fg_nfit(component) ! Also currently hardcoded
-       constructor%corr               = dpar%fg_temp_corr(component,:)
+       constructor%polfit              = .true. ! WARNING HARD CODED TO .true. FOR NOW
+       constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
+       constructor%corr                = dpar%fg_temp_corr(component,:)
+       constructor%template_amplitudes = 0.d0
        
        write(*,*) trim(dpar%fg_filename(component))
 

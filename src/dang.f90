@@ -201,34 +201,11 @@ contains
 
       call write_stats_to_term(ddata,dpar,dcomps,iter)
       call write_maps(dpar,ddata,dcomps)
-      stop
 
-      ! call sample_component_amplitudes (where both diffuse and template amplitudes are sampled)
-      ! call update_sky_signal(dpar,dcomps)
-      
-      ! ------------------------------------------------------------------------------------------
-      ! Sample amplitudes
-      ! ------------------------------------------------------------------------------------------
-      do n = 1, dpar%ncomp
-         if (dpar%fg_samp_amp(n)) then
-            write(*,*) "Sample "//trim(dpar%fg_label(n))//" amplitudes."
-            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-               ddata%fg_map(:,k,0,n) = sample_fg_amp(dpar,ddata,dcomps,n,k)
-               call extrapolate_foreground(dpar,ddata,dcomps,n,k)
-            end do
-         end if
-      end do
-      do n = 1, dpar%ntemp
-         if (.not. ANY(dpar%joint_comp == trim(dpar%temp_label(n))) .or. .not. (dpar%joint_sample)) then
-            if (dpar%temp_sample(n)) then
-               write(*,*) "Sample "//trim(dpar%fg_label(n))//" template amplitudes."
-               do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                  call template_fit(dpar,ddata,dcomps,k,n)
-                  call extrapolate_template(dpar,ddata,dcomps,n,k)
-               end do
-            end if
-         end if
-      end do
+      write(*,*) component_list(2)%p%template_amplitudes(:,2)
+      write(*,*) component_list(2)%p%template_amplitudes(:,3)
+
+      stop
       
       ! Similarly here:
       !

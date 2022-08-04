@@ -491,13 +491,14 @@ contains
     self%chisq = 0.d0
     do i = 0, npix-1
        if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
-       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+       do k = 2,3!dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
           do j = 1, nbands
              self%chisq = self%chisq + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
                   & (self%rms_map(i,k,j)**2.d0)
           end do
        end do
     end do
+    self%chisq = self%chisq/(size(dpar%pol_type)*(nump*nbands)-npixpar-nglobalpar)
     ! if (trim(dpar%mode) == 'comp_sep') then
     !    self%chisq = 0.d0
     !    do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
@@ -555,7 +556,7 @@ contains
        call compute_chisq(self,dpar)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
-             write(*,fmt='(i6,a,f10.5)') iter, " - Chisq: ", self%chisq
+             write(*,fmt='(i6,a,f16.5)') iter, " - Chisq: ", self%chisq
              write(*,fmt='(a)') '---------------------------------------------'
           end if
        end if
@@ -647,8 +648,8 @@ contains
           call write_result_map(trim(title), nside, ordering, header, map)
 
 
-          title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_input_k' // trim(iter_str) // '.fits'
-          map(:,:)   = dat%sig_map(:,:,j)
+          title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
+          map(:,:)   = dat%sky_model(:,:,j)
           do i = 0, npix-1
              if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
                 map(i,:) = missval

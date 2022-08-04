@@ -531,6 +531,7 @@ contains
                 if (self%cg_component(k)%p%corr(j)) then
                    self%cg_component(k)%p%template_amplitudes(j,map_n)   = self%x(offset+l)
                    self%cg_component(k)%p%template_amplitudes(j,map_n+1) = self%x(offset+l)
+                   write(*,*) self%x(offset+l)
                    l = l + 1
                 end if
              end do
