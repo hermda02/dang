@@ -489,7 +489,6 @@ contains
       do j = 1, nbands
          temp1 = 0.d0
          temp2 = 0.d0
-         temp3 = 0.d0
 
          ! Step one is to solve temp1 = (N^{-1/2})(vec)
          !$OMP PARALLEL PRIVATE(i)

@@ -241,13 +241,11 @@ contains
   end function planck
   ! function compute_spectrum(dpar, self, bp, ind, freq, pix, map_n, index)
 
-  function eval_sed(self, dpar, bp, ind, pix, map_n, index)
+  function eval_sed(self, ind, pix, map_n, index)
     ! always computed in RJ units
     
     implicit none
-    class(dang_params)                 :: dpar
     class(dang_comps)                  :: self
-    type(bandinfo)                     :: bp
     integer(i4b),           intent(in) :: ind
     integer(i4b),           optional   :: pix
     integer(i4b),           optional   :: map_n
@@ -257,50 +255,50 @@ contains
     real(dp)                           :: eval_sed
 
     if (trim(self%type) == 'power-law') then
-       if (bp%id == 'delta') then
+       if (bp(ind)%id == 'delta') then
           ! if (ind == 1) then
           if (present(index)) then
-             compute_spectrum = (bp%nu_c/self%nu_ref)**index(1)
+             compute_spectrum = (bp(ind)%nu_c/self%nu_ref)**index(1)
           else 
-             compute_spectrum = (bp%nu_c/self%nu_ref)**self%beta_s(pix,map_n)
+             compute_spectrum = (bp(ind)%nu_c/self%nu_ref)**self%indices(pix,map_n,1)
           end if
        else
           compute_spectrum = 0.d0
           ! Compute for LFI bandpass
           if (present(index)) then
-             do i = 1, bp%n
-                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/self%nu_ref)**index(1)
+             do i = 1, bp(ind)%n
+                compute_spectrum = compute_spectrum + bp(ind)%tau0(i)*(bp(ind)%nu0(i)/self%nu_ref)**index(1)
              end do
           else 
-             do i = 1, bp%n
-                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/self%nu_ref)**self%indices(pix,map_n,1)
+             do i = 1, bp(ind)%n
+                compute_spectrum = compute_spectrum + bp(ind)%tau0(i)*(bp(ind)%nu0(i)/self%nu_ref)**self%indices(pix,map_n,1)
              end do
           end if
        end if
     else if (trim(self%type) == 'mbb') then
-       if (bp%id == 'delta') then
+       if (bp(ind)%id == 'delta') then
           if (present(index)) then
              z = h / (k_B*index(2))
              compute_spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / &
-                  & (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(self%nu_ref*1d9))**(index(1)+1.d0)
+                  & (exp(z*bp(ind)%nu_c)-1.d0) * (bp(ind)%nu_c/(self%nu_ref*1d9))**(index(1)+1.d0)
           else
-             z = h / (k_B*self%T_d(pix,map_n))
+             z = h / (k_B*self%indices(pix,map_n,2))
              compute_spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / &
-                  & (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(self%nu_ref*1d9))**(self%beta_d(pix,map_n)+1.d0)
+                  & (exp(z*bp(ind)%nu_c)-1.d0) * (bp(ind)%nu_c/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
           end if
        else
           compute_spectrum = 0.d0
           if (present(index)) then
              z = h / (k_B*index(2))
-             do i = 1, bp%n
-                compute_spectrum = compute_spectrum + bp%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
-                     (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/(self%nu_ref*1d9))**(index(1)+1.d0)
+             do i = 1, bp(ind)%n
+                compute_spectrum = compute_spectrum + bp(ind)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
+                     (exp(z*bp(ind)%nu0(i))-1.d0) * (bp(ind)%nu0(i)/(self%nu_ref*1d9))**(index(1)+1.d0)
              end do
           else
-             z = h / (k_B*self%T_d(pix,map_n))
-             do i = 1, bp%n
-                compute_spectrum = compute_spectrum + bp%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
-                     (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/(self%nu_ref*1d9))**(self%beta_d(pix,map_n)+1.d0)
+             z = h / (k_B*self%indices(pix,map_n,2))
+             do i = 1, bp(ind)%n
+                compute_spectrum = compute_spectrum + bp(ind)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
+                     (exp(z*bp(ind)%nu0(i))-1.d0) * (bp(ind)%nu0(i)/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
              end do
           end if
        end if
@@ -334,7 +332,6 @@ contains
           end if
           !else if (trim(dpar%fg_label(ind)) == 'mbb') then
        else if (ind == 2) then
-          write(*,*) 'yuh'
           z = h / (k_B*self%T_d(pix,map_n))
           compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
                (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(353.d0*1d9))**(self%beta_d(pix,map_n)+1.d0)

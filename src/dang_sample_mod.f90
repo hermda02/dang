@@ -95,109 +95,25 @@ contains
 
     write(*,*) 'Compute RHS of matrix eqn.'
     ! Computing the LHS and RHS of the linear equation
-    ! RHS
-    ! w = 0 
-    ! do m = 1, size(dpar%joint_comp)
-    !    do n = 1, dpar%ncomp
-    !       if (trim(dpar%joint_comp(m)) == trim(dpar%fg_label(n))) then
-    !          if (.not. dpar%joint_pol) then
-    !             do j = 1, z
-    !                do i = 1, x
-    !                   if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
-    !                      c(i) = 0.d0
-    !                      cycle
-    !                   else
-    !                      c(i) = c(i) +  (map2fit(i-1,map_n,j)*compute_spectrum(dpar,compo,bp(j),n,i-1,map_n) &!compute_spectrum(dpar,compo,n,dpar%band_nu(j),i-1,map_n) &
-    !                           &)/(dat%rms_map(i-1,map_n,j)**2.d0)
-    !                   end if
-    !                end do
-    !             end do
-    !             w = w + x
-    !          else if (dpar%joint_pol) then
-    !             do j = 1, z
-    !                do i = 1, x
-    !                   if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) then
-    !                      c(i)   = 0.d0
-    !                      c(x+i) = 0.d0
-    !                      cycle
-    !                   else                           
-    !                      c(i)   = c(i)   + (map2fit(i-1,map_n,j)*compute_spectrum(dpar,compo,bp(j),n,i-1,map_n)  &!compute_spectrum(dpar,compo,n,dpar%band_nu(j),i-1,map_n) &
-    !                           &)/(dat%rms_map(i-1,map_n,j)**2.d0)
-    !                      c(x+i) = c(x+i) + (map2fit(i-1,map_n+1,j)*compute_spectrum(dpar,compo,bp(j),n,i-1,map_n+1)  &!compute_spectrum(dpar,compo,n,dpar%band_nu(j),i-1,map_n+1)&
-    !                           &)/(dat%rms_map(i-1,map_n+1,j)**2.d0)
-    !                      ! if (i == 1) then
-    !                      !    write(*,*) '============='
-    !                      !    write(*,*) c(i)
-    !                      !    write(*,*) map2fit(i-1,map_n,j)
-    !                      !    write(*,*) compute_spectrum(dpar,compo,bp(j),n,i-1,map_n)
-    !                      !    write(*,*) '============='
-    !                      ! end if
-    !                   end if
-    !                end do
-    !             end do
-    !             w = w + 2*x
-    !          end if
-    !       end if
-    !    end do
-    !    do n = 1, dpar%ntemp
-    !       if (trim(dpar%joint_comp(m)) == trim(dpar%temp_label(n))) then
-    !          if (.not. dpar%joint_pol) then
-    !             l = 1
-    !             do j = 1, z
-    !                if (dpar%temp_corr(n,j)) then
-    !                   do i = 1, x
-    !                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-    !                      c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*&
-    !                           dat%temps(i-1,map_n,n)
-    !                   end do
-    !                   l = l + 1
-    !                end if
-    !             end do
-    !             w = w + dpar%temp_nfit(n)
-    !          else if (dpar%joint_pol) then
-    !             ! If sampling Q and U jointly
-    !             l = 1
-    !             do j = 1, z
-    !                if (dpar%temp_corr(n,j)) then
-    !                   do i = 1, x
-    !                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
-    !                      c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n,j)**2.d0)*map2fit(i-1,map_n,j)*&
-    !                           dat%temps(i-1,map_n,n)
-    !                      c(w+l) = c(w+l)+1.d0/(dat%rms_map(i-1,map_n+1,j)**2.d0)*map2fit(i-1,map_n+1,j)*&
-    !                           dat%temps(i-1,map_n+1,n)
-    !                   end do
-    !                   l = l + 1
-    !                end if
-    !             end do
-    !             w = w + dpar%temp_nfit(n)
-    !          end if
-    !       end if
-    !    end do
-    ! end do
 
-    ! call sample_group_RHS(componentlist,sample_group,b)
-
-    call cg_groups(1)%p%compute_rhs(dat,dpar,b)
+    call cg_groups(1)%p%compute_rhs(dat,b)
 
     allocate(c(size(b)))
 
     c(:) = 0.d0
-
-    write(*,*) b(1)
-    write(*,*) b(10)
-
     open(55,file='sample_group_rhs_testing.txt')
     do i = 1, size(b)
        write(55,fmt='(2(E16.8))') c(i), b(i)
     end do
     close(55)
     stop
+
     
     ! Computation
     if (trim(method) == 'cg') then
        if (rank == master) write(*,*) 'Joint sampling using CG.'
        ! call sample_cg_vec(c,dpar,dat,compo,map_n)
-       call sample_cg_vec(b,c,dpar,dat,compo,map_n)
+       call sample_cg_vec(c,b,dpar,dat,compo,map_n)
     else if (trim(method) == 'cg_precond') then
        call sample_cg_vec_precond(b,c,dpar,dat,compo,map_n)
     else
@@ -205,6 +121,8 @@ contains
        write(*,*) 'cg is the only currently available method for joint sampling'
        stop
     end if
+
+
    
     ! Solver returns a vector - first filled with component amplitudes, then template amplitudes
     ! So unpack in order
