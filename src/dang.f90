@@ -58,6 +58,8 @@ program dang
   npix       = ddata%npix
   nbands     = dpar%numinc
   nfgs       = dpar%ncomp+dpar%ntemp
+  ncomp      = dpar%ncomp
+  ncg_groups = dpar%ncggroup
   npixpar    = 0.d0
   nglobalpar = 0.d0
   nump       = 0
@@ -196,7 +198,6 @@ contains
       ! --------------------------------------------------------------
       if (dpar%joint_sample) then
          if (dpar%joint_pol) then
-            write(*,*) 2
             call sample_joint_amp(dpar,ddata,dcomps,2,trim(dpar%solver))
          else
             do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))

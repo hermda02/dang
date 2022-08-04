@@ -17,12 +17,18 @@ module dang_cg_mod
 
      integer(i4b) :: ncg_components
      integer(i4b) :: cg_group
+     integer(i4b) :: i_max
+     real(dp)     :: converge
      type(component_pointer), allocatable, dimension(:) :: cg_component
+
+     real(dp), allocatable, dimension(:) :: x ! The amplitude vector for this CG group
 
    contains
 
+     procedure :: compute_Ax
      procedure :: compute_rhs
      procedure :: compute_sample_vector
+     procedure :: cg_search
 
   end type dang_cg_group
 
@@ -39,12 +45,156 @@ module dang_cg_mod
   ! ====================================================================
 contains
 
+  function constructor_cg(dpar, cg_group)
+    implicit none
+
+    type(dang_params), intent(in) :: dpar
+    class(dang_cg_group), pointer :: constructor_cg
+    integer(i4b),      intent(in) :: cg_group
+
+    integer(i4b)                  :: i, count
+
+    allocate(constructor_cg)
+
+    constructor_cg%ncg_components = 0
+    constructor_cg%cg_group       = cg_group
+    constructor_cg%i_max          = dpar%cg_max_iter(cg_group)
+    constructor_cg%converge       = dpar%cg_convergence(cg_group)
+
+    do i = 1, dpar%ncomp
+       if (component_list(i)%p%cg_group == cg_group) then
+          constructor_cg%ncg_components = constructor_cg%ncg_components + 1
+       end if
+    end do
+
+    if (constructor_cg%ncg_components == 0) then
+       write(*,*) "Woah there, number of CG components = 0"
+       write(*,*) "for CG group ", cg_group
+       stop
+    end if
+
+    allocate(constructor_cg%cg_component(constructor_cg%ncg_components))
+
+    count = 1
+    do i = 1, dpar%ncomp
+       if (component_list(i)%p%cg_group == cg_group) then
+          constructor_cg%cg_component(count)%p => component_list(i)%p
+          count = count + 1
+       end if
+    end do
+
+  end function constructor_cg
+
+
+  subroutine initialize_cg_groups(dpar)
+    implicit none
+    type(dang_params)             :: dpar
+    integer(i4b)                  :: i, count
+
+    allocate(cg_groups(dpar%ncggroup))
+
+    count = 0
+    do i = 1, dpar%ncggroup
+       write(*,*) 'Initialize CG group ', i
+       cg_groups(i)%p => dang_cg(dpar,i)
+    end do
+  end subroutine initialize_cg_groups
+
+  subroutine cg_search(self, dpar, ddata, map_n, b)
+
+    ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)                   
+    ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"      
+
+    implicit none
+
+    class(dang_cg_group)                   :: self
+    type(dang_data),         intent(in)    :: ddata
+    type(dang_params)                      :: dpar
+
+    integer(i4b),            intent(in)    :: map_n 
+    real(dp), dimension(:),  intent(in)    :: b
+
+    real(dp), allocatable, dimension(:)    :: r, q, d, b2, eta
+    real(dp), allocatable, dimension(:)    :: x_internal
+
+    integer(i4b)                           :: i, j, k, l, m, n
+    real(dp)                               :: alpha, beta, delta_0
+    real(dp)                               :: delta_old, delta_new
+    real(dp)                               :: t3, t4, t5, t6
+
+    m = size(b)
+    
+    ! Temporarily hard coded - size of N
+    n = 2*npix
+
+    ! To ensure that we only allocate the CG group amplitude vector once
+    if (iter == 1) then
+       allocate(self%x(m))
+    end if
+
+    allocate(eta(n))
+    allocate(b2(m))
+    allocate(x_internal(m))
+    allocate(r(m))
+
+    ! Check mode
+    if (trim(dpar%ml_mode) == 'sample') then
+       ! First draw a univariate for sampling if in sampling mo
+       do i = 1, n
+          eta(i) = rand_normal(0.d0,1.d0)
+       end do
+       b2 = b + self%compute_sample_vector(ddata,eta,nbands,map_n,b)
+    else if (trim(dpar%ml_mode) == 'optimize') then
+       b2 = b
+    end if
+
+    ! Initial condition parameters
+    !-----------------------------
+    x_internal = self%x
+    !-----------------------------
+
+    r  = b2 - self%compute_Ax(ddata, x_internal, nbands, map_n)
+    d  = r
+    delta_new = sum(r*r)
+    delta_0   = delta_new
+    i = 0
+    do while( (i .lt. self%i_max) .and. (delta_new .gt. self%converge))
+       t3         = mpi_wtime()
+       q          = self%compute_Ax(ddata, d, nbands, map_n)
+       alpha      = delta_new/(sum(d*q))
+       x_internal = x_internal + alpha*d
+
+       if (mod(i,50) == 0) then
+          r = b2 - self%compute_Ax(ddata, x_internal, nbands, map_n)
+       else
+          r = r - alpha*q
+       end if
+
+       delta_old = delta_new
+       delta_new = sum(r*r)
+       beta      = delta_new/delta_old
+       d         = r + beta*d
+       t4        = mpi_wtime()
+       i         = i + 1
+
+       write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+       if (delta_new .lt. self%converge) then
+          write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+       end if
+
+    end do
+
+    self%x = x_internal
+
+    deallocate(eta,b2,x_internal,r)
+
+  end subroutine cg_search
+
   subroutine compute_rhs(self,ddata,b)
     implicit none
 
     class(dang_cg_group)                               :: self
     type(dang_data),                     intent(in)    :: ddata
-    type(dang_params)                                  :: dpar
     real(dp), allocatable, dimension(:), intent(inout) :: b
     integer(i4b)                                       :: component
     real(dp), allocatable, dimension(:,:,:)            :: data
@@ -67,7 +217,6 @@ contains
 
     ! Iterate through CG group components to construct arrays
     do i = 1, self%ncg_components
-       write(*,*) self%cg_component(i)%p%type
        if (self%cg_component(i)%p%type == 'template') then
           if (self%cg_component(i)%p%polfit) then
              m = m + self%cg_component(i)%p%nfit
@@ -86,16 +235,11 @@ contains
     b = 0.d0
 
     ! Remove other foregrounds from the data which we are fitting to
-    do i = 1, dpar%ncomp
+    do i = 1, ncomp
        if (component_list(i)%p%cg_group /= self%cg_group) then
           data(:,:,:) = data(:,:,:) - ddata%fg_map(:,:,1:,i)
        end if
     end do
-
-    write(*,*) data(0,2,1)
-    write(*,*) self%cg_component(1)%p%eval_sed(1,0,2)
-    write(*,*) ddata%rms_map(0,2,1)
-    write(*,*) ddata%temps(0,2,1)
 
     offset = 0
     do k = 1, self%ncg_components
@@ -135,6 +279,116 @@ contains
        end if
     end do
   end subroutine compute_rhs
+
+  function compute_Ax(self, ddata, x, nbands, map_n) result(res)
+    implicit none
+    class(dang_cg_group)                  :: self
+    type(dang_data),        intent(in)    :: ddata
+    real(dp), dimension(:), intent(in)    :: x
+    integer(i4b),           intent(in)    :: nbands, map_n
+
+    real(dp), allocatable, dimension(:)   :: temp1, temp2, temp3, res
+
+    integer(i4b)                          :: i, j, k
+    integer(i4b)                          :: l, m, n, offset
+
+    ! How this works: result = sum_nu(T_nu^t N_nu^-1 T_nu)*x       
+    !--------------------------------------------------------------                   
+    ! Suppose T_nu is of size n, m, and input vector is of size m |                    
+    ! Then N^-1 is of size n, n                                   |                     
+    ! And T_nu^t is of size m, n                                  |                            
+    !                                                             |                     
+    ! The returned vector, like the input vector, is of size m    |                   
+    !                                                             | 
+    ! Let's compute this from right to left:                      |
+    !                                                             |        
+    ! temp1 = T_nu x                                              |
+    ! temp2 = N_nu^-1 temp1                                       |
+    ! temp3 = T_nu^t temp2                                        |
+    ! res   = sum_nu(temp3)                                       |
+    !--------------------------------------------------------------                   
+
+    n      = size(x)
+    offset = 0
+    
+    ! do i = 1, self%ncg_components                                                     
+    !    if (self%cg_component(k)%p%type /= 'template') then                           
+    !       if (self%cg_component(k)%p%joint) then                                     
+    !          offset = offset + 2*npix                                                 
+    !       else                                                                        
+    !          offset = offset + npix                                                  
+    !       end if                                                                     
+    !    end if                                                                        
+    ! end do 
+
+    ! THERE IS CURRENTLY NO SUPPORT FOR MULTI-TEMPLATE HANDLING
+
+    offset = offset + 2*npix
+    l = 1
+
+    allocate(temp1(offset))
+    allocate(temp2(offset))
+    allocate(temp3(n))
+    allocate(res(n))
+
+    res = 0.d0
+
+    do j = 1, nbands
+       temp1 = 0.d0
+       temp2 = 0.d0
+       temp3 = 0.d0
+       ! Solving temp1 = (T_nu)x
+       do k = 1, self%ncg_components
+          if (self%cg_component(k)%p%type /= 'template') then
+             do i = 1, npix
+                if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                temp1(i)      = x(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                ! This is just for the joint stuff - add modularity later
+                temp1(npix+i) = x(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n+1)
+                ! write(*,*) x(i), x(npix+i)
+                ! write(*,*) self%cg_component(k)%p%eval_sed(j,i-1,map_n), self%cg_component(k)%p%eval_sed(j,i-1,map_n+1)
+             end do
+          else
+             if (self%cg_component(k)%p%corr(j)) then
+                do i = 1, npix
+                   if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                   temp1(i)      = temp1(i) + x(offset+l)*ddata%temps(i-1,map_n,1)
+                   temp1(npix+i) = temp1(npix+i) + x(offset+l)*ddata%temps(i-1,map_n+1,1)
+                end do
+             end if
+          end if
+       end do
+       ! res = res + temp1
+    ! end do
+       ! Solving temp2 = (N^-1)temp1
+       do i = 1, npix
+          if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+          temp2(i)      = temp1(i)/(ddata%rms_map(i-1,map_n,j)**2.d0)
+          temp2(npix+i) = temp1(npix+i)/(ddata%rms_map(i-1,map_n+1,j)**2.d0)
+       end do
+
+       ! Solving (T_nu^t)temp2
+       do k = 1, self%ncg_components
+          if (self%cg_component(k)%p%type /= 'template') then
+             do i = 1, npix
+                if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                temp3(i)      = temp2(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                temp3(npix+i) = temp2(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+             end do
+          else
+             if (self%cg_component(k)%p%corr(j)) then
+                do i = 1, npix
+                   if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                   temp3(offset+l) = temp3(offset+l) + temp2(i)*ddata%temps(i-1,map_n,1)
+                   temp3(offset+l) = temp3(offset+l) + temp2(npix+i)*ddata%temps(i-1,map_n+1,1)
+                end do
+                l = l + 1
+             end if
+          end if
+       end do
+       res = res + temp3
+    end do
+  end function compute_Ax
 
   function compute_sample_vector(self, ddata, eta, nbands, map_n, b) result(res)
     implicit none
@@ -220,62 +474,7 @@ contains
        end do
        res = res + temp2
     end do
-
-
-  end function compute_sample_vector
-
-  function constructor_cg(dpar, cg_group)
-    implicit none
-
-    type(dang_params), intent(in) :: dpar
-    class(dang_cg_group), pointer :: constructor_cg
-    integer(i4b),      intent(in) :: cg_group
-
-    integer(i4b)                  :: i, count
-
-    allocate(constructor_cg)
-
-    constructor_cg%ncg_components = 0
-    constructor_cg%cg_group       = cg_group
-
-    do i = 1, dpar%ncomp
-       if (component_list(i)%p%cg_group == cg_group) then
-          constructor_cg%ncg_components = constructor_cg%ncg_components + 1
-       end if
-    end do
-
-    if (constructor_cg%ncg_components == 0) then
-       write(*,*) "Woah there, number of CG components = 0"
-       write(*,*) "for CG group ", cg_group
-       stop
-    end if
-
-    allocate(constructor_cg%cg_component(constructor_cg%ncg_components))
-
-    count = 1
-    do i = 1, dpar%ncomp
-       if (component_list(i)%p%cg_group == cg_group) then
-          constructor_cg%cg_component(count)%p => component_list(i)%p
-          count = count + 1
-       end if
-    end do
-
-  end function constructor_cg
-
-
-  subroutine initialize_cg_groups(dpar)
-    implicit none
-    type(dang_params)             :: dpar
-    integer(i4b)                  :: i, count
-
-    allocate(cg_groups(dpar%ncggroup))
-
-    count = 0
-    do i = 1, dpar%ncggroup
-       write(*,*) 'Initialize CG group ', i
-       cg_groups(i)%p => dang_cg(dpar,i)
-    end do
-  end subroutine initialize_cg_groups
+ end function compute_sample_vector
 
 
 end module dang_cg_mod

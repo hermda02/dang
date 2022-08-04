@@ -297,10 +297,10 @@ contains
          t4        = mpi_wtime()
          i         = i + 1
 
-         ! write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-         ! if (delta_new .lt. converge) then
-         !    write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-         ! end if
+         write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+         if (delta_new .lt. converge) then
+            write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+         end if
       end do
 
       dat%amp_vec = x
@@ -504,6 +504,7 @@ contains
          ! Step three is to solve temp3 = (T_nu^t)(temp2) - this part is complex/confusing...
          do m = 1, size(self%joint_comp)
             do n = 1, self%ncomp
+               if (trim(self%fg_label(n)) == 'dust_353') cycle
                if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
                   !$OMP PARALLEL PRIVATE(i)
                   !$OMP DO SCHEDULE(static)
@@ -722,16 +723,8 @@ contains
       ! temp3 is of size m <- the final vector                      |
       !--------------------------------------------------------------
 
-      allocate(temp1(len))
-      allocate(temp2(len))
-      allocate(temp3(n))
-      allocate(res(n))
-
-      res     = 0.d0
-
       !---------------------------------
       ! No multi-template handling yet
-      l = 1
       ! if (self%ntemp == 2) then 
       !    r = 1+self%temp_nfit(1)
       ! else if (self%ntemp == 3) then
@@ -743,6 +736,14 @@ contains
       !    s = 1+self%temp_nfit(1)+self%temp_nfit(2)+self%temp_nfit(3)
       ! end if
       !---------------------------------
+      l = 1
+
+      allocate(temp1(len))
+      allocate(temp2(len))
+      allocate(temp3(n))
+      allocate(res(n))
+
+      res     = 0.d0
 
       do j = 1, nbands
          temp1 = 0.d0
@@ -753,6 +754,7 @@ contains
          ! Step one is to solve temp1 = (T_nu)(vec)
          do m = 1, size(self%joint_comp)
             do n = 1, self%ncomp
+               if (trim(self%fg_label(n)) == 'dust_353') cycle
                if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
                   ! First the multiply npix values of x by the npix diagonals of T_nu
                   !$OMP PARALLEL PRIVATE(i)
@@ -761,6 +763,8 @@ contains
                      if (dat%masks(i-1,1) == 0.d0 .or. dat%masks(i-1,1) == missval) cycle
                      temp1(i) = vec(i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n)
                      if (self%joint_pol) temp1(x+i) = vec(x+i)*compute_spectrum(self,compo,bp(j),n,i-1,map_n+1)!compute_spectrum(self,compo,n,self%band_nu(j),i-1,map_n+1)
+                     ! write(*,*) vec(i), vec(x+i)
+                     ! write(*,*) compute_spectrum(self,compo,bp(j),n,i-1,map_n), compute_spectrum(self,compo,bp(j),n,i-1,map_n+1)
                   end do
                   !$OMP END DO
                   !$OMP END PARALLEL
@@ -783,7 +787,9 @@ contains
                end if
             end do
          end do
-
+         ! res = res + temp1
+      ! end do
+         
          ! Step two is to solve temp2 = (N^-1)(temp1)
          !$OMP PARALLEL PRIVATE(i)
          !$OMP DO SCHEDULE(static)
@@ -798,6 +804,7 @@ contains
          ! Step three is to solve temp3 = (T_nu^t)(temp2) - this part is complex/confusing...
          do m = 1, size(self%joint_comp)
             do n = 1, self%ncomp
+               if (trim(self%fg_label(n)) == 'dust_353') cycle
                if (trim(self%joint_comp(m)) == trim(self%fg_label(n))) then
                   !$OMP PARALLEL PRIVATE(i)
                   !$OMP DO SCHEDULE(static)

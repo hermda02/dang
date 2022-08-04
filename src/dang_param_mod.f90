@@ -93,9 +93,12 @@ module dang_param_mod
      real(dp)                                          :: HI_Td_std      ! HI Temperature prior std
      real(dp)                                          :: HI_Td_step     ! Td sampling step size
 
+     ! CG group parameters
      integer(i4b)                                      :: ncggroup
      logical(lgt),       allocatable, dimension(:)     :: cg_group_sample ! Do we sample that cg group?
-     
+     integer(i4b),       allocatable, dimension(:)     :: cg_max_iter
+     real(dp),           allocatable, dimension(:)     :: cg_convergence
+
   end type dang_params
   
 contains
@@ -555,10 +558,14 @@ contains
        allocate(par%joint_comp(n3))
 
        allocate(par%cg_group_sample(n4))
+       allocate(par%cg_max_iter(n4))
+       allocate(par%cg_convergence(n4))
 
        do i = 1, n4
           call int2string(i, itext)
           call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%cg_group_sample(i))
+          call get_parameter_hashtable(htbl, 'CG_GROUP_MAX_ITER'//itext, len_itext=len_itext, par_int=par%cg_max_iter(i))
+          call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, par_dp=par%cg_convergence(i))
        end do
        
        do i = 1, n2
