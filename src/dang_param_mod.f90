@@ -515,10 +515,7 @@ contains
     if (trim(par%mode) == 'comp_sep') then
        call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
        call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
-       call get_parameter_hashtable(htbl, 'NUMJOINT', par_int=par%njoint)
        call get_parameter_hashtable(htbl, 'NUM_CG_GROUPS', par_int=par%ncggroup)
-       call get_parameter_hashtable(htbl, 'JOINT_SAMPLE', par_lgt=par%joint_sample)
-       call get_parameter_hashtable(htbl, 'JOINT_POL', par_lgt=par%joint_pol)
        call get_parameter_hashtable(htbl, 'DUST_CORR_TYPE', par_string=par%dust_corr_type)
        
        allocate(par%mbb_gauss(2,2))
@@ -586,13 +583,7 @@ contains
              end if
           end do
        end do
-       
-       ! Also to be deprecated
-       do i = 1, n3
-          call int2string(i, itext)
-          call get_parameter_hashtable(htbl, 'JOINT_SAMPLE_COMP'//itext, len_itext=len_itext, par_string=par%joint_comp(i))
-       end do
-       
+              
        ! Loop over and load all component information
        do i = 1, n
           call int2string(i, itext)
