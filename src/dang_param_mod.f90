@@ -662,8 +662,8 @@ contains
              call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
                   par_string=par%fg_spec_file(i,2))
           else if (trim(par%fg_type(i)) == 'template') then
-             call get_parameter_hashtable(htbl, 'COMP_POLFIT'//itext, len_itext=len_itext,&
-                  par_string=par%temp_polfit(i))
+             ! call get_parameter_hashtable(htbl, 'COMP_POLFIT'//itext, len_itext=len_itext,&
+             !      par_string=par%temp_polfit(i))
              do j = 1, par%numband
                 call int2string(j,jtext)
                 call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
@@ -672,15 +672,11 @@ contains
                    par%fg_nfit(i) = par%fg_nfit(i) + 1
                 end if
              end do
-
-
           end if
           if (trim(par%fg_type(i)) /= 'template') then
              par%fg_ref_loc(i) = minloc(abs(par%band_nu-par%fg_nu_ref(i)),1)
           end if
        end do
-       
-       
        
     else if (trim(par%mode) == 'hi_fit') then
        call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)

@@ -60,6 +60,8 @@ program dang
   nfgs       = dpar%ncomp+dpar%ntemp
   ncomp      = dpar%ncomp
   ncg_groups = dpar%ncggroup
+  nsample    = dpar%nsample
+  ml_mode    = trim(dpar%ml_mode)
   npixpar    = 0.d0
   nglobalpar = 0.d0
   nump       = 0
@@ -198,62 +200,27 @@ contains
       ! ------------------------------------------------------------------------------------------
       call sample_cg_groups(dpar,ddata,2)
       call update_sky_model(ddata)
-
       call write_stats_to_term(ddata,dpar,dcomps,iter)
-      call write_maps(dpar,ddata,dcomps)
-
-      write(*,*) component_list(2)%p%template_amplitudes(:,2)
-      write(*,*) component_list(2)%p%template_amplitudes(:,3)
-
-      stop
       
-      ! Similarly here:
-      !
-      ! call sample_spectral_parameters
-      ! call update_sky_signal(ddata,dcomps)
+      ! ------------------------------------------------------------------------------------------
+      ! Sample each spectral parameter
+      ! ------------------------------------------------------------------------------------------
+      call sample_spectral_parameters(ddata)
+      call update_sky_model(ddata)
+      call write_stats_to_term(ddata,dpar,dcomps,iter)
 
       ! ------------------------------------------------------------------------------------------
-      ! Sample spectral parameters
+      ! Write out the data
       ! ------------------------------------------------------------------------------------------
-      do n = 1, dpar%ncomp
-         if (dpar%fg_samp_spec(n,1)) then
-            if (dpar%fg_spec_joint(n,1)) then
-               write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta jointly."
-               write(*,*) "---------------------------------"
-               ! call sample_new_index(dpar,ddata,dcomps,n,-1)
-               call sample_index(dpar,ddata,dcomps,n,-1)!,1000)
-            else
-               do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                  write(*,*) "Sample "//trim(dpar%fg_label(n))//" beta for "//trim(tqu(k))//"."
-                  write(*,*) "---------------------------------"
-                  call sample_index(dpar,ddata,dcomps,n,k)
-               end do
-            end if
-            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-               call extrapolate_foreground(dpar,ddata,dcomps,n,k)
-            end do
-            ! How good is the fit and what are the parameters looking like?
-            call write_stats_to_term(ddata,dpar,dcomps,iter)
-         end if
-      end do
-      ! ------------------------------------------------------------------------------------------
-      ddata%res_map = ddata%sig_map
       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-         do j = 1, nfgs
-            ddata%res_map(:,k,:)  = ddata%res_map(:,k,:) - ddata%fg_map(:,k,1:,j)
-         end do
          if (rank == master) then
             call write_data(dpar,ddata,dcomps,k)
          end if
       end do
-      !-------------------------------------------------------------------------------------------
-
-      ! How good is the fit and what are the parameters looking like?
-      call write_stats_to_term(ddata,dpar,dcomps,iter)
-      
       if (mod(iter,dpar%iter_out) .EQ. 0) then
          call write_maps(dpar,ddata,dcomps)
       end if
+      ! ------------------------------------------------------------------------------------------
    end do
    call mpi_finalize(ierr)
  end subroutine comp_sep

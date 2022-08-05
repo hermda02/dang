@@ -156,7 +156,7 @@ contains
              do k = 1, nmaps
                 do j = 1, nbands
                    ddata%sky_model(i,k,j) = ddata%sky_model(i,k,j) + &
-                        & c%amplitude(i,k)*c%eval_sed(j,i-1,k)
+                        & c%amplitude(i,k)*c%eval_sed(j,i,k)
                 end do
              end do
           end do
@@ -546,9 +546,9 @@ contains
              if (mod(iter, 1) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, a, f7.3, a, f8.4, a, 10e10.3)')&
                      iter, " - Poltype: "//trim(tqu(k)), " - A_s: ",&
-                     self%fg_map(23000,k,0,1),  " - beta_s: ",&
-                     mask_avg(dcomps%beta_s(:,k),self%masks(:,1)), ' - A_d: ', &
-                     self%temp_amps(:,k,1)/self%temp_norm(k,1)
+                     component_list(1)%p%amplitude(23000,k),  " - beta_s: ",&
+                     mask_avg(component_list(1)%p%indices(:,k,1),self%masks(:,1)), ' - A_d: ', &
+                     component_list(2)%p%template_amplitudes(:,k)
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
           end if

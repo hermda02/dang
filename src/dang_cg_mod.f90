@@ -113,14 +113,6 @@ contains
        call cg_groups(i)%p%compute_rhs(ddata,b)
        call cg_groups(i)%p%cg_search(dpar,ddata,map_n,b)
        call cg_groups(i)%p%unpack_amplitudes(dpar,ddata,map_n)
-
-       if (i == 1) then
-          open(55,file='sampling_group_rhs_testing.txt')
-          do j = 1, size(b)
-             write(55,fmt='(2(E16.8))') b(j), cg_groups(1)%p%x(j)
-          end do
-          close(55)
-       end if
        deallocate(b)
     end do
 
@@ -222,10 +214,11 @@ contains
     class(dang_cg_group)                               :: self
     type(dang_data),                     intent(in)    :: ddata
     real(dp), allocatable, dimension(:), intent(inout) :: b
+    type(dang_comps),                    pointer       :: c
     integer(i4b)                                       :: component
     real(dp), allocatable, dimension(:,:,:)            :: data
 
-    integer(i4b)                            :: i, j, k
+    integer(i4b)                            :: i, j, k, y
     integer(i4b)                            :: l, m, n
     integer(i4b)                            :: offset, z
 
@@ -233,8 +226,9 @@ contains
 
     map_n = 2 ! Dummy variable for now
 
+    ! Here is an object we'll call data, which we will correct to be the                                                      
+    ! portion of the sky signal we wish to fit to      
     allocate(data(0:npix-1,nmaps,nbands))
-
     data = ddata%sig_map
 
     l = ddata%npix  ! the number of pixels in our sky maps 
@@ -261,17 +255,37 @@ contains
     b = 0.d0
 
     ! Remove other foregrounds from the data which we are fitting to
-    do i = 1, ncomp
-       if (component_list(i)%p%cg_group /= self%cg_group) then
-          data(:,:,:) = data(:,:,:) - ddata%fg_map(:,:,1:,i)
+    do y = 1, ncomp
+       c => component_list(y)%p
+       if (c%cg_group /= self%cg_group) then
+          if (c%type /= 'template') then
+             do i = 0, npix-1
+                if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                do k = 1, nmaps
+                   do j = 1, nbands
+                      data(i,k,j) = data(i,k,j) - c%amplitude(i,k)*c%eval_sed(j,i-1,k)
+                   end do
+                end do
+             end do
+          else
+             do i = 0, npix-1
+                if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                do k = 1, nmaps
+                   do j = 1, nbands
+                      data(i,k,j) = data(i,k,j) - c%template(i,k)*c%template_amplitudes(j,k)
+                   end do
+                end do
+             end do
+          end if
        end if
     end do
 
+    ! Compute the RHS of the matrix equation Ax=b
     offset = 0
     do k = 1, self%ncg_components
        if (self%cg_component(k)%p%type /= 'template') then
-          do j = 1, n
-             do i = 1, l
+          do i = 1, l
+             do j = 1, n
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) then
                    b(i)   = 0.d0
                    b(l+i) = 0.d0
@@ -512,6 +526,8 @@ contains
     
     integer(i4b)                       :: offset, i, j, k, l
 
+    offset = 0
+
     ! Let's unravel self%x such that the foreground amplitudes
     ! are properly stored
     do k = 1, self%ncg_components
@@ -531,7 +547,6 @@ contains
                 if (self%cg_component(k)%p%corr(j)) then
                    self%cg_component(k)%p%template_amplitudes(j,map_n)   = self%x(offset+l)
                    self%cg_component(k)%p%template_amplitudes(j,map_n+1) = self%x(offset+l)
-                   write(*,*) self%x(offset+l)
                    l = l + 1
                 end if
              end do

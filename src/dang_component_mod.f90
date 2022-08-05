@@ -11,19 +11,21 @@ module dang_component_mod
 
   type :: dang_comps
      
-     character(len=16)                                :: label, type
-     logical(lgt)                                     :: sample_amplitude
-     logical(lgt),      allocatable, dimension(:)     :: sample_index
-     real(dp)                                         :: nu_ref
-     integer(i4b)                                     :: cg_group
-     logical(lgt)                                     :: polfit
+     character(len=16)                                :: label, type      ! Component label and type
+     logical(lgt)                                     :: sample_amplitude ! Do we sample the amplitudes?
+     logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
+     real(dp)                                         :: nu_ref           ! Reference frequency
+     integer(i4b)                                     :: cg_group         ! CG group number
+     logical(lgt)                                     :: polfit           ! (Template only)
      logical(lgt),      allocatable, dimension(:)     :: corr             ! Do we correct this band?
-     integer(i4b)                                     :: nfit
+     integer(i4b)                                     :: nfit             ! (Template only)
+     integer(i4b)                                     :: nindices         ! How many indices does the component have?
 
-     real(dp),          allocatable, dimension(:,:,:) :: indices
-     real(dp),          allocatable, dimension(:,:)   :: amplitude
-     real(dp),          allocatable, dimension(:,:)   :: template
-     real(dp),          allocatable, dimension(:,:)   :: template_amplitudes
+     real(dp),          allocatable, dimension(:,:,:) :: indices             ! Indices maps
+     real(dp),          allocatable, dimension(:,:)   :: amplitude           ! Amplitude maps
+     real(dp),          allocatable, dimension(:,:)   :: template            ! Template map
+     real(dp),          allocatable, dimension(:,:)   :: template_amplitudes ! Template amplitudes
+     integer(i4b),      allocatable, dimension(:)     :: index_mode          ! Fullsky/per-pixel
 
      real(dp),          allocatable, dimension(:,:)   :: spec_par
      real(dp),          allocatable, dimension(:)     :: temp_amps
@@ -68,6 +70,8 @@ contains
     class(dang_comps), pointer    :: constructor
     integer(i4b),      intent(in) :: component
 
+    integer(i4b)                  :: i
+
     allocate(constructor)
 
     constructor%label            = trim(dpar%fg_label(component))
@@ -77,44 +81,19 @@ contains
 
     if (trim(constructor%type) == 'mbb') then
        ! Allocate arrays to appropriate size for each component type
+       constructor%nindices = 2
        allocate(constructor%gauss_prior(2,2))
        allocate(constructor%uni_prior(2,2))
        allocate(constructor%sample_index(2))
        allocate(constructor%prior_type(2))
+       allocate(constructor%index_mode(2))
 
        ! Allocate maps for the components
        allocate(constructor%amplitude(0:npix-1,nmaps))
        allocate(constructor%indices(0:npix-1,nmaps,2))
-     
-       ! Bools for sampling indices
-       constructor%sample_index(1)  = dpar%fg_samp_spec(component,1)
-       constructor%sample_index(2)  = dpar%fg_samp_spec(component,2)
-
-       ! Define prior for likelihood evaluation
-       constructor%prior_type(1)    = dpar%fg_prior_type(component,1)
-       constructor%prior_type(2)    = dpar%fg_prior_type(component,2)
-
-       ! Define the Gaussian prior and bounds
-       ! Beta
-       constructor%gauss_prior(1,1) = dpar%fg_gauss(component,1,1)
-       constructor%gauss_prior(1,2) = dpar%fg_gauss(component,1,2)
-       ! T_d
-       constructor%gauss_prior(2,1) = dpar%fg_gauss(component,2,1)
-       constructor%gauss_prior(2,2) = dpar%fg_gauss(component,2,2)
-       
-       ! Beta
-       constructor%uni_prior(1,1)   = dpar%fg_uni(component,1,1)
-       constructor%uni_prior(1,2)   = dpar%fg_uni(component,1,2)
-       ! T_d
-       constructor%uni_prior(2,1)   = dpar%fg_uni(component,2,1)
-       constructor%uni_prior(2,2)   = dpar%fg_uni(component,2,2)
 
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
-
-       ! Initialize index maps
-       constructor%indices(:,:,1)   = dpar%fg_init(component,1)
-       constructor%indices(:,:,2)   = dpar%fg_init(component,2)
 
        ! Initialize an amplitude map, or don't
        if (trim(dpar%fg_filename(component)) == 'none') then
@@ -123,37 +102,50 @@ contains
           call read_bintab(trim(dpar%fg_filename(component)),constructor%amplitude, npix, &
                & nmaps, nullval, anynull, header=header)
        end if
+
+       do i = 1, constructor%nindices
+          ! Do we sample this index?
+          constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)
+
+          ! Sample full sky or per-pixel?
+          if (trim(dpar%fg_ind_region(component,i)) == 'fullsky') then
+             constructor%index_mode = 1
+          else if (trim(dpar%fg_ind_region(component,i)) == 'per-pixel') then
+             constructor%index_mode = 2
+          end if
+
+          ! Define prior for likelihood evaluation
+          constructor%prior_type(i)    = dpar%fg_prior_type(component,i)
+          constructor%gauss_prior(i,1) = dpar%fg_gauss(component,i,1)
+          constructor%gauss_prior(i,2) = dpar%fg_gauss(component,i,2)
+          constructor%uni_prior(i,1)   = dpar%fg_uni(component,i,1)
+          constructor%uni_prior(i,2)   = dpar%fg_uni(component,i,2)
+
+          ! Initialize spectral index maps, or don't
+          if (trim(dpar%fg_spec_file(component,i)) == 'none') then
+             constructor%indices(:,:,i)   = dpar%fg_init(component,i)
+          else
+             call read_bintab(trim(dpar%fg_spec_file(component,i)),constructor%indices(:,:,i), npix, &
+                  & nmaps, nullval, anynull, header=header)
+          end if
+       end do
 
 
     else if (trim(constructor%type) == 'power-law') then
        ! Allocate arrays to appropriate size for each component type
+       constructor%nindices = 1
        allocate(constructor%gauss_prior(1,2))
        allocate(constructor%uni_prior(1,2))
        allocate(constructor%sample_index(1))
        allocate(constructor%prior_type(1))
-
+       allocate(constructor%index_mode(1))
+       
        ! Allocate maps for the components
        allocate(constructor%amplitude(0:npix-1,nmaps))
        allocate(constructor%indices(0:npix-1,nmaps,1))
        
-       ! Bools for sampling indices
-       constructor%sample_index(1)  = dpar%fg_samp_spec(component,1)
-
-       ! Define prior for likelihood evaluation
-       constructor%prior_type(1)    = dpar%fg_prior_type(component,1)
-       
-       ! Define the Gaussian prior and bounds
-       constructor%gauss_prior(1,1) = dpar%fg_gauss(component,1,1)
-       constructor%gauss_prior(1,2) = dpar%fg_gauss(component,1,2)
-
-       constructor%uni_prior(1,1)   = dpar%fg_uni(component,1,1)
-       constructor%uni_prior(1,2)   = dpar%fg_uni(component,1,2)
-
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
-
-       ! Initialize index maps
-       constructor%indices          = dpar%fg_init(component,1)
 
        ! Initialize an amplitude map, or don't
        if (trim(dpar%fg_filename(component)) == 'none') then
@@ -163,8 +155,36 @@ contains
                & nmaps, nullval, anynull, header=header)
        end if
 
+       do i = 1, constructor%nindices
+          ! Do we sample this index?
+          constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)
+
+          ! Sample full sky or per-pixel?
+          if (trim(dpar%fg_ind_region(component,i)) == 'fullsky') then
+             constructor%index_mode = 1
+          else if (trim(dpar%fg_ind_region(component,i)) == 'per-pixel') then
+             constructor%index_mode = 2
+          end if
+
+          ! Define prior for likelihood evaluation
+          constructor%prior_type(i)    = dpar%fg_prior_type(component,i)
+          constructor%gauss_prior(i,1) = dpar%fg_gauss(component,i,1)
+          constructor%gauss_prior(i,2) = dpar%fg_gauss(component,i,2)
+          constructor%uni_prior(i,1)   = dpar%fg_uni(component,i,1)
+          constructor%uni_prior(i,2)   = dpar%fg_uni(component,i,2)
+
+          ! Initialize spectral index maps, or don't
+          if (trim(dpar%fg_spec_file(component,i)) == 'none') then
+             constructor%indices(:,:,i)   = dpar%fg_init(component,i)
+          else
+             call read_bintab(trim(dpar%fg_spec_file(component,i)),constructor%indices(:,:,i), npix, &
+                  & nmaps, nullval, anynull, header=header)
+          end if
+       end do
+
     else if (trim(constructor%type) == 'template') then
-       
+       constructor%nindices = 0
+      
        allocate(constructor%corr(nbands))
        allocate(constructor%amplitude(0:npix-1,nmaps)) ! Amplitude is given by the product of the template at the 
                                                        ! fit template amplitude (template_amplitudes)
@@ -175,8 +195,6 @@ contains
        constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
        constructor%corr                = dpar%fg_temp_corr(component,:)
        constructor%template_amplitudes = 0.d0
-       
-       write(*,*) trim(dpar%fg_filename(component))
 
        if (trim(dpar%fg_filename(component)) == 'none') then
           write(*,*) "Error: template filename == 'none' "

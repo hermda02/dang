@@ -18,7 +18,7 @@ module dang_util_mod
   integer(i4b)       :: ierr, rank, numprocs
   integer(i4b)       :: nbands, npix, nmaps, nside, nfgs, npar
   integer(i4b)       :: npixpar, nglobalpar
-  integer(i4b)       :: ncomp, ncg_groups
+  integer(i4b)       :: ncomp, ncg_groups, nsample
   integer(i4b)       :: iter, niter, ordering, nlheader
   integer(i4b)       :: proc_per_band
   integer(i4b)       :: master      = 0 
@@ -31,13 +31,15 @@ module dang_util_mod
   character(len=80), dimension(180) :: header
   character(len=80), dimension(3)   :: tqu 
   character(len=128)                :: title
+  character(len=10)                 :: ml_mode
   
   real(dp), allocatable, dimension(:) :: amp_vec
 
   public    :: npix, nbands, nmaps, ordering, header, h, c, k_B, T_CMB
-  public    :: ncomp, ncg_groups
+  public    :: ncomp, ncg_groups, nsample
   public    :: npixpar, nglobalpar, title
   public    :: iter, iter_str, exist, tqu
+  public    :: ml_mode
   public    :: amp_vec
 
 contains 

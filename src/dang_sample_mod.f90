@@ -16,690 +16,297 @@ module dang_sample_mod
   integer(i4b) :: i, j, k, l
   
 contains
+
+  subroutine sample_spectral_parameters(ddata)
+    implicit none
+
+    type(dang_data),             intent(in) :: ddata
+    type(dang_comps),            pointer    :: c
+    integer(i4b)                            :: i, j, k
+
+    ! Loop over all foregrounds and sample for indices
+    do i = 1, ncomp
+       c => component_list(i)%p
+       if (c%nindices == 0) cycle
+       do j = 1, c%nindices
+          if (c%sample_index(j)) then
+             ! Should probably include some modes for varying
+             ! poltype combinations
+             ! if (c%joint_index(l)) then
+             ! 
+             call sample_index_mh(ddata,c,j,-1)
+          end if
+       end do
+    end do
+
+  end subroutine sample_spectral_parameters
   
-  subroutine sample_index(dpar, dat, comp, ind, map_n, output) 
-    !------------------------------------------------------------------------
-    ! Warning -- not set up for foregrounds with multiple spectral parameters yet
-    ! I.e. will only sample beta_d, and not T_d
-    !------------------------------------------------------------------------
+  subroutine sample_index_mh(ddata,c,nind,map_n)
     implicit none
     
-    class(dang_params)                         :: dpar
-    type(dang_comps),            intent(inout) :: comp
-    type(dang_data)                            :: dat
-    integer(i4b),                intent(in)    :: map_n, ind
-    integer(i4b)                               :: nside1, nside2, npix2, f
-    real(dp), dimension(0:npix-1,nmaps,nbands) :: map2fit, cov 
-    real(dp), dimension(0:npix-1,nmaps)        :: indx
-    real(dp), dimension(0:npix-1,nmaps)        :: mask
-    real(dp), dimension(0:npix-1)              :: indx_sample
-    real(dp), allocatable, dimension(:,:)      :: fg_map_high, fg_map_low
-    real(dp), allocatable, dimension(:,:,:)    :: data_low, cov_low, rms_low
-    real(dp), allocatable, dimension(:,:)      :: indx_low, mask_low
-    real(dp), allocatable, dimension(:)        :: indx_sample_low
-    real(dp)                                   :: a, b, c, num, sam, t, p, sol
-    real(dp)                                   :: time1, time2, diff
-    real(dp)                                   :: lnl_old, lnl_new, ratio, s
-    real(dp)                                   :: naccept, paccept, local_a, local_b
-    logical                                    :: pix_samp
-    logical                                    :: exist
+    type(dang_data),             intent(in) :: ddata
+    type(dang_comps),   pointer, intent(in) :: c
+    integer(i4b),                intent(in) :: nind
+    integer(i4b),                intent(in) :: map_n
+    type(dang_comps),   pointer             :: c2
     
-    real(dp), allocatable, dimension(:)        :: beta_grid, like_grid
-    character(len=128)                         :: title    
-    real(dp), allocatable, dimension(:,:)      :: chisq_map
-    character(len=3)                           :: l_str
+    real(dp), allocatable, dimension(:,:,:) :: data, model
+    real(dp), allocatable, dimension(:,:)   :: index
+    real(dp), allocatable, dimension(:)     :: sample, theta
 
-    character(len=5)                           :: pxl_str
-    integer(i4b), optional, intent(in)         :: output
+    integer(i4b)                            :: i, j, k
+    integer(i4b)                            :: l, m, n, mh_mode
+    real(dp)                                :: lnl, lnl_old, lnl_new
+    real(dp)                                :: diff, ratio, num
 
-    logical(lgt)                               :: test
+    ! Here is an object we'll call data, which we will correct to be the
+    ! portion of the sky signal we wish to fit to
+    allocate(data(0:npix-1,nmaps,nbands))
+    allocate(model(0:npix-1,nmaps,nbands))
+    model(:,:,:) = 0.d0
+    data(:,:,:)  = ddata%sig_map
 
-    test = .false.
-    if (present(output)) then
-       test = .true.
-    end if
-    
-    !------------------------------------------------------------------------
-    ! Spectral index sampler, using the Metropolis approach.
-    !------------------------------------------------------------------------    
-    allocate(fg_map_high(0:npix-1,nmaps))
-
-    do i = 0, npix-1
-       do j = 1, nbands
-          do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-             cov(i,k,j)     = dat%rms_map(i,k,j)**2.d0
-             map2fit(i,k,j) = dat%sig_map(i,k,j)
-          end do
-       end do
-       mask(i,:) = dat%masks(i,:)
-       if (mask(i,dpar%pol_type(1)) == 0.d0) then
-          mask(i,:) = missval
+    ! Loop over components, remove all others
+    do l = 1, ncomp
+       c2 => component_list(l)%p
+       if (c2%label /= c%label) then
+          if (c2%type /='template') then
+             do i = 0, npix-1
+                do k = 1, nmaps
+                   do j = 1, nbands
+                      data(i,k,j) = data(i,k,j) - c2%amplitude(i,k)*c2%eval_sed(j,i,k)
+                   end do
+                end do
+             end do
+          else
+             do i = 0, npix-1
+                do k = 1, nmaps
+                   do j = 1, nbands
+                      data(i,k,j) = data(i,k,j) - c2%template(i,k)*c2%template_amplitudes(j,k)
+                   end do
+                end do
+             end do
+          end if
        end if
     end do
 
-    ! Correct the "map2fit" by removing all other foregrounds from the signal maps
-    do f = 1, nfgs
-       if (f /= ind) then
-          map2fit(:,:,:) = map2fit(:,:,:) - dat%fg_map(:,:,1:,f)
-       end if
-    end do
-
-    ! Assign estimated foreground amplitude to a dummy array in case of ud_grading
-    fg_map_high(:,:) = dat%fg_map(:,:,0,ind)
-
-    !------------------------------------------------------------------------
-    ! Load priors for the appropriate spectrum
-    !------------------------------------------------------------------------
-    if (trim(dpar%fg_label(ind)) == 'synch') then 
-       write(*,*) "Fitting for synchrotron beta."
-       indx     = comp%beta_s
-    else if (trim(dpar%fg_label(ind)) == 'dust') then 
-       write(*,*) "Fitting for thermal dust beta"
-       indx     = comp%beta_d
+    ! Initialize index map from previous Gibbs iteration
+    allocate(sample(c%nindices),theta(c%nindices))
+    
+    ! Little extra section here for mode determination
+    !=================================================
+    ! mh_mode :
+    !    1 --- corresponds to sampling for the poltype which is input to the routine
+    !    2 --- sampling for Q+U jointly
+    !=================================================
+    if (map_n == -1) then
+       mh_mode = 2
+    else
+       mh_mode = 1
     end if
     
-    if (index(dpar%fg_ind_region(ind,1),'pix') /= 0) then
-       write(*,*) 'single pixel region sampling'
-       pix_samp = .true.
-       nside2   = dpar%fg_samp_nside(ind,1)
-    else if (index(dpar%fg_ind_region(ind,1),'full') /= 0) then
-       write(*,*) 'Sampling fullsky'
-       pix_samp = .false.
-    else
-       write(*,*) 'ERROR: Sampling region for component '//trim(dpar%fg_label(ind))//' not recognized.'
-       write(*,*) '   Check COMP_BETA_REGION parameter in parameter file.'
-       stop
-    end if
-    
-    !-------------------|
-    ! Per pixel sampler |
-    !-------------------|
-    if (pix_samp) then
-       if (rank == master) then
-          write(*,fmt='(a,i4)') 'Sampling ' // trim(dpar%fg_label(ind)) // ' beta at nside', nside2
-       end if
-       
-       time1 = mpi_wtime()
-       
-       !------------------------------------------------------------------------
-       ! Check to see if the data nside is the same as the sampling nside
-       ! If not equal, downgrade the data before sampling
-       !
-       ! VITAL: Make dummy varables for each map before ud_grading
-       !
-       !------------------------------------------------------------------------
-       nside1 = npix2nside(npix)
-       if (nside1 == nside2) then
-          npix2 = npix
+    ! Now time to begin sampling
+    if (c%index_mode(nind) == 1) then
+       lnl = 0.d0
+       ! Ensure proper handling of poltypes
+       if (mh_mode == 1) then
+          do l = 1, c%nindices
+             sample(l)   = c%indices(0,map_n,l)
+          end do
        else
-          npix2 = nside2npix(nside2)
+          do l = 1, c%nindices
+             sample(l)   = c%indices(0,2,l)
+          end do
        end if
-       allocate(data_low(0:npix2-1,nmaps,nbands),fg_map_low(0:npix2-1,nmaps))
-       allocate(indx_low(0:npix2-1,nmaps),cov_low(0:npix2-1,nmaps,nbands))
-       allocate(rms_low(0:npix2-1,nmaps,nbands))
-       allocate(indx_sample_low(0:npix2-1))
-       allocate(mask_low(0:npix2-1,nmaps))
        
-       if (nside1 /= nside2) then 
-          if (ordering == 1) then
-             call udgrade_ring(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
-             call udgrade_ring(indx,nside1,indx_low,nside2)
-             call udgrade_ring(fg_map_high(:,:),nside1,fg_map_low(:,:),nside2)
+       ! Define the model to toss into the likelihood evaluation
+       ! Ensure proper handling of poltypes
+       if (mh_mode == 1) then
+          do i = 0, npix-1
              do j = 1, nbands
-                call udgrade_ring(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                call udgrade_ring(cov(:,:,j),nside1,cov_low(:,:,j),nside2)
-                call udgrade_ring(dat%rms_map(:,:,j),nside1,rms_low(:,:,j),nside2)
+                model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,sample)
+             end do
+          end do
+       else
+          do i = 0, npix-1
+             do k = 1, nmaps
+                do j = 1, nbands
+                   model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,sample)
+                end do
+             end do
+          end do
+       end if
+       
+       ! Evaluate the lnL (already includes the -0.5 out front)
+       lnl = evaluate_lnL(data,ddata%rms_map,model,map_n,-1,ddata%masks(:,1))
+       
+       if (trim(c%prior_type(nind)) == 'gaussian') then
+          lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+       else if (trim(c%prior_type(nind)) == 'uniform') then
+          lnl_old = lnl
+       end if
+
+       ! Now we do the real sampling
+       do l = 1, nsample
+          
+          ! Update theta with the new sample
+          theta(nind) = sample(nind) + rand_normal(0.d0,c%gauss_prior(nind,2))
+          
+          ! Evaluate model for likelihood evaluation
+          ! Ensure proper handling of poltypes
+          if (mh_mode == 1) then
+             do i = 0, npix-1
+                do j = 1, nbands
+                   model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,theta)
+                end do
              end do
           else
-             call udgrade_nest(indx,nside1,indx_low,nside2)
-             call udgrade_nest(mask,nside1,mask_low,nside2,fmissval=missval,PESSIMISTIC=.false.)
-             call udgrade_nest(dat%fg_map(:,:,0,ind),nside1,fg_map_low(:,:),nside2)
-             do j = 1, nbands
-                call udgrade_nest(map2fit(:,:,j),nside1,data_low(:,:,j),nside2)
-                call udgrade_nest(cov(:,:,j),nside1,cov_low(:,:,j),nside2)
-                call udgrade_nest(dat%rms_map(:,:,j),nside1,rms_low(:,:,j),nside2)
+             do i = 0, npix-1
+                do k = 1, nmaps
+                   do j = 1, nbands
+                      model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,theta)
+                   end do
+                end do
              end do
           end if
-          cov_low = sqrt(cov_low / (npix/npix2))
-          rms_low = sqrt(rms_low / (npix/npix2))
-          do i = 0, npix2-1
-             if (mask_low(i,1) .lt. 0.50) then
-                mask_low(i,:) = 0.d0
-             else
-                mask_low(i,:) = 1.d0
-             end if
-          end do
-       else 
-          fg_map_low(:,:) = dat%fg_map(:,:,0,ind)
-          do j = 1, nbands
-             data_low(:,:,j)   = map2fit(:,:,j)
-             cov_low(:,:,j)    = cov(:,:,j)
-             rms_low(:,:,j)    = dat%rms_map(:,:,j)
-          end do
-          indx_low = indx
-          mask_low = mask
-       end if
-       
-       !------------------------------------------------------------------------
-       ! Metropolis algorithm:
-       ! Sampling portion. Determine the log-likelihood, and accept based off of
-       ! the improvement in the fit.
-       !------------------------------------------------------------------------
-
-       !---------------------------|
-       ! Sample for Q and U jointly|
-       !---------------------------|
-       if (map_n == -1) then
-          indx_sample_low = indx_low(:,dpar%pol_type(1))
-          ! Parallelization breaks down for prior evaluation
-          !$OMP PARALLEL PRIVATE(i,j,k,l,c,b,sol,sam,lnl_old,lnl_new,ratio,t)
-
-          !$OMP DO SCHEDULE(STATIC)
-          do i = 0, npix2-1
-             a         = 0.d0
-             sol       = indx_low(i,dpar%pol_type(1))
-             sam       = sol
-             if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) cycle
-
-
-             write(pxl_str, '(i0.5)') i
-             if (test) then
-                write(*,*) i
-                open(41,file=trim(dpar%outdir)//'metrop_test_'//pxl_str//'.dat')
-                open(42,file=trim(dpar%outdir)//'lnls_'//pxl_str//'.dat')
-             end if
-
-                        
-             ! First evaluate likelihood from previous sample
-             c = eval_sample_lnL_pixel(dpar,comp,fg_map_low(i,:),data_low(i,:,:),rms_low(i,:,:),sol,ind,map_n)
-             
-             ! Evaluate the prior as well
-             if (dpar%fg_prior_type(ind,1) == 'gaussian') then
-                lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
-             else if (dpar%fg_prior_type(ind,1) == 'uniform') then
-                lnl_old = -0.5d0*c
-             else if (dpar%fg_prior_type(ind,1) == 'jeffreys') then
-                lnl_old = -0.5d0*c + log(eval_jeffreys_prior(dpar, dat, comp, map_n, ind, sam, i))
-             else if (dpar%fg_prior_type(ind,1) == 'full_jeffreys') then
-                lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(dpar, dat, comp, map_n, ind, sam, i))
-             else 
-                write(*,*) "error in param%fg_prior_type"
-                write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys' 'full_jeffreys'"
-                stop
-             end if
-
-             do l = 1, dpar%nsample
-                t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))
-                
-                ! If sampled value is outside of uniform bounds, cycle
-                if (t .gt. dpar%fg_uni(ind,1,2) .or. t .lt. dpar%fg_uni(ind,1,1)) then
-                   cycle
-                end if
-                
-                ! Evaluate likelihood given this sample
-                b = eval_sample_lnL_pixel(dpar,comp,fg_map_low(i,:),data_low(i,:,:),rms_low(i,:,:),t,ind,map_n)
-                
-                ! Evaluate the prior as well
-                if (dpar%fg_prior_type(ind,1) == 'gaussian') then
-                   lnl_new = -0.5d0*b + log(eval_normal_prior(t,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
-                else if (dpar%fg_prior_type(ind,1) == 'uniform') then
-                   lnl_new = -0.5d0*b
-                else if (dpar%fg_prior_type(ind,1) == 'jeffreys') then
-                   lnl_new = -0.5d0*b + log(eval_jeffreys_prior(dpar, dat, comp, map_n, ind, t, i))
-                else if (dpar%fg_prior_type(ind,1) == 'full_jeffreys') then
-                   lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(dpar, dat, comp, map_n, ind, sam, i))
-                else 
-                   write(*,*) "error in param%fg_prior_type"
-                   write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
-                   stop
-                end if
-
-                ! Take the ratio of the likelihoods
-                diff = lnl_new - lnl_old
-                ratio = exp(diff)
-                
-                if (test) then
-                   write(42,fmt='(2(E17.8))') lnl_old, lnl_new
-                end if
-
-                if (trim(dpar%ml_mode) == 'optimize') then
-                   if (ratio > 1.d0) then
-                      sam      = t
-                      c        = b
-                      lnl_old = lnl_new
-                   end if
-                ! Accept if the ratio is greater than some random number
-                else if (trim(dpar%ml_mode) == 'sample') then
-                   call RANDOM_NUMBER(num)
-                   if (ratio > num) then
-                      sam      = t
-                      c        = b
-                      lnl_old = lnl_new
-                   end if
-                end if
-                paccept = naccept/l
-                if (test) then
-                   write(41,fmt='(6(E17.8))') t, naccept, l, paccept, ratio, num
-                end if
-                
-                sol = sam
-                indx_sample_low(i) = sol
-             end do
-          end do
-          if (test) then
-             close(41)
-             close(42)
-          end if
-          !$OMP END PARALLEL
           
-       !----------------------------|
-       ! Sample for a single poltype|
-       !----------------------------|
-       else
-
-          ! Parallelization breaks down for prior evaluation
-          !$OMP PARALLEL PRIVATE(i,j,k,l,c,b,sol,sam,lnl_old,lnl_new,ratio,t)
-
-          !$OMP DO SCHEDULE(STATIC)
-          do i = 0, npix2-1
-             naccept   = 0.d0
-             paccept   = 0.d0
-             a         = 0.d0
-             sol       = indx_low(i,map_n)
-             sam       = sol
-             if (mask_low(i,1) == 0.d0 .or. mask_low(i,1) == missval) then
-                cycle
-             end if
-
-             ! First evaluate likelihood from previous sample
-             c = eval_sample_lnL_pixel(dpar,comp,fg_map_low(i,:),data_low(i,:,:),rms_low(i,:,:),sol,ind,map_n)
-             
-             ! Evaluate the prior as well
-             if (dpar%fg_prior_type(ind,1) == 'gaussian') then
-                lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
-             else if (dpar%fg_prior_type(ind,1) == 'uniform') then
-                lnl_old = -0.5d0*c
-             else if (dpar%fg_prior_type(ind,1) == 'jeffreys') then
-                lnl_old = -0.5d0*c + log(eval_jeffreys_prior(dpar, dat, comp, map_n, ind, sam, i))
-             else if (dpar%fg_prior_type(ind,1) == 'full_jeffreys') then
-                lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(dpar, dat, comp, map_n, ind, sam, i))
-             else 
-                write(*,*) "error in param%fg_prior_type"
-                write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
-                stop
-             end if
-             
-             do l = 1, dpar%nsample
-                t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))
-                
-                ! If sampled value is outside of uniform bounds, cycle
-                if (t .gt. dpar%fg_uni(ind,1,2) .or. t .lt. dpar%fg_uni(ind,1,1)) then
-                   paccept = naccept/l
-                   cycle
-                end if
-                
-                ! Evaluate likelihood given this sample
-                b = eval_sample_lnL_pixel(dpar,comp,fg_map_low(i,:),data_low(i,:,:),rms_low(i,:,:),t,ind,map_n)
-                
-                ! Evaluate the prior as well
-                if (dpar%fg_prior_type(ind,1) == 'gaussian') then
-                   lnl_new = -0.5d0*b + log(eval_normal_prior(t,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
-                else if (dpar%fg_prior_type(ind,1) == 'uniform') then
-                   lnl_new = -0.5d0*b
-                else if (dpar%fg_prior_type(ind,1) == 'jeffreys') then
-                   lnl_new = -0.5d0*b + log(eval_jeffreys_prior(dpar, dat, comp, map_n, ind, t, i))
-                else if (dpar%fg_prior_type(ind,1) == 'full_jeffreys') then
-                   lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(dpar, dat, comp, map_n, ind, sam, i))
-                else 
-                   write(*,*) "error in param%fg_prior_type"
-                   write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
-                   stop
-                end if
-
-                ! Take the ratio of the likelihoods
-                diff = lnl_new - lnl_old
-                ratio = exp(diff)
-
-                if (trim(dpar%ml_mode) == 'optimize') then
-                   if (ratio > 1.d0) then
-                      sam      = t
-                      c        = b
-                      lnl_old = lnl_new
-                   end if
-                ! Accept if the ratio is greater than some random number
-                else if (trim(dpar%ml_mode) == 'sample') then
-                   call RANDOM_NUMBER(num)
-                   if (ratio > num) then
-                      sam      = t
-                      c        = b
-                      lnl_old = lnl_new
-                   end if
-                end if
-                
-                paccept = naccept/l
-                sol = sam
-                indx_sample_low(i) = sol
-             end do
-          end do
-          !$OMP END DO
-          !$OMP END PARALLEL
-       end if
-       if (nside1 /= nside2) then
-          if (ordering == 1) then
-             call udgrade_ring(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
-          else
-             call udgrade_nest(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
-          end if
-       else
-          indx_sample = indx_sample_low
-       end if
-      
-    !------------------|
-    ! Full sky sampler |
-    !------------------|
-    else
-       
-       time1 = mpi_wtime()
-       
-       !----------------------------|
-       ! Sample for Q and U jointly |
-       !----------------------------|
-       if (map_n == -1) then
-          naccept     = 0.d0
-          paccept     = 0.d0
-          chisq_map   = 0.d0
-          indx_sample = indx(:,dpar%pol_type(1))
-          sol         = indx(0,dpar%pol_type(1))
-          sam         = sol
+          ! Evaluate the lnL (already includes the -0.5 out front)
+          lnl = evaluate_lnL(data,ddata%rms_map,model,map_n,-1,ddata%masks(:,1))
           
-          ! First evaluate likelihood from previous sample
-          c = eval_sample_lnL_fullsky(dpar,comp,dat%fg_map(:,:,0,ind),map2fit,mask,dat%rms_map,sol,ind,map_n)
-
-          ! Evaluate the prior as well
-          if (dpar%fg_prior_type(ind,1) == 'gaussian') then
-             lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
-          else if (dpar%fg_prior_type(ind,1) == 'uniform') then
-             lnl_old = -0.5d0*c
-          else if (dpar%fg_prior_type(ind,1) == 'jeffreys') then
-             lnl_old = -0.5d0*c + log(eval_jeffreys_prior(dpar, dat, comp, map_n, ind, sam))
-          else if (dpar%fg_prior_type(ind,1) == 'full_jeffreys') then
-             lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(dpar, dat, comp, map_n, ind, sam, i))
-          else 
-             write(*,*) "error in param%fg_prior_type"
-             write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
-             stop
-          end if
-
-          do l = 1, dpar%nsample
-             t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))
-             
-             ! If sampled value is outside of uniform bounds, cycle
-             if (t .gt. dpar%fg_uni(ind,1,2) .or. t .lt. dpar%fg_uni(ind,1,1)) then
-                paccept = naccept/l
-                cycle
-             end if
-             ! Evaluate likelihood given this sample
-             b = eval_sample_lnL_fullsky(dpar,comp,dat%fg_map(:,:,0,ind),map2fit,mask,dat%rms_map,t,ind,map_n)
-
-             ! Evaluate the prior as well
-             if (dpar%fg_prior_type(ind,1) == 'gaussian') then
-                lnl_new = -0.5d0*b + log(eval_normal_prior(t,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
-             else if (dpar%fg_prior_type(ind,1) == 'uniform') then
-                lnl_new = -0.5d0*b
-             else if (dpar%fg_prior_type(ind,1) == 'jeffreys') then
-                lnl_new = -0.5d0*b + log(eval_jeffreys_prior(dpar, dat, comp, map_n, ind, t))
-             else if (dpar%fg_prior_type(ind,1) == 'full_jeffreys') then
-                lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(dpar, dat, comp, map_n, ind, sam, i))
-             else 
-                write(*,*) "error in param%fg_prior_type"
-                write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
-                stop
-             end if
-
-             ! Take the ratio of the likelihoods
-             diff = lnl_new - lnl_old
-             ratio = exp(diff)
-             
-             if (trim(dpar%ml_mode) == 'optimize') then
-                if (ratio > 1.d0) then
-                   sam      = t
-                   c        = b
-                   lnl_old = lnl_new
-                end if
-                ! Accept if the ratio is greater than some random number
-             else if (trim(dpar%ml_mode) == 'sample') then
-                call RANDOM_NUMBER(num)
-                if (ratio > num) then
-                   sam      = t
-                   c        = b
-                   lnl_old = lnl_new
-                end if
-             end if
-             
-             paccept = naccept/l
-
-          end do
-          sol = sam
-          indx_sample(:) = sol
-          
-       !---------------------------------------|
-       ! Sample for a single poltype - fullsky |
-       !---------------------------------------|
-       else
-
-          sol         = indx(0,map_n)
-          sam         = sol
-          naccept     = 0.d0
-          paccept     = 0.d0
-
-          ! First evaluate likelihood from previous sample
-          c = eval_sample_lnL_fullsky(dpar,comp,dat%fg_map(:,:,0,ind),map2fit,mask,dat%rms_map,sol,ind,map_n)
-          
-          ! Evaluate the prior as well
-          if (dpar%fg_prior_type(ind,1) == 'gaussian') then
-             lnl_old = -0.5d0*c + log(eval_normal_prior(sam,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
-          else if (dpar%fg_prior_type(ind,1) == 'uniform') then
-             lnl_old = -0.5d0*c
-          else if (dpar%fg_prior_type(ind,1) == 'jeffreys') then
-             lnl_old = -0.5d0*c + log(eval_jeffreys_prior(dpar, dat, comp, map_n, ind, sam))
-          else if (dpar%fg_prior_type(ind,1) == 'full_jeffreys') then
-             lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(dpar, dat, comp, map_n, ind, sam, i))
-          else 
-             write(*,*) "error in param%fg_prior_type"
-             write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
-             stop
+          ! Accept/reject
+          if (trim(c%prior_type(nind)) == 'gaussian') then
+             lnl_new = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+          else if (trim(c%prior_type(nind)) == 'uniform') then
+             lnl_new = lnl
           end if
           
-          do l = 1, dpar%nsample
-             t      = sam + rand_normal(0.d0, dpar%fg_gauss(ind,1,2))
-             
-             ! If sampled value is outside of uniform bounds, cycle
-             if (t .gt. dpar%fg_uni(ind,1,2) .or. t .lt. dpar%fg_uni(ind,1,1)) then
-                paccept = naccept/l
-                cycle
+          diff  = lnl_new - lnl_old
+          ratio = exp(diff)
+          
+          if (trim(ml_mode) == 'optimize') then
+             if (ratio > 1.d0) then
+                sample(nind) = theta(nind)
+                lnl_old      = lnl_new
              end if
-
-             ! Evaluate likelihood given this sample
-             b = eval_sample_lnL_fullsky(dpar,comp,dat%fg_map(:,:,0,ind),map2fit,mask,dat%rms_map,t,ind,map_n)
-             
-             ! Evaluate the prior as well
-             if (dpar%fg_prior_type(ind,1) == 'gaussian') then
-                lnl_new = -0.5d0*b + log(eval_normal_prior(t,dpar%fg_gauss(ind,1,1), dpar%fg_gauss(ind,1,2)))
-             else if (dpar%fg_prior_type(ind,1) == 'uniform') then
-                lnl_new = -0.5d0*b
-             else if (dpar%fg_prior_type(ind,1) == 'jeffreys') then
-                lnl_new = -0.5d0*b + log(eval_jeffreys_prior(dpar, dat, comp, map_n, ind, t))
-             else if (dpar%fg_prior_type(ind,1) == 'full_jeffreys') then
-                lnl_old = -0.5d0*c + log(eval_full_jeffreys_prior(dpar, dat, comp, map_n, ind, sam, i))
-             else 
-                write(*,*) "error in param%fg_prior_type"
-                write(*,*) "      only allowed: 'gaussian', 'uniform', 'jeffreys'"
-                stop
-             end if
-             
-             diff = lnl_new - lnl_old
-             ratio = exp(diff)
+          else if (trim(ml_mode) == 'sample') then
              call RANDOM_NUMBER(num)
-             if (trim(dpar%ml_mode) == 'optimize') then
-                if (ratio > 1.d0) then
-                   sam      = t
-                   c        = b
-                   lnl_old = lnl_new
-                   naccept  = naccept + 1.0
-                end if
-             else if (trim(dpar%ml_mode) == 'sample') then
-                call RANDOM_NUMBER(num)
-                if (ratio > num) then
-                   sam      = t
-                   c        = b
-                   lnl_old = lnl_new
-                   naccept  = naccept + 1.0
-                end if
+             if (ratio > num) then
+                sample(nind) = theta(nind)
+                lnl_old      = lnl_new
              end if
-             
-             paccept = naccept/l
-          end do
-          sol = sam
-          indx_sample(:) = sol
-       end if
-    end if
-    
-    if (map_n == -1) then
-       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-          if (trim(dpar%fg_label(ind)) == 'synch') then 
-             comp%beta_s(:,k) = indx_sample(:)
-          else if (trim(dpar%fg_label(ind)) == 'dust') then 
-             comp%beta_d(:,k) = indx_sample(:)
           end if
        end do
-    else
-       if (trim(dpar%fg_label(ind)) == 'synch') then 
-          comp%beta_s(:,map_n) = indx_sample(:)
-       else if (trim(dpar%fg_label(ind)) == 'dust') then 
-          comp%beta_d(:,map_n) = indx_sample(:)
+       stop
+       ! Ensure proper handling of poltypes
+       if (mh_mode == 1) then
+          c%indices(:,map_n,nind) = sample(nind)
+       else
+          c%indices(:,2:3,nind)   = sample(nind)
        end if
-    end if
-    
-    time2 = mpi_wtime()
-    
-    write(*,*) ''
-    if (rank == master) then
-       time2 = mpi_wtime()
-       write(*,fmt='(a,f10.3,a)') 'Spectral index sampler completed in ', time2-time1, 's.'
-    end if
-    
-    write(*,*) ''
-    
-  end subroutine sample_index
 
-  ! function Inv_sample(dpar, dat, comp, ind, map_n, x_in, lnL, prior) result(val)
-  !   !------------------------------------------------------------------------
-  !   ! Framework for inversion sampling a parameters
-  !   !------------------------------------------------------------------------
-  !   implicit none
-    
-  !   class(dang_params)                         :: dpar
-  !   type(dang_comps),            intent(inout) :: comp
-  !   type(dang_data)                            :: dat
-  !   integer(i4b),                intent(in)    :: map_n, ind
-  !   real(dp),     dimension(:),  intent(in)    :: px
-  !   integer(i4b)                               :: nside1, nside2, npix2, f
-  !   real(dp),     dimension(2),  optional      :: prior
-  !   interface
-  !      function lnL(x)
-  !        use healpix_types
-  !        implicit none
-  !        real(dp), intent(in) :: x
-  !        real(dp)             :: lnL
-  !      end function lnL
-  !   end interface
-
-  function eval_sample_lnL_fullsky(dpar,comp,fg_map,map2fit,mask,rms,sample,ind,map_n) result(lnL)
-    implicit none
-
-    type(dang_params)                      :: dpar
-    type(dang_comps)                       :: comp
-    real(dp), dimension(:,:,:), intent(in) :: map2fit, rms
-    real(dp), dimension(:,:),   intent(in) :: fg_map, mask
-    real(dp),                   intent(in) :: sample
-    integer(i4b),               intent(in) :: map_n, ind
-    real(dp)                               :: naccept, paccept
-    real(dp)                               :: lnL, local_lnL
-    integer(i4b)                           :: i, j, k
-
-    naccept     = 0.d0
-    paccept     = 0.d0
-              
-    !$OMP PARALLEL PRIVATE(i,j,k,local_lnL), SHARED(lnL)
-    lnL           = 0.d0
-    local_lnL     = 0.d0
-    if (map_n == -1) then
-       !$OMP DO SCHEDULE(static)
+    else if (c%index_mode(nind) == 2) then
+       ! Pixel-by-pixel
        do i = 0, npix-1
-          if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-          do j = 1, nbands
-             do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                local_lnL = local_lnL + (((fg_map(i,k) * compute_spectrum(dpar,comp,bp(j),ind,index=sample))&
-                     - map2fit(i,k,j))**2.d0)/rms(i,k,j)**2.d0
+          if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == 0.d0) cycle
+
+          ! Initialize the MH chain
+          lnl      = 0.d0
+          ! Ensure proper handling of poltypes
+          if (mh_mode == 1) then
+             do l = 1, c%nindices
+                sample(l)   = c%indices(i,map_n,l)
              end do
+          else
+             do l = 1, c%nindices
+                sample(l)   = c%indices(i,2,l)
+             end do
+          end if
+
+          ! Define the model to toss into the likelihood evaluation
+          ! Ensure proper handling of poltypes
+          if (mh_mode == 1) then
+             do j = 1, nbands
+                model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,sample)
+             end do
+          else
+             do k = 1, nmaps
+                do j = 1, nbands
+                   model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,sample)
+                end do
+             end do
+          end if
+          
+          ! Evaluate the lnL (already includes the -0.5 out front)
+          lnl = evaluate_lnL(data,ddata%rms_map,model,map_n,i,ddata%masks(:,1))
+          
+          if (trim(c%prior_type(nind)) == 'gaussian') then
+             lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+          else if (trim(c%prior_type(nind)) == 'uniform') then
+             lnl_old = lnl
+          end if
+          
+          ! Now we do the real sampling
+          do l = 1, nsample
+
+             ! Update theta with the new sample
+             theta(nind) = sample(nind) + rand_normal(0.d0,c%gauss_prior(nind,2))
+
+             ! Evaluate model for likelihood evaluation
+             ! Ensure proper handling of poltypes
+             if (mh_mode == 1) then
+                do j = 1, nbands
+                   model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,theta)
+                end do
+             else
+                do k = 1, nmaps
+                   do j = 1, nbands
+                      model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,theta)
+                   end do
+                end do
+             end if
+             
+             ! Evaluate
+             lnl = evaluate_lnL(data,ddata%rms_map,model,map_n,i,ddata%masks(:,1))
+             
+             ! Accept/reject
+             if (trim(c%prior_type(nind)) == 'gaussian') then
+                lnl_new = lnl + & 
+                     & log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+             else if (trim(c%prior_type(nind)) == 'uniform') then
+                lnl_new = lnl
+             end if
+             
+             diff  = lnl_new - lnl_old
+             ratio = exp(diff)
+             
+             if (trim(ml_mode) == 'optimize') then
+                if (ratio > 1.d0) then
+                   sample(nind) = theta(nind)
+                   lnl_old      = lnl_new
+                end if
+             else if (trim(ml_mode) == 'sample') then
+                call RANDOM_NUMBER(num)
+                if (ratio > num) then
+                   sample(nind) = theta(nind)
+                   lnl_old      = lnl_new
+                end if
+             end if
           end do
+          ! Ensure proper handling of poltypes
+          if (mh_mode == 1) then
+             c%indices(i,map_n,nind) = sample(nind)
+          else
+             c%indices(i,2:3,nind) = sample(nind)
+          end if
        end do
-       !$OMP END DO
-    else
-       k = map_n
-       !$OMP DO SCHEDULE(static)
-       do i = 0, npix-1
-          if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
-          do j = 1, nbands
-             local_lnL = local_lnL + (((fg_map(i,k) * compute_spectrum(dpar,comp,bp(j),ind,index=sample))&
-                  - map2fit(i,k,j))**2.d0)/rms(i,k,j)**2.d0
-          end do
-       end do
-       !$OMP END DO
     end if
-    !$OMP CRITICAL
-    lnL = lnL + local_lnL
-    !$OMP END CRITICAL
-    !$OMP END PARALLEL
-  end function eval_sample_lnL_fullsky
 
-  function eval_sample_lnL_pixel(dpar,comp,fg_map,map2fit,rms,sample,ind,map_n) result(lnL)
-    implicit none
+    deallocate(data,model)
 
-    type(dang_params)                      :: dpar
-    type(dang_comps)                       :: comp
-    real(dp), dimension(:,:),   intent(in) :: map2fit, rms
-    real(dp), dimension(:),     intent(in) :: fg_map
-    real(dp),                   intent(in) :: sample
-    integer(i4b),               intent(in) :: map_n, ind
-    real(dp)                               :: naccept, paccept
-    real(dp)                               :: lnL, local_lnL
-    integer(i4b)                           :: i, j, k
-
-    naccept     = 0.d0
-    paccept     = 0.d0
-              
-    lnL           = 0.d0
-    local_lnL     = 0.d0
-    if (map_n == -1) then
-       do j = 1, nbands
-          do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-             local_lnL = local_lnL + (((fg_map(k) * compute_spectrum(dpar,comp,bp(j),ind,index=sample))&
-                  - map2fit(k,j))**2.d0)/rms(k,j)**2.d0
-          end do
-       end do
-    else
-       k = map_n
-       do j = 1, nbands
-          local_lnL = local_lnL + (((fg_map(k) * compute_spectrum(dpar,comp,bp(j),ind,index=sample))&
-               - map2fit(k,j))**2.d0)/rms(k,j)**2.d0
-       end do
-    end if
-    lnL = lnL + local_lnL
-  end function eval_sample_lnL_pixel
+  end subroutine sample_index_mh
 
   ! Note that the other evaluation routines do NOT include the -0.5, working to make them obsolete
-  function evaluate_lnL(data,rms,model,map_n,pixel) result(lnL)
+  function evaluate_lnL(data,rms,model,map_n,pixel,mask) result(lnL)
     !==========================================================================
     ! Inputs:
     !         data:  array(real(dp)) - data with which we compare the model
@@ -711,14 +318,15 @@ contains
     ! Output:
     !         lnL: real(dp)
     !
-    ! if pixel < 0, sample full sky, otherwise sample that pixel
-    ! if map_n > 0, sample that poltype
-    ! if map_n = -1, sample Q+U jointly
-    ! if map_n = -2, sample T+Q+U jointly
+    ! if pixel < 0,  evaluate full sky, otherwise sample that pixel
+    ! if map_n > 0,  evaluate that poltype
+    ! if map_n = -1, evaluate Q+U jointly
+    ! if map_n = -2, evaluate T+Q+U jointly
     !==========================================================================
     implicit none
 
     real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data, rms, model
+    real(dp), dimension(0:npix-1),              intent(in) :: mask
     integer(i4b),               intent(in) :: map_n, pixel
     integer(i4b)                           :: i,j,k
     real(dp)                               :: lnL
@@ -734,6 +342,7 @@ contains
           end do
        else
           do i = 0, npix-1
+             if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
              do j = 1, nbands
                 lnL = lnL - 0.5d0*((data(i,map_n,j)-model(i,map_n,j))/rms(i,map_n,j))**2
              end do
@@ -749,6 +358,7 @@ contains
           end do
        else
           do i = 0, npix-1
+             if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
              do j = 1, nbands
                 do k = 2, 3
                    lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
@@ -766,6 +376,7 @@ contains
           end do
        else
           do i = 0, npix-1
+             if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
              do j = 1, nbands
                 do k = 1, 3
                    lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
@@ -903,11 +514,12 @@ contains
     
   end subroutine template_fit
 
-  subroutine sample_index_metropolis(data,rms,model,theta_0,p_theta,step,map_n,pixel,lnL,sample)
+  subroutine sample_index_metropolis(data,rms,model,mask,theta_0,p_theta,step,map_n,pixel,lnL,sample)
     implicit none
 
     real(dp), dimension(0:npix-1,nmaps,nbands), intent(in)    :: data, rms
     real(dp), dimension(2),                     intent(in)    :: p_theta
+    real(dp), dimension(0:npix-1),              intent(in)    :: mask
     real(dp),                                   intent(inout) :: theta_0
     real(dp),                                   intent(inout) :: lnL
     real(dp),                                   intent(in)    :: step
@@ -940,7 +552,7 @@ contains
              model_map(pixel,k,j) = model(pixel,k,j,t)
           end do
           ! Assess fit and consider the prior
-          lnl_new = lnl_new + evaluate_lnL(data,rms,model_map,k,pixel) + &
+          lnl_new = lnl_new + evaluate_lnL(data,rms,model_map,k,pixel,mask) + &
                & log(eval_normal_prior(t,p_theta(1), p_theta(2)))
        end do
     else
@@ -951,7 +563,7 @@ contains
           model_map(pixel,map_n,j) = model(pixel,map_n,j,t)
        end do
        ! Assess fit and consider the prior
-       lnl_new = evaluate_lnL(data,rms,model_map,map_n,pixel) + &
+       lnl_new = evaluate_lnL(data,rms,model_map,map_n,pixel,mask) + &
             & log(eval_normal_prior(t,p_theta(1), p_theta(2)))
     end if
     ! Compare to previous fit
@@ -1039,12 +651,12 @@ contains
              model(i,map_n,j) = model_HI_Td(i,map_n,j,Td)
           end do
           
-          lnl = evaluate_lnL(maps_low,ddata%rms_map,model,1,i) + &
+          lnl = evaluate_lnL(maps_low,ddata%rms_map,model,1,i,ddata%masks(:,1)) + &
                & log(eval_normal_prior(Td,dpar%HI_Td_mean, dpar%HI_Td_std))
 
           s = dpar%HI_Td_step
           do l = 1, dpar%nsample
-             call sample_index_metropolis(maps_low,ddata%rms_map,model_HI_Td,Td,p_Td,s,map_n,i,lnl,.true.)
+             call sample_index_metropolis(maps_low,ddata%rms_map,model_HI_Td,ddata%masks(:,1),Td,p_Td,s,map_n,i,lnl,.true.)
           end do
           sample_T_low(i) = Td
        end if
