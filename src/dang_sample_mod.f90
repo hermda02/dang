@@ -34,6 +34,7 @@ contains
              ! poltype combinations
              ! if (c%joint_index(l)) then
              ! 
+             write(*,*) 'Sampling spectral index for ', trim(c%label)
              call sample_index_mh(ddata,c,j,-1)
           end if
        end do
@@ -175,7 +176,7 @@ contains
           
           ! Accept/reject
           if (trim(c%prior_type(nind)) == 'gaussian') then
-             lnl_new = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+             lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
           else if (trim(c%prior_type(nind)) == 'uniform') then
              lnl_new = lnl
           end if
@@ -274,7 +275,7 @@ contains
              ! Accept/reject
              if (trim(c%prior_type(nind)) == 'gaussian') then
                 lnl_new = lnl + & 
-                     & log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+                     & log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
              else if (trim(c%prior_type(nind)) == 'uniform') then
                 lnl_new = lnl
              end if

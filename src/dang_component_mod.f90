@@ -27,9 +27,6 @@ module dang_component_mod
      real(dp),          allocatable, dimension(:,:)   :: template_amplitudes ! Template amplitudes
      integer(i4b),      allocatable, dimension(:)     :: index_mode          ! Fullsky/per-pixel
 
-     real(dp),          allocatable, dimension(:,:)   :: spec_par
-     real(dp),          allocatable, dimension(:)     :: temp_amps
-
      real(dp),          allocatable, dimension(:,:)   :: beta_s, beta_d, T_d, HI
      real(dp),          allocatable, dimension(:)     :: HI_amps
 
@@ -219,7 +216,7 @@ contains
     allocate(component_list(dpar%ncomp))
 
     do i = 1, dpar%ncomp
-       write(*,*) 'Initialize component ', i
+       ! write(*,*) 'Initialize component ', i
        component_list(i)%p => dang_comps(dpar,i)
     end do
 

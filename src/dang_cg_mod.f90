@@ -94,7 +94,7 @@ contains
 
     count = 0
     do i = 1, dpar%ncggroup
-       write(*,*) 'Initialize CG group ', i
+       ! write(*,*) 'Initialize CG group ', i
        cg_groups(i)%p => dang_cg(dpar,i)
     end do
   end subroutine initialize_cg_groups
