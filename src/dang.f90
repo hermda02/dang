@@ -172,9 +172,6 @@ contains
    !--------------------------------------------------------------|
    
    do iter = 1, dpar%ngibbs
-
-      write(*,*) 'iter = ', iter
-      
       !--------------------- BP SWAP CHUNK -----------------------|
       ! -- Swap in a different BeyondPlanck map each iteration -- |
       !-----------------------------------------------------------|

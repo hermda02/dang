@@ -119,7 +119,7 @@ contains
           end do
           close(55)
        end if
-       stop
+       ! stop
        call cg_groups(i)%p%unpack_amplitudes(dpar,ddata,map_n)
        deallocate(b)
     end do
@@ -203,10 +203,10 @@ contains
        t4        = mpi_wtime()
        i         = i + 1
 
-       write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-       if (delta_new .lt. self%converge) then
-          write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
-       end if
+       ! write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+       ! if (delta_new .lt. self%converge) then
+       !    write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+       ! end if
 
     end do
 
@@ -292,8 +292,8 @@ contains
     offset = 0
     do k = 1, self%ncg_components
        if (self%cg_component(k)%p%type /= 'template') then
-          !!$OMP PARALLEL PRIVATE(i,j)
-          !!$OMP DO SCHEDULE(static)
+          !$OMP PARALLEL PRIVATE(i,j)
+          !$OMP DO SCHEDULE(static)
           do i = 1, l
              do j = 1, n
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) then
@@ -310,8 +310,8 @@ contains
                 end if
              end do
           end do
-          !!$OMP END DO
-          !!$OMP END PARALLEL
+          !$OMP END DO
+          !$OMP END PARALLEL
           offset = offset + 2*l
        else
           z = 1
@@ -396,55 +396,55 @@ contains
        ! Solving temp1 = (T_nu)x
        do k = 1, self%ncg_components
           if (self%cg_component(k)%p%type /= 'template') then
-             !!$OMP PARALLEL PRIVATE(i)
-             !!$OMP DO SCHEDULE(static)
+             !$OMP PARALLEL PRIVATE(i)
+             !$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 temp1(i)      = x(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
                 ! This is just for the joint stuff - add modularity later
                 temp1(npix+i) = x(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n+1)
              end do
-             !!$OMP END DO
-             !!$OMP END PARALLEL
+             !$OMP END DO
+             !$OMP END PARALLEL
           else
              if (self%cg_component(k)%p%corr(j)) then
-                !!$OMP PARALLEL PRIVATE(i)
-                !!$OMP DO SCHEDULE(static)
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    temp1(i)      = temp1(i) + x(offset+l)*self%cg_component(k)%p%template(i-1,map_n)
                    temp1(npix+i) = temp1(npix+i) + x(offset+l)*&
                         & self%cg_component(k)%p%template(i-1,map_n+1)
                 end do
-                !!$OMP END DO
-                !!$OMP END PARALLEL
+                !$OMP END DO
+                !$OMP END PARALLEL
              end if
           end if
        end do
 
        ! Solving temp2 = (N^-1)temp1
-       !!$OMP PARALLEL PRIVATE(i)
-       !!$OMP DO SCHEDULE(static)
+       !$OMP PARALLEL PRIVATE(i)
+       !$OMP DO SCHEDULE(static)
        do i = 1, npix
           if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
           temp2(i)      = temp1(i)/(ddata%rms_map(i-1,map_n,j)**2.d0)
           temp2(npix+i) = temp1(npix+i)/(ddata%rms_map(i-1,map_n+1,j)**2.d0)
        end do
-       !!$OMP END DO
-       !!$OMP END PARALLEL
+       !$OMP END DO
+       !$OMP END PARALLEL
 
        ! Solving (T_nu^t)temp2
        do k = 1, self%ncg_components
           if (self%cg_component(k)%p%type /= 'template') then
-             !!$OMP PARALLEL PRIVATE(i)
-             !!$OMP DO SCHEDULE(static)
+             !$OMP PARALLEL PRIVATE(i)
+             !$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 temp3(i)      = temp2(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
                 temp3(npix+i) = temp2(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
              end do
-             !!$OMP END DO
-             !!$OMP END PARALLEL
+             !$OMP END DO
+             !$OMP END PARALLEL
           else
              if (self%cg_component(k)%p%corr(j)) then
                 !!$OMP PARALLEL PRIVATE(i)
@@ -520,33 +520,33 @@ contains
        temp1 = 0.d0
        temp2 = 0.d0
 
-       !!$OMP PARALLEL PRIVATE(i)
-       !!$OMP DO SCHEDULE(static)
+       !$OMP PARALLEL PRIVATE(i)
+       !$OMP DO SCHEDULE(static)
        do i = 1, npix
           if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
           temp1(i)      = eta(i)/(ddata%rms_map(i-1,map_n,j))
           ! This is just for the joint stuff - add modularity later
           temp1(npix+i) = eta(npix+i)/(ddata%rms_map(i-1,map_n+1,j))
        end do
-       !!$OMP END DO
-       !!$OMP END PARALLEL
+       !$OMP END DO
+       !$OMP END PARALLEL
 
        do k = 1, self%ncg_components
           if (self%cg_component(k)%p%type /= 'template') then
-             !!$OMP PARALLEL PRIVATE(i)
-             !!$OMP DO SCHEDULE(static)
+             !$OMP PARALLEL PRIVATE(i)
+             !$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 temp2(i) = temp1(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
                 ! This is just for the joint stuff - add modularity later
                 temp2(npix+i) = temp1(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n+1)
              end do
-             !!$OMP END DO
-             !!$OMP END PARALLEL
+             !$OMP END DO
+             !$OMP END PARALLEL
           else
              if (self%cg_component(k)%p%corr(j)) then
-                !!$OMP PARALLEL PRIVATE(i)
-                !!$OMP DO SCHEDULE(static)
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    temp2(offset+l) = temp2(offset+l) + temp1(i)*self%cg_component(k)%p%template(i-1,map_n)
@@ -554,8 +554,8 @@ contains
                    temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*&
                         & self%cg_component(k)%p%template(i-1,map_n+1)
                 end do
-                !!$OMP END DO
-                !!$OMP END PARALLEL
+                !$OMP END DO
+                !$OMP END PARALLEL
                 l = l + 1
              end if
           end if

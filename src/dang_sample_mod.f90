@@ -206,6 +206,9 @@ contains
 
     else if (c%index_mode(nind) == 2) then
        ! Pixel-by-pixel
+
+       !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio)
+       !$OMP DO SCHEDULE(static)
        do i = 0, npix-1
           if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == 0.d0) cycle
 
@@ -299,6 +302,8 @@ contains
              c%indices(i,2:3,nind) = sample(nind)
           end if
        end do
+       !$OMP END DO
+       !$OMP END PARALLEL
     end if
 
     deallocate(data,model)
