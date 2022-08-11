@@ -405,7 +405,7 @@ contains
     real(dp), dimension(1:,1:), intent(in)            :: A
     real(dp), dimension(1:),    intent(out)           :: eigenvals
 
-    integer(i4b)     :: n, liwork, lwork, lda, info
+    integer(i8b)     :: n, lda, lwork, liwork, info
     character(len=1) :: job, uplo
     real(dp),     allocatable, dimension(:,:) :: A_copy
     real(dp),     allocatable, dimension(:)   :: W, work
@@ -449,13 +449,16 @@ contains
   subroutine eigen_decomp(matrix, eigenvals, eigenvectors, status)
     implicit none
     real(dp)              :: matrix(:,:), eigenvals(:), eigenvectors(:,:)
-    real(dp), allocatable :: work(:), iwork(:)
-    integer(i4b)          :: n, status
+    real(dp), allocatable :: work(:)
+    integer(i4b), allocatable :: iwork(:)
+    integer(i8b)          :: n, wsize, liwork, status
     n = size(matrix,1)
     allocate(work(2*n**2+6*n+1), iwork(5*n+3))
     eigenvectors = matrix
-    call dsyevd('v', 'l', n, eigenvectors, n, eigenvals, work, size(work), &
-      & iwork, size(iwork), status)
+    wsize  = size(work)
+    liwork = size(iwork) 
+    call dsyevd('v', 'l', n, eigenvectors, n, eigenvals, work, wsize, &
+      & iwork, liwork, status)
     deallocate(work, iwork)
   end subroutine eigen_decomp
 

@@ -20,7 +20,8 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:,:)   :: rms_map    ! noise maps
     real(dp), allocatable, dimension(:,:,:)   :: res_map    ! Residual maps
     real(dp), allocatable, dimension(:,:)     :: chi_map    ! Chisq map (for outputs)
-    real(dp), allocatable, dimension(:,:,:,:) :: fg_map     ! Component maps
+    real(dp), allocatable, dimension(:,:,:,:) :: fg_map     ! Component maps (npix, nmaps, nbands, nfgs)
+    real(dp), allocatable, dimension(:,:,:)   :: sky_model  ! Total sky model
 
     real(dp), allocatable, dimension(:)       :: gain       ! Where band gains are stored
     real(dp), allocatable, dimension(:)       :: offset     ! Where band offsets are stored
@@ -64,6 +65,9 @@ contains
     allocate(self%rms_map(0:npix-1,nmaps,nbands))
     allocate(self%res_map(0:npix-1,nmaps,nbands))
     allocate(self%chi_map(0:npix-1,nmaps))
+
+    allocate(self%sky_model(0:npix-1,nmaps,nbands))
+    self%sky_model(:,:,:) = 0.d0
 
     allocate(self%temps(0:npix-1,nmaps,dpar%ntemp))
     allocate(self%temp_amps(nbands,nmaps,dpar%ntemp))
@@ -137,6 +141,40 @@ contains
        end do
     end if
   end subroutine read_data_maps
+
+  subroutine update_sky_model(ddata)
+    implicit none
+    type(dang_data),   intent(inout) :: ddata
+    type(dang_comps),  pointer       :: c
+    integer(i4b)                     :: i, j, k, l
+
+    ddata%sky_model(:,:,:) = 0.d0
+    do l = 1, ncomp
+       c => component_list(l)%p
+       if (c%type /= 'template') then
+          do i = 0, npix-1
+             do k = 1, nmaps
+                do j = 1, nbands
+                   ddata%sky_model(i,k,j) = ddata%sky_model(i,k,j) + &
+                        & c%amplitude(i,k)*c%eval_sed(j,i,k)
+                end do
+             end do
+          end do
+       else
+          do i = 0, npix-1
+             do k = 1, nmaps
+                do j = 1, nbands
+                   ddata%sky_model(i,k,j) = ddata%sky_model(i,k,j) + &
+                        & c%template(i,k)*c%template_amplitudes(j,k)
+                end do
+             end do
+          end do
+       end if
+    end do
+
+    ddata%res_map = ddata%sig_map - ddata%sky_model
+
+  end subroutine update_sky_model
 
   subroutine mask_hi(self, dpar, dcomps)
     implicit none
@@ -440,44 +478,55 @@ contains
     
   end subroutine convert_bp_maps
 
-  subroutine compute_chisq(self,dpar,comp,map_n)
+  subroutine compute_chisq(self,dpar)!,comp,map_n)
     use healpix_types
     implicit none
     type(dang_data),                              intent(inout) :: self
     type(dang_params)                                           :: dpar
-    type(dang_comps)                                            :: comp
-    integer(i4b),                                 intent(in)    :: map_n
+    ! type(dang_comps)                                            :: comp
+    ! integer(i4b),                                 intent(in)    :: map_n
     real(dp)                                                    :: s, signal
-    integer(i4b)                                                :: i, j, w
-    
-    if (trim(dpar%mode) == 'comp_sep') then
-       self%chisq = 0.d0
-       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-          do i = 0, npix-1
-             if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
-             do j = 1, nbands
-                s = 0.d0
-                do w = 1, nfgs
-                   signal = self%fg_map(i,k,j,w)
-                   s = s + signal
-                end do
-                self%chisq = self%chisq + (((self%sig_map(i,k,j) - s)**2))/(self%rms_map(i,k,j)**2)
-             end do
+    integer(i4b)                                                :: i, j, k
+
+    self%chisq = 0.d0
+    do i = 0, npix-1
+       if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
+       do k = 2,3!dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+          do j = 1, nbands
+             self%chisq = self%chisq + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
+                  & (self%rms_map(i,k,j)**2.d0)
           end do
        end do
-       self%chisq = self%chisq/(size(dpar%pol_type)*(nump*nbands)-npixpar-nglobalpar)
-    else if (trim(dpar%mode) == 'hi_fit') then
-       self%chisq = 0.d0
-       do i = 0, npix-1
-          if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
-          do j = 1, nbands    
-             s = 0.0
-             s = self%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))+self%offset(j)
-             self%chisq = self%chisq + (self%sig_map(i,map_n,j)-s)**2.d0/(self%rms_map(i,map_n,j)**2.d0)
-          end do
-       end do
-       self%chisq = self%chisq!/((nump*nbands)-npixpar-nglobalpar)
-    end if
+    end do
+    self%chisq = self%chisq/(size(dpar%pol_type)*(nump*nbands)-npixpar-nglobalpar)
+    ! if (trim(dpar%mode) == 'comp_sep') then
+    !    self%chisq = 0.d0
+    !    do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+    !       do i = 0, npix-1
+    !          if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
+    !          do j = 1, nbands
+    !             s = 0.d0
+    !             do w = 1, nfgs
+    !                signal = self%fg_map(i,k,j,w)
+    !                s = s + signal
+    !             end do
+    !             self%chisq = self%chisq + (((self%sig_map(i,k,j) - s)**2))/(self%rms_map(i,k,j)**2)
+    !          end do
+    !       end do
+    !    end do
+    !    self%chisq = self%chisq/(size(dpar%pol_type)*(nump*nbands)-npixpar-nglobalpar)
+    ! else if (trim(dpar%mode) == 'hi_fit') then
+    !    self%chisq = 0.d0
+    !    do i = 0, npix-1
+    !       if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
+    !       do j = 1, nbands    
+    !          s = 0.0
+    !          s = self%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))+self%offset(j)
+    !          self%chisq = self%chisq + (self%sig_map(i,map_n,j)-s)**2.d0/(self%rms_map(i,map_n,j)**2.d0)
+    !       end do
+    !    end do
+    !    self%chisq = self%chisq!/((nump*nbands)-npixpar-nglobalpar)
+    ! end if
     
   end subroutine compute_chisq
 
@@ -497,23 +546,23 @@ contains
              if (mod(iter, 1) == 0 .or. iter == 1) then
                 write(*,fmt='(i6, a, a, f7.3, a, f8.4, a, 10e10.3)')&
                      iter, " - Poltype: "//trim(tqu(k)), " - A_s: ",&
-                     self%fg_map(23000,k,0,1),  " - beta_s: ",&
-                     mask_avg(dcomps%beta_s(:,k),self%masks(:,1)), ' - A_d: ', &
-                     self%temp_amps(:,k,1)/self%temp_norm(k,1)
+                     component_list(1)%p%amplitude(23000,k),  " - beta_s: ",&
+                     mask_avg(component_list(1)%p%indices(:,k,1),self%masks(:,1)), ' - A_d: ', &
+                     component_list(2)%p%template_amplitudes(:,k)
                 write(*,fmt='(a)') '---------------------------------------------'
              end if
           end if
        end do
-       call compute_chisq(self,dpar,dcomps,k)
+       call compute_chisq(self,dpar)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
-             write(*,fmt='(i6,a,f10.5)') iter, " - Chisq: ", self%chisq
+             write(*,fmt='(i6,a,f16.5)') iter, " - Chisq: ", self%chisq
              write(*,fmt='(a)') '---------------------------------------------'
           end if
        end if
        
     else if (trim(dpar%mode) == 'hi_fit') then
-       call compute_chisq(self,dpar,dcomps,1)
+       call compute_chisq(self,dpar)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
              if (nbands .lt. 10) then
@@ -534,12 +583,12 @@ contains
   end subroutine write_stats_to_term
 
   ! Data output routines
-  subroutine write_maps(dpar,dat,dcomps)
+  subroutine write_maps(dpar,dat)
     implicit none
     
     type(dang_params)                   :: dpar
     type(dang_data)                     :: dat
-    type(dang_comps)                    :: dcomps
+    type(dang_comps),         pointer   :: c
     real(dp), dimension(0:npix-1,nmaps) :: map
     real(dp)                            :: s, signal
     integer(i4b)                        :: n, mn, i, j, k, l
@@ -552,21 +601,23 @@ contains
        write(iter_str, '(i0.5)') iter
        if (dpar%output_fg .eqv. .true.) then
           do j = 1, nbands
-             do n = 1, dpar%ntemp
-                title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_'// trim(dpar%temp_label(n)) //&
+             do n = 1, ncomp
+                c => component_list(n)%p
+                title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_'// trim(c%label) //&
                      '_k' // trim(iter_str) // '.fits'
-                map(:,:)   = dat%fg_map(:,:,j,n+dpar%ncomp)
-                do i = 0, npix-1
-                   if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-                      map(i,:) = missval
-                   end if
-                end do
-                call write_result_map(trim(title), nside, ordering, header, map)
-             end do
-             do n = 1, dpar%ncomp
-                title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_'// trim(dpar%fg_label(n)) //&
-                     '_amplitude_k' // trim(iter_str) // '.fits'
-                map(:,:)   = dat%fg_map(:,:,j,n)
+                if (c%type /= 'template') then
+                   do i = 0, npix-1
+                      do k = 1, nmaps
+                         map(i,k) = c%amplitude(i,k)*c%eval_sed(j,i,k)
+                      end do
+                   end do
+                else
+                   do i = 0, npix-1
+                      do k = 1, nmaps
+                         map(i,k) = c%template(i,k)*c%template_amplitudes(j,k)
+                      end do
+                   end do
+                end if
                 do i = 0, npix-1
                    if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
                       map(i,:) = missval
@@ -579,7 +630,7 @@ contains
           do n = 1, dpar%ncomp
              title = trim(dpar%outdir) // 'reference_'// trim(dpar%fg_label(n)) //&
                   '_amplitude_k' // trim(iter_str) // '.fits'
-             map(:,:)   = dat%fg_map(:,:,0,n)
+             map(:,:)   = component_list(n)%p%amplitude!dat%fg_map(:,:,0,n)
              do i = 0, npix-1
                 if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
                    map(i,:) = missval
@@ -597,12 +648,44 @@ contains
              end if
           end do
           call write_result_map(trim(title), nside, ordering, header, map)
+
+
+          title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
+          map(:,:)   = dat%sky_model(:,:,j)
+          do i = 0, npix-1
+             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                map(i,:) = missval
+             end if
+          end do
+          call write_result_map(trim(title), nside, ordering, header, map)
        end do
-       title = trim(dpar%outdir) // 'synch_beta_k' // trim(iter_str) // '.fits'
-       map(:,:)   = dcomps%beta_s(:,:)
-       do i = 0, npix-1
-          if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-             map(i,:) = missval
+       do n = 1, ncomp
+          c => component_list(n)%p
+          if (trim(c%type) == 'template') then
+             cycle
+          else if (trim(c%type) == 'power-law') then
+             title = trim(dpar%outdir) // trim(c%label) // '_beta_k' // trim(iter_str) // '.fits'
+             map(:,:)   = c%indices(:,:,1)
+             do i = 0, npix-1
+                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                   map(i,:) = missval
+                end if
+             end do
+          else if (trim(c%type) == 'mbb') then
+             title = trim(dpar%outdir) // trim(c%label) // '_beta_k' // trim(iter_str) // '.fits'
+             map(:,:)   = c%indices(:,:,1)
+             do i = 0, npix-1
+                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                   map(i,:) = missval
+                end if
+             end do
+             title = trim(dpar%outdir) // trim(c%label) // '_T_k' // trim(iter_str) // '.fits'
+             map(:,:)   = c%indices(:,:,2)
+             do i = 0, npix-1
+                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                   map(i,:) = missval
+                end if
+             end do
           end if
        end do
        call write_result_map(trim(title), nside, ordering, header, map)
@@ -611,11 +694,8 @@ contains
           do i = 0, npix-1
              do j = 1, nbands
                 s      = 0.d0
-                do l = 1, nfgs
-                   signal = dat%fg_map(i,mn,j,l)
-                   s      = s + signal
-                end do
-                dat%chi_map(i,mn) = dat%chi_map(i,mn) + dat%masks(i,1)*(dat%sig_map(i,mn,j) - s)**2.d0/dat%rms_map(i,mn,j)**2.d0
+                dat%chi_map(i,mn) = dat%chi_map(i,mn) + dat%masks(i,1)*(dat%sig_map(i,mn,j) - dat%sky_model(i,mn,j))**2.d0&
+                     & /dat%rms_map(i,mn,j)**2.d0
              end do
           end do
        end do
@@ -631,9 +711,11 @@ contains
        call write_result_map(trim(title), nside, ordering, header, map)
 
     ! For hi_fit maps
+    ! Commented out this whole section for now
     else if (trim(dpar%mode) == 'hi_fit') then
+       
 
-       write(iter_str, '(i0.5)') iter
+       ! write(iter_str, '(i0.5)') iter
        ! do j = 1, nbands
        !    title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
        !    map(:,1)   = dcomps%HI_amps(j)*dcomps%HI(:,1)
@@ -644,92 +726,90 @@ contains
        !    end do
        !    call write_bintab(map,npix,1, header, nlheader, trim(title))
        ! end do
+       ! ! Write out residual maps
+       ! do j = 1, nbands
+       !    title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
+       !    map(:,:)   = dat%res_map(:,:,j)
+       !    do i = 0, npix-1
+       !       if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+       !          map(i,1) = missval
+       !       end if
+       !    end do
+       !    call write_bintab(map,npix,1, header, nlheader, trim(title))
+       ! end do
 
-       ! Write out residual maps
-       do j = 1, nbands
-          title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
-          map(:,:)   = dat%res_map(:,:,j)
-          do i = 0, npix-1
-             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-                map(i,1) = missval
-             end if
-          end do
-          call write_bintab(map,npix,1, header, nlheader, trim(title))
-       end do
+       ! ! Write out T_d map
+       ! title = trim(dpar%outdir) // 'T_d_k'// trim(iter_str) // '.fits'
+       ! map(:,1)   = dcomps%T_d(:,1)
+       ! do i = 0, npix-1
+       !    if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+       !       map(i,1) = missval
+       !    end if
+       ! end do
+       ! call write_bintab(map,npix,1, header, nlheader, trim(title))
 
-       ! Write out T_d map
-       title = trim(dpar%outdir) // 'T_d_k'// trim(iter_str) // '.fits'
-       map(:,1)   = dcomps%T_d(:,1)
-       do i = 0, npix-1
-          if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-             map(i,1) = missval
-          end if
-       end do
-       call write_bintab(map,npix,1, header, nlheader, trim(title))
-
-       ! Compute and write out \chi^2 map
-       dat%chi_map = 0.d0
-       do i = 0, npix-1
-          do j = 1, nbands
-             s = dat%gain(j)*dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))+dat%offset(j)
-             dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
-          end do
-       end do
-       dat%chi_map(:,1) = dat%chi_map(:,1)!/(nbands)
-       title = trim(dpar%outdir) // 'chisq_k' // trim(iter_str) // '.fits'
-       map(:,1)   = dat%chi_map(:,1)
-       do i = 0, npix-1
-          if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-             map(i,1) = missval
-          end if
-       end do
-       call write_bintab(map,npix,1, header, nlheader, trim(title))
+       ! ! Compute and write out \chi^2 map
+       ! dat%chi_map = 0.d0
+       ! do i = 0, npix-1
+       !    do j = 1, nbands
+       !       s = dat%gain(j)*dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))+dat%offset(j)
+       !       dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
+       !    end do
+       ! end do
+       ! dat%chi_map(:,1) = dat%chi_map(:,1)!/(nbands)
+       ! title = trim(dpar%outdir) // 'chisq_k' // trim(iter_str) // '.fits'
+       ! map(:,1)   = dat%chi_map(:,1)
+       ! do i = 0, npix-1
+       !    if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+       !       map(i,1) = missval
+       !    end if
+       ! end do
+       ! call write_bintab(map,npix,1, header, nlheader, trim(title))
     end if
     
   end subroutine write_maps
   
-  subroutine write_data(dpar,dat,dcomps,map_n)
+  subroutine write_data(dpar,dat,map_n)
     implicit none
     type(dang_params)                   :: dpar
     type(dang_data)                     :: dat
-    type(dang_comps)                    :: dcomps
+    type(dang_comps),         pointer   :: c
     integer(i4b),            intent(in) :: map_n
-    integer(i4b)                        :: i
+    integer(i4b)                        :: i, n
     character(len=2)                    :: temp_n
     character(len=128)                  :: title, fmt
     character(len=4)                    :: nband_str
 
     if (trim(dpar%mode) == 'comp_sep') then
        
-       title = trim(dpar%outdir) // 'pixel_23000_A_d_' // trim(tqu(map_n)) // '.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(30,file=title, status="old",position="append", action="write")
-       else
-          open(30,file=title, status="new", action="write")
-       endif
-       write(30,*) dat%fg_map(23000,map_n,2,2)
-       close(30)
+       ! title = trim(dpar%outdir) // 'pixel_23000_A_d_' // trim(tqu(map_n)) // '.dat'
+       ! inquire(file=title,exist=exist)
+       ! if (exist) then
+       !    open(30,file=title, status="old",position="append", action="write")
+       ! else
+       !    open(30,file=title, status="new", action="write")
+       ! endif
+       ! write(30,*) dat%fg_map(23000,map_n,2,2)
+       ! close(30)
        
-       title = trim(dpar%outdir) // 'pixel_23000_A_s_' // trim(tqu(map_n)) // '.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(31,file=title, status="old",position="append", action="write")
-       else
-          open(31,file=title, status="new", action="write")
-       endif
-       write(31,*) dat%fg_map(23000,map_n,2,1)
-       close(31)
-       
-       title = trim(dpar%outdir) // 'pixel_23000_beta_s_' // trim(tqu(map_n)) // '.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(32,file=title, status="old",position="append", action="write")
-       else
-          open(32,file=title, status="new", action="write")
-       endif
-       write(32,*) dcomps%beta_s(23000,map_n)
-       close(32)
+       ! title = trim(dpar%outdir) // 'pixel_23000_A_s_' // trim(tqu(map_n)) // '.dat'
+       ! inquire(file=title,exist=exist)
+       ! if (exist) then
+       !    open(31,file=title, status="old",position="append", action="write")
+       ! else
+       !    open(31,file=title, status="new", action="write")
+       ! endif
+       ! write(31,*) dat%fg_map(23000,map_n,2,1)
+       ! close(31)       
+       ! title = trim(dpar%outdir) // 'pixel_23000_beta_s_' // trim(tqu(map_n)) // '.dat'
+       ! inquire(file=title,exist=exist)
+       ! if (exist) then
+       !    open(32,file=title, status="old",position="append", action="write")
+       ! else
+       !    open(32,file=title, status="new", action="write")
+       ! endif
+       ! write(32,*) dcomps%beta_s(23000,map_n)
+       ! close(32)
        
        title = trim(dpar%outdir) // 'total_chisq_' // trim(tqu(map_n)) // '.dat'
        inquire(file=title,exist=exist)
@@ -738,21 +818,24 @@ contains
        else
           open(33,file=title, status="new", action="write")
        endif
-       call compute_chisq(dat,dpar,dcomps,map_n)
+       call compute_chisq(dat,dpar)!,dcomps,map_n)
        write(33,*) dat%chisq
        close(33)
        
-       do i = 1, dpar%ntemp
-          title = trim(dpar%outdir) //  trim(dpar%temp_label(i)) // '_' //trim(tqu(map_n)) // '_amplitudes.dat'
-          inquire(file=title,exist=exist)
-          if (exist) then
-             open(34,file=title, status="old", &
-                  position="append", action="write")
-          else
-             open(34,file=title, status="new", action="write")
-          endif
-          write(34,'(10(E17.8))') dat%temp_amps(:,map_n,i)
-          close(34)
+       do n = 1, ncomp
+          c => component_list(n)%p
+          if (c%type == 'template') then
+             title = trim(dpar%outdir) //  trim(c%label) // '_' //trim(tqu(map_n)) // '_amplitudes.dat'
+             inquire(file=title,exist=exist)
+             if (exist) then
+                open(34,file=title, status="old", &
+                     position="append", action="write")
+             else
+                open(34,file=title, status="new", action="write")
+             endif
+             write(34,'(10(E17.8))') c%template_amplitudes(:,map_n)
+             close(34)
+          end if
        end do
        
     else if (trim(dpar%mode) == 'hi_fit') then
@@ -760,67 +843,66 @@ contains
        write(nband_str, '(i4)') nbands
 
        fmt = '('//trim(nband_str)//'(E17.8))'
-
-       title = trim(dpar%outdir) // 'HI_amplitudes.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(35,file=title,status="old",position="append",action="write") 
-       else
-          open(35,file=title,status="new",action="write")
-       end if
-       write(35,fmt=fmt) dcomps%HI_amps
-       close(35)
+       ! title = trim(dpar%outdir) // 'HI_amplitudes.dat'
+       ! inquire(file=title,exist=exist)
+       ! if (exist) then
+       !    open(35,file=title,status="old",position="append",action="write") 
+       ! else
+       !    open(35,file=title,status="new",action="write")
+       ! end if
+       ! write(35,fmt=fmt) dcomps%HI_amps
+       ! close(35)
        
-       title = trim(dpar%outdir)//'HI_chisq.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(36,file=title,status="old",position="append",action="write") 
-       else
-          open(36,file=title,status="new",action="write")
-       end if
-       call compute_chisq(dat,dpar,dcomps,1)
-       write(36,'(E17.8)') dat%chisq
-       close(36)
+       ! title = trim(dpar%outdir)//'HI_chisq.dat'
+       ! inquire(file=title,exist=exist)
+       ! if (exist) then
+       !    open(36,file=title,status="old",position="append",action="write") 
+       ! else
+       !    open(36,file=title,status="new",action="write")
+       ! end if
+       ! call compute_chisq(dat,dpar)!,dcomps,1)
+       ! write(36,'(E17.8)') dat%chisq
+       ! close(36)
 
-       title = trim(dpar%outdir)//'band_gains.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(37,file=title,status="old",position="append",action="write") 
-       else
-          open(37,file=title,status="new",action="write")
-       end if
-       write(37,fmt=fmt) dat%gain
-       close(37)
+       ! title = trim(dpar%outdir)//'band_gains.dat'
+       ! inquire(file=title,exist=exist)
+       ! if (exist) then
+       !    open(37,file=title,status="old",position="append",action="write") 
+       ! else
+       !    open(37,file=title,status="new",action="write")
+       ! end if
+       ! write(37,fmt=fmt) dat%gain
+       ! close(37)
 
-       title = trim(dpar%outdir)//'band_offsets.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(38,file=title,status="old",position="append",action="write") 
-       else
-          open(38,file=title,status="new",action="write")
-       end if
-       write(38,fmt=fmt) dat%offset
-       close(38)
+       ! title = trim(dpar%outdir)//'band_offsets.dat'
+       ! inquire(file=title,exist=exist)
+       ! if (exist) then
+       !    open(38,file=title,status="old",position="append",action="write") 
+       ! else
+       !    open(38,file=title,status="new",action="write")
+       ! end if
+       ! write(38,fmt=fmt) dat%offset
+       ! close(38)
 
-       title = trim(dpar%outdir)//'HI_Td_mean.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(39,file=title,status="old",position="append",action="write") 
-       else
-          open(39,file=title,status="new",action="write")
-       end if
-       write(39,'(E17.8)') mask_avg(dcomps%T_d(:,1),dat%masks(:,1))
-       close(39)
+       ! title = trim(dpar%outdir)//'HI_Td_mean.dat'
+       ! inquire(file=title,exist=exist)
+       ! if (exist) then
+       !    open(39,file=title,status="old",position="append",action="write") 
+       ! else
+       !    open(39,file=title,status="new",action="write")
+       ! end if
+       ! write(39,'(E17.8)') mask_avg(dcomps%T_d(:,1),dat%masks(:,1))
+       ! close(39)
 
-       title = trim(dpar%outdir)//'band_chisq.dat'
-       inquire(file=title,exist=exist)
-       if (exist) then
-          open(40,file=title,status="old",position="append",action="write") 
-       else
-          open(40,file=title,status="new",action="write")
-       end if
-       write(40,fmt=fmt) dat%band_chisq
-       close(40)
+       ! title = trim(dpar%outdir)//'band_chisq.dat'
+       ! inquire(file=title,exist=exist)
+       ! if (exist) then
+       !    open(40,file=title,status="old",position="append",action="write") 
+       ! else
+       !    open(40,file=title,status="new",action="write")
+       ! end if
+       ! write(40,fmt=fmt) dat%band_chisq
+       ! close(40)
 
     end if
     
@@ -835,7 +917,7 @@ contains
     integer(i4b)                   :: i,j
     real(dp)                       :: s
 
-    call compute_chisq(self,dpar,dcomps,1)
+    call compute_chisq(self,dpar)
     self%chi_map = 0.d0
     do j = 1, nbands
        self%band_chisq(j) = 0.d0

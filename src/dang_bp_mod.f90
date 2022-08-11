@@ -38,7 +38,7 @@ contains
        end if
        bp(i)%id   = dpar%bp_id(i)
        if (trim(dpar%bp_id(i)) == 'delta') then
-          dpar%bp_file(j) = ''
+          dpar%bp_file(i) = ''
        else if (trim(dpar%bp_id(i)) == 'LFI') then
           threshold = 0.d0
        else if (trim(dpar%bp_id(i)) == 'WMAP') then
