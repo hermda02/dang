@@ -211,11 +211,11 @@ contains
       ! ------------------------------------------------------------------------------------------
       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
          if (rank == master) then
-            call write_data(dpar,ddata,dcomps,k)
+            call write_data(dpar,ddata,k)
          end if
       end do
       if (mod(iter,dpar%iter_out) .EQ. 0) then
-         call write_maps(dpar,ddata,dcomps)
+         call write_maps(dpar,ddata)
       end if
       ! ------------------------------------------------------------------------------------------
    end do
@@ -243,7 +243,7 @@ contains
          ddata%band_chisq(j) = ddata%band_chisq(j) + (ddata%res_map(i,1,j)/ddata%rms_map(i,1,j))**2
       end do
    end do
-   call write_maps(dpar,ddata,dcomps)
+   call write_maps(dpar,ddata)
    
    do iter = 1, dpar%ngibbs
       
@@ -269,9 +269,9 @@ contains
       call update_ddata(ddata,dpar,dcomps)
       call write_stats_to_term(ddata,dpar,dcomps,iter)
       if (mod(iter,dpar%iter_out) .EQ. 0) then
-         call write_maps(dpar,ddata,dcomps)
+         call write_maps(dpar,ddata)
       end if
-      call write_data(dpar,ddata,dcomps,1)
+      call write_data(dpar,ddata,1)
       write(*,*) ''
 
    end do

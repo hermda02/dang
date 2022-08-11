@@ -520,33 +520,33 @@ contains
        temp1 = 0.d0
        temp2 = 0.d0
 
-       !$OMP PARALLEL PRIVATE(i)
-       !$OMP DO SCHEDULE(static)
+       !!$OMP PARALLEL PRIVATE(i)
+       !!$OMP DO SCHEDULE(static)
        do i = 1, npix
           if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
           temp1(i)      = eta(i)/(ddata%rms_map(i-1,map_n,j))
           ! This is just for the joint stuff - add modularity later
           temp1(npix+i) = eta(npix+i)/(ddata%rms_map(i-1,map_n+1,j))
        end do
-       !$OMP END DO
-       !$OMP END PARALLEL
+       !!$OMP END DO
+       !!$OMP END PARALLEL
 
        do k = 1, self%ncg_components
           if (self%cg_component(k)%p%type /= 'template') then
-             !$OMP PARALLEL PRIVATE(i)
-             !$OMP DO SCHEDULE(static)
+             !!$OMP PARALLEL PRIVATE(i)
+             !!$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 temp2(i) = temp1(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
                 ! This is just for the joint stuff - add modularity later
                 temp2(npix+i) = temp1(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n+1)
              end do
-             !$OMP END DO
-             !$OMP END PARALLEL
+             !!$OMP END DO
+             !!$OMP END PARALLEL
           else
              if (self%cg_component(k)%p%corr(j)) then
-                !$OMP PARALLEL PRIVATE(i)
-                !$OMP DO SCHEDULE(static)
+                !!$OMP PARALLEL PRIVATE(i)
+                !!$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    temp2(offset+l) = temp2(offset+l) + temp1(i)*self%cg_component(k)%p%template(i-1,map_n)
@@ -554,8 +554,8 @@ contains
                    temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*&
                         & self%cg_component(k)%p%template(i-1,map_n+1)
                 end do
-                !$OMP END DO
-                !$OMP END PARALLEL
+                !!$OMP END DO
+                !!$OMP END PARALLEL
                 l = l + 1
              end if
           end if
