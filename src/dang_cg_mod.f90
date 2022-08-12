@@ -19,6 +19,7 @@ module dang_cg_mod
      integer(i4b) :: cg_group
      integer(i4b) :: i_max
      real(dp)     :: converge
+     integer(i4b) :: pol_flag
      type(component_pointer), allocatable, dimension(:) :: cg_component
 
      real(dp), allocatable, dimension(:) :: x ! The amplitude vector for this CG group
@@ -49,10 +50,11 @@ contains
   function constructor_cg(dpar, cg_group)
     implicit none
 
-    type(dang_params), intent(in) :: dpar
-    class(dang_cg_group), pointer :: constructor_cg
-    integer(i4b),      intent(in) :: cg_group
-    integer(i4b)                  :: i, count
+    type(dang_params),  intent(in) :: dpar
+    class(dang_cg_group),  pointer :: constructor_cg
+    integer(i4b),       intent(in) :: cg_group
+    integer(i4b)                   :: i, count, flag
+    character(len=5), allocatable, dimension(:) :: pol_list
 
     allocate(constructor_cg)
 
@@ -82,6 +84,51 @@ contains
           count = count + 1
        end if
     end do
+
+    constructor_cg%pol_flag = 0
+
+    count = count_delimits(dpar%cg_poltype(cg_group),',')
+    ! ====================================================================
+    ! Here is how our bitwise poltype flagging works:
+    !
+    !               P  U  Q  T
+    !
+    ! T             0  0  0  1   = 1
+    !
+    !     Q + U     1  0  0  0   = 8
+    !
+    ! T,  Q,  U     0  1  1  1   = 7
+    !
+    ! T,  Q + U     1  0  0  1   = 9
+    !
+    ! T + Q + U     1  1  1  1   = 15
+    !
+    ! ====================================================================
+
+    flag = 0
+    allocate(pol_list(count+1))
+    call delimit_string(dpar%cg_poltype(cg_group),',',pol_list)
+
+    do i = 1, count+1
+       if (pol_list(i) == 'T') then
+          write(*,*) "flag = T"
+          flag = flag + 2**0
+       else if (pol_list(i) == 'Q') then
+          write(*,*) "flag = Q"
+          flag = flag + 2**1
+       else if (pol_list(i) == 'U') then
+          write(*,*) "flag = U"
+          flag = flag + 2**2
+       else if (pol_list(i) == 'Q+U') then
+          write(*,*) "flag = Q+U"
+          flag = flag + 2**3
+       else if (pol_list(i) == 'T+Q+U') then
+          write(*,*) "flag = T+Q+U"
+          flag = flag + 2**0 + 2**1 + 2**2 + 2**3
+       end if
+    end do
+
+    constructor_cg%pol_flag = flag
 
   end function constructor_cg
 
