@@ -33,14 +33,11 @@ module dang_util_mod
   character(len=128)                :: title
   character(len=10)                 :: ml_mode
   
-  real(dp), allocatable, dimension(:) :: amp_vec
-
   public    :: npix, nbands, nmaps, ordering, header, h, c, k_B, T_CMB
   public    :: ncomp, ncg_groups, nsample
   public    :: npixpar, nglobalpar, title
   public    :: iter, iter_str, exist, tqu
   public    :: ml_mode
-  public    :: amp_vec
 
 contains 
   

@@ -32,22 +32,19 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:,:)   :: temp_amps  ! Where template amplitudes are stored
     real(dp), allocatable, dimension(:,:)     :: temp_norm  ! Where we store template normalizations
 
-    real(dp), allocatable, dimension(:)       :: amp_vec    ! Amplitude vector returned from the CG solver
     real(dp), allocatable, dimension(:)       :: band_chisq ! A variable to store the chisq of each band
 
   contains
     procedure :: init_data_maps
     procedure :: read_data_maps
-
+    procedure :: update_sky_model
+    procedure :: convert_maps
   end type dang_data
 
   private :: i, j, k, l
   integer(i4b) :: i, j, k, l
 
 contains
-
-  ! I think I want a constructor that creates a data object for each band
-
 
   subroutine init_data_maps(self,dpar)
     implicit none
@@ -142,20 +139,20 @@ contains
     end if
   end subroutine read_data_maps
 
-  subroutine update_sky_model(ddata)
+  subroutine update_sky_model(self)
     implicit none
-    type(dang_data),   intent(inout) :: ddata
+    class(dang_data)                 :: self
     type(dang_comps),  pointer       :: c
     integer(i4b)                     :: i, j, k, l
 
-    ddata%sky_model(:,:,:) = 0.d0
+    self%sky_model(:,:,:) = 0.d0
     do l = 1, ncomp
        c => component_list(l)%p
        if (c%type /= 'template') then
           do i = 0, npix-1
              do k = 1, nmaps
                 do j = 1, nbands
-                   ddata%sky_model(i,k,j) = ddata%sky_model(i,k,j) + &
+                   self%sky_model(i,k,j) = self%sky_model(i,k,j) + &
                         & c%amplitude(i,k)*c%eval_sed(j,i,k)
                 end do
              end do
@@ -164,7 +161,7 @@ contains
           do i = 0, npix-1
              do k = 1, nmaps
                 do j = 1, nbands
-                   ddata%sky_model(i,k,j) = ddata%sky_model(i,k,j) + &
+                   self%sky_model(i,k,j) = self%sky_model(i,k,j) + &
                         & c%template(i,k)*c%template_amplitudes(j,k)
                 end do
              end do
@@ -172,7 +169,7 @@ contains
        end if
     end do
 
-    ddata%res_map = ddata%sig_map - ddata%sky_model
+    self%res_map = self%sig_map - self%sky_model
 
   end subroutine update_sky_model
 
@@ -252,38 +249,6 @@ contains
     end if
     call write_result_map(trim(title), nside, ordering, header, thermal_map(:,:,band))
   end subroutine dust_correct_band
-
-  subroutine extrapolate_foreground(dpar, dat, comp, ind, map_n)
-    implicit none
-    type(dang_data), intent(inout) :: dat
-    type(dang_params)              :: dpar
-    type(dang_comps)               :: comp
-    integer(i4b),    intent(in)    :: ind, map_n
-    integer(i4b)                   :: i, j, k
-
-    do i = 0, npix-1
-       do j = 1, nbands
-          dat%fg_map(i,map_n,j,ind) = dat%fg_map(i,map_n,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,i,map_n)!ind,dpar%band_nu(j),i,map_n)
-       end do
-    end do
-
-  end subroutine extrapolate_foreground
-
-  subroutine extrapolate_template(dpar, dat, comp, ind, map_n)
-    implicit none
-    type(dang_data), intent(inout) :: dat
-    type(dang_params)              :: dpar
-    type(dang_comps)               :: comp
-    integer(i4b),    intent(in)    :: ind, map_n
-    integer(i4b)                   :: i, j, k
-
-    do i = 0, npix-1
-       do j = 1, nbands
-          dat%fg_map(i,map_n,j,dpar%ncomp+ind) = dat%temp_amps(j,map_n,ind)*dat%temps(i,map_n,ind)
-       end do
-    end do
-
-  end subroutine extrapolate_template
 
   function compute_bnu_prime_RJ(nu)
     ! Assume that nu is in GHz
@@ -393,7 +358,7 @@ contains
   subroutine convert_maps(self,dpar)
     ! We want to run everything in uK_RJ (at least for compsep), yeah?
     implicit none
-    type(dang_data),   intent(inout) :: self
+    class(dang_data)                 :: self
     type(dang_params), intent(inout) :: dpar
     integer(i4b)                :: j
     
@@ -448,11 +413,10 @@ contains
 
   end subroutine convert_maps
   
-  subroutine convert_bp_maps(self,dpar)!,bp)
+  subroutine convert_bp_maps(self,dpar)
     implicit none
     type(dang_data),   intent(inout) :: self
     type(dang_params), intent(inout) :: dpar
-    ! type(bandinfo),    intent(in)    :: bp
     integer(i4b)                     :: j
     
     do j = 1, nbands
@@ -478,13 +442,11 @@ contains
     
   end subroutine convert_bp_maps
 
-  subroutine compute_chisq(self,dpar)!,comp,map_n)
+  subroutine compute_chisq(self,dpar)
     use healpix_types
     implicit none
     type(dang_data),                              intent(inout) :: self
     type(dang_params)                                           :: dpar
-    ! type(dang_comps)                                            :: comp
-    ! integer(i4b),                                 intent(in)    :: map_n
     real(dp)                                                    :: s, signal
     integer(i4b)                                                :: i, j, k
 
@@ -498,35 +460,7 @@ contains
           end do
        end do
     end do
-    self%chisq = self%chisq/(size(dpar%pol_type)*(nump*nbands)-npixpar-nglobalpar)
-    ! if (trim(dpar%mode) == 'comp_sep') then
-    !    self%chisq = 0.d0
-    !    do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-    !       do i = 0, npix-1
-    !          if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
-    !          do j = 1, nbands
-    !             s = 0.d0
-    !             do w = 1, nfgs
-    !                signal = self%fg_map(i,k,j,w)
-    !                s = s + signal
-    !             end do
-    !             self%chisq = self%chisq + (((self%sig_map(i,k,j) - s)**2))/(self%rms_map(i,k,j)**2)
-    !          end do
-    !       end do
-    !    end do
-    !    self%chisq = self%chisq/(size(dpar%pol_type)*(nump*nbands)-npixpar-nglobalpar)
-    ! else if (trim(dpar%mode) == 'hi_fit') then
-    !    self%chisq = 0.d0
-    !    do i = 0, npix-1
-    !       if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
-    !       do j = 1, nbands    
-    !          s = 0.0
-    !          s = self%gain(j)*comp%HI_amps(j)*comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))+self%offset(j)
-    !          self%chisq = self%chisq + (self%sig_map(i,map_n,j)-s)**2.d0/(self%rms_map(i,map_n,j)**2.d0)
-    !       end do
-    !    end do
-    !    self%chisq = self%chisq!/((nump*nbands)-npixpar-nglobalpar)
-    ! end if
+    self%chisq = self%chisq
     
   end subroutine compute_chisq
 
@@ -907,38 +841,5 @@ contains
     end if
     
   end subroutine write_data
-
-  subroutine update_ddata(self,dpar,dcomps)
-    implicit none
-    type(dang_data), intent(inout) :: self
-    type(dang_params)              :: dpar
-    type(dang_comps)               :: dcomps
-    
-    integer(i4b)                   :: i,j
-    real(dp)                       :: s
-
-    call compute_chisq(self,dpar)
-    self%chi_map = 0.d0
-    do j = 1, nbands
-       self%band_chisq(j) = 0.d0
-       ! Compute the residual for each map
-       do i = 0, npix-1
-          if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) then
-             self%res_map(i,1,j) = missval
-             self%chi_map(i,1)   = missval
-             cycle
-          end if
-          ! Declare the model value
-          s = self%gain(j)*dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))+self%offset(j)
-          ! Compute residual per band
-          self%res_map(i,1,j) = (self%sig_map(i,1,j)-s)
-          ! Compute the summed total chisq
-          self%chi_map(i,1) = self%chi_map(i,1) + self%masks(i,1)*(self%sig_map(i,1,j) - s)**2.d0/self%rms_map(i,1,j)**2.d0
-          ! Compute the chisq for each band
-          self%band_chisq(j) = self%band_chisq(j) + (self%res_map(i,1,j)/self%rms_map(i,1,j))**2
-       end do
-    end do
-
-  end subroutine update_ddata
 
 end module dang_data_mod

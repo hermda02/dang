@@ -12,7 +12,6 @@ module dang_component_mod
   type :: dang_comps
      
      character(len=16)                                :: label, type      ! Component label and type
-     logical(lgt)                                     :: sample_amplitude ! Do we sample the amplitudes?
      logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
      real(dp)                                         :: nu_ref           ! Reference frequency
      integer(i4b)                                     :: cg_group         ! CG group number
@@ -73,7 +72,6 @@ contains
 
     constructor%label            = trim(dpar%fg_label(component))
     constructor%type             = dpar%fg_type(component)
-    constructor%sample_amplitude = dpar%fg_samp_amp(component)
     constructor%cg_group         = dpar%fg_cg_group(component)
 
     if (trim(constructor%type) == 'mbb') then
@@ -126,7 +124,6 @@ contains
                   & nmaps, nullval, anynull, header=header)
           end if
        end do
-
 
     else if (trim(constructor%type) == 'power-law') then
        ! Allocate arrays to appropriate size for each component type
@@ -201,6 +198,75 @@ contains
                & nmaps, nullval, anynull, header=header)
        end if
 
+    else if (trim(constructor%type) == 'hi_fit') then
+       !------------------------------------------------------|
+       ! Unique component!                                    |
+       !------------------------------------------------------|
+       ! signal model is given as follows                     |
+       !                                                      |
+       ! s_{nu,p} = A_{nu}*HI_{p}*B_{nu}(T_{d,p})             |
+       !                                                      |
+       ! So we have two things that we need to sample         |
+       ! a template amplitude, and a spectral index per pixel |
+       !------------------------------------------------------|
+       constructor%nindices = 1
+       
+       allocate(constructor%corr(nbands))
+       allocate(constructor%gauss_prior(1,2))
+       allocate(constructor%uni_prior(1,2))
+       allocate(constructor%sample_index(1))
+       allocate(constructor%prior_type(1))
+       allocate(constructor%index_mode(1))
+       
+       ! Allocate maps for the components
+       allocate(constructor%template_amplitudes(nbands,nmaps))
+       allocate(constructor%template(0:npix-1,nmaps))
+       allocate(constructor%amplitude(0:npix-1,nmaps))
+       allocate(constructor%indices(0:npix-1,nmaps,1))
+       
+       ! Reference frequency
+       constructor%nu_ref              = dpar%fg_nu_ref(component) 
+
+       constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
+       constructor%corr                = dpar%fg_temp_corr(component,:)
+       constructor%template_amplitudes = 0.d0
+
+
+       do i = 1, constructor%nindices
+          ! Do we sample this index?
+          constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)
+
+          ! Sample full sky or per-pixel?
+          if (trim(dpar%fg_ind_region(component,i)) == 'fullsky') then
+             constructor%index_mode = 1
+          else if (trim(dpar%fg_ind_region(component,i)) == 'per-pixel') then
+             constructor%index_mode = 2
+          end if
+
+          ! Define prior for likelihood evaluation
+          constructor%prior_type(i)    = dpar%fg_prior_type(component,i)
+          constructor%gauss_prior(i,1) = dpar%fg_gauss(component,i,1)
+          constructor%gauss_prior(i,2) = dpar%fg_gauss(component,i,2)
+          constructor%uni_prior(i,1)   = dpar%fg_uni(component,i,1)
+          constructor%uni_prior(i,2)   = dpar%fg_uni(component,i,2)
+
+          ! Initialize spectral index maps, or don't
+          if (trim(dpar%fg_spec_file(component,i)) == 'none') then
+             constructor%indices(:,:,i)   = dpar%fg_init(component,i)
+          else
+             call read_bintab(trim(dpar%fg_spec_file(component,i)),constructor%indices(:,:,i), npix, &
+                  & nmaps, nullval, anynull, header=header)
+          end if
+       end do
+
+       if (trim(dpar%fg_filename(component)) == 'none') then
+          write(*,*) "Error: template filename == 'none' "
+          stop
+       else
+          call read_bintab(trim(dpar%fg_filename(component)),constructor%template, npix, &
+               & nmaps, nullval, anynull, header=header)
+       end if
+
     else
        write(*,*) "Warning - unrecognized component type detected"
        stop
@@ -221,41 +287,6 @@ contains
     end do
 
   end subroutine initialize_components
-
-  subroutine init_synch(self,dpar,npix,nmaps)
-    implicit none
-    type(dang_comps)              :: self
-    type(dang_params)             :: dpar
-    integer(i4b), intent(in)      :: npix, nmaps
-    
-    allocate(self%beta_s(0:npix-1,nmaps))
-    write(*,*) 'Allocated synch parameter maps'
-    if (trim(dpar%fg_spec_file(1,1)) == 'none') then 
-       write(*,fmt='(a,f8.4)') 'Full sky beta_s estimate ', dpar%fg_init(1,1)
-       write(*,*) ''
-       self%beta_s     = dpar%fg_init(1,1) ! Synchrotron beta initial guess
-    else
-       write(*,*) "No init files found"
-       stop
-       !call read_bintab(trim(param%fg_spec_file(1,1)),self%beta_s,npix,3,nullval,anynull,header=header)
-    end if
-    
-  end subroutine init_synch
-  
-  subroutine init_dust(self,dpar,npix,nmaps)
-    implicit none
-    type(dang_comps)              :: self
-    type(dang_params)             :: dpar
-    integer(i4b), intent(in)      :: npix, nmaps
-    
-    allocate(self%beta_d(0:npix-1,nmaps))
-    allocate(self%T_d(0:npix-1,nmaps))
-    write(*,*) 'Allocated dust parameter maps!'
-    write(*,*) ''
-    self%beta_d     = 1.53d0              ! Dust beta initial guess
-    self%T_d        = 19.6d0
-    
-  end subroutine init_dust
 
   subroutine init_hi_fit(self, dpar, npix)
     implicit none
@@ -295,7 +326,6 @@ contains
        end do
     end if
   end function planck
-  ! function compute_spectrum(dpar, self, bp, ind, freq, pix, map_n, index)
 
   function eval_sed(self, band, pix, map_n, index)
     ! always computed in RJ units
@@ -307,27 +337,27 @@ contains
     integer(i4b),           optional   :: map_n
     integer(i4b)                       :: i
     real(dp), dimension(:), optional   :: index
-    real(dp)                           :: z, compute_spectrum
+    real(dp)                           :: z, spectrum
     real(dp)                           :: eval_sed
 
     if (trim(self%type) == 'power-law') then
        if (bp(band)%id == 'delta') then
           ! if (ind == 1) then
           if (present(index)) then
-             compute_spectrum = (bp(band)%nu_c/self%nu_ref)**index(1)
+             spectrum = (bp(band)%nu_c/self%nu_ref)**index(1)
           else 
-             compute_spectrum = (bp(band)%nu_c/self%nu_ref)**self%indices(pix,map_n,1)
+             spectrum = (bp(band)%nu_c/self%nu_ref)**self%indices(pix,map_n,1)
           end if
        else
-          compute_spectrum = 0.d0
+          spectrum = 0.d0
           ! Compute for LFI bandpass
           if (present(index)) then
              do i = 1, bp(band)%n
-                compute_spectrum = compute_spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**index(1)
+                spectrum = spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**index(1)
              end do
           else 
              do i = 1, bp(band)%n
-                compute_spectrum = compute_spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**self%indices(pix,map_n,1)
+                spectrum = spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**self%indices(pix,map_n,1)
              end do
           end if
        end if
@@ -335,37 +365,44 @@ contains
        if (bp(band)%id == 'delta') then
           if (present(index)) then
              z = h / (k_B*index(2))
-             compute_spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / &
+             spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / &
                   & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref*1d9))**(index(1)+1.d0)
           else
              z = h / (k_B*self%indices(pix,map_n,2))
-             compute_spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / &
+             spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / &
                   & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
           end if
        else
-          compute_spectrum = 0.d0
+          spectrum = 0.d0
           if (present(index)) then
              z = h / (k_B*index(2))
              do i = 1, bp(band)%n
-                compute_spectrum = compute_spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
+                spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
                      (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref*1d9))**(index(1)+1.d0)
              end do
           else
              z = h / (k_B*self%indices(pix,map_n,2))
              do i = 1, bp(band)%n
-                compute_spectrum = compute_spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
+                spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
                      (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
              end do
           end if
        end if
     else if (trim(self%type) == 'template') then
-       compute_spectrum = 1.d0
+       spectrum = 1.d0
+    else if (trim(self%type) == 'hi_fit') then
+       if (bp(band)%id == 'delta') then
+
+       else
+          
+
+       end if
     end if
-    eval_sed = compute_spectrum
+    
+    eval_sed = spectrum
 
   end function eval_sed
   
-  ! function compute_spectrum(dpar, self, bp, ind, freq, pix, map_n, index)
   function compute_spectrum(dpar, self, bp, ind, pix, map_n, index)
     ! always computed in RJ units
     
@@ -390,9 +427,9 @@ contains
           end if
           !else if (trim(dpar%fg_label(ind)) == 'mbb') then
        else if (ind == 2) then
-          z = h / (k_B*self%T_d(pix,map_n))
+          z = h / (k_B*19.6d0)!self%T_d(pix,map_n))
           compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
-               (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(353.d0*1d9))**(self%beta_d(pix,map_n)+1.d0)
+               (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(353.d0*1d9))**(1.53d0+1.d0)!(self%beta_d(pix,map_n)+1.d0)
        end if
     else
        compute_spectrum = 0.d0
