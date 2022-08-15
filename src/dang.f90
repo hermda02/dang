@@ -190,7 +190,7 @@ contains
       ! ------------------------------------------------------------------------------------------
       ! Sample each CG group for amplitudes
       ! ------------------------------------------------------------------------------------------
-      call sample_cg_groups(dpar,ddata,2)
+      call sample_cg_groups(dpar,ddata)
       call ddata%update_sky_model
       call write_stats_to_term(ddata,dpar,dcomps,iter)
       

@@ -19,7 +19,8 @@ module dang_cg_mod
      integer(i4b) :: cg_group
      integer(i4b) :: i_max
      real(dp)     :: converge
-     integer(i4b) :: pol_flag
+     integer(i4b) :: nflag
+     integer(i4b),            allocatable, dimension(:) :: pol_flag
      type(component_pointer), allocatable, dimension(:) :: cg_component
 
      real(dp), allocatable, dimension(:) :: x ! The amplitude vector for this CG group
@@ -48,12 +49,26 @@ module dang_cg_mod
 contains
 
   function constructor_cg(dpar, cg_group)
+    ! ============================================ |
+    ! Construct the CG groups by pointing vital    |
+    ! information (such as maximum # of iterations |
+    ! and convergence criteria) to the group, and  |
+    ! ensure that the CG group points to the       |
+    ! correct components. See below for info on the|
+    ! polarization flags.                          |
+    !                                              |
+    ! Inputs:                                      |
+    ! dpar: class(dang_params)                     |
+    !                                              |
+    ! cg_group: integer                            |
+    ! ============================================ |
+
     implicit none
 
     type(dang_params),  intent(in) :: dpar
     class(dang_cg_group),  pointer :: constructor_cg
     integer(i4b),       intent(in) :: cg_group
-    integer(i4b)                   :: i, count, flag
+    integer(i4b)                   :: i, j, count, flag, nflag
     character(len=5), allocatable, dimension(:) :: pol_list
 
     allocate(constructor_cg)
@@ -63,12 +78,14 @@ contains
     constructor_cg%i_max          = dpar%cg_max_iter(cg_group)
     constructor_cg%converge       = dpar%cg_convergence(cg_group)
 
+    ! How many components in this CG group?
     do i = 1, dpar%ncomp
        if (component_list(i)%p%cg_group == cg_group) then
           constructor_cg%ncg_components = constructor_cg%ncg_components + 1
        end if
     end do
 
+    ! Handle the error before we try to allocate
     if (constructor_cg%ncg_components == 0) then
        write(*,*) "Woah there, number of CG components = 0"
        write(*,*) "for CG group ", cg_group
@@ -77,6 +94,7 @@ contains
 
     allocate(constructor_cg%cg_component(constructor_cg%ncg_components))
 
+    ! Point to the correct component
     count = 1
     do i = 1, dpar%ncomp
        if (component_list(i)%p%cg_group == cg_group) then
@@ -85,6 +103,7 @@ contains
        end if
     end do
 
+    ! Figure out the polarization flag information
     constructor_cg%pol_flag = 0
 
     count = count_delimits(dpar%cg_poltype(cg_group),',')
@@ -106,33 +125,53 @@ contains
     ! ====================================================================
 
     flag = 0
+    nflag = 0
     allocate(pol_list(count+1))
     call delimit_string(dpar%cg_poltype(cg_group),',',pol_list)
 
     do i = 1, count+1
        if (pol_list(i) == 'T') then
-          write(*,*) "flag = T"
           flag = flag + 2**0
+          nflag = nflag + 1
        else if (pol_list(i) == 'Q') then
-          write(*,*) "flag = Q"
           flag = flag + 2**1
+          nflag = nflag + 1
        else if (pol_list(i) == 'U') then
-          write(*,*) "flag = U"
           flag = flag + 2**2
+          nflag = nflag + 1
        else if (pol_list(i) == 'Q+U') then
-          write(*,*) "flag = Q+U"
           flag = flag + 2**3
+          nflag = nflag + 1
        else if (pol_list(i) == 'T+Q+U') then
-          write(*,*) "flag = T+Q+U"
-          flag = flag + 2**0 + 2**1 + 2**2 + 2**3
+          flag = 0
+          nflag = nflag + 1
        end if
     end do
 
-    constructor_cg%pol_flag = flag
+    constructor_cg%nflag    = nflag
+
+    allocate(constructor_cg%pol_flag(nflag))
+
+    do i = 1, nflag     
+       do j = 0, 3
+          if (iand(flag,2**j) .ne. 0) then
+             constructor_cg%pol_flag(i) = 2**j
+          end if
+       end do
+       if (iand(flag,0) .ne. 0) then
+          constructor_cg%pol_flag(i) = 0
+       end if
+    end do
 
   end function constructor_cg
 
   subroutine initialize_cg_groups(dpar)
+    ! ============================================ |
+    ! Create an object for each of the CG groups   |
+    ! and point to the correct components          |
+    !                                              |
+    ! dpar: class(dang_params)                     |
+    ! ============================================ |
     implicit none
     type(dang_params)             :: dpar
     integer(i4b)                  :: i, count
@@ -146,45 +185,61 @@ contains
     end do
   end subroutine initialize_cg_groups
 
-  subroutine sample_cg_groups(dpar, ddata, map_n)
+  subroutine sample_cg_groups(dpar, ddata)
+    ! ===================================================== |
+    ! Subroutine which samples over the CG groups           |
+    ! by first computing the RHS of the matrix              |
+    ! equation:                                             |
+    !   sum_nu(T_nu^t N^-1 T_nu) = sum_nu(T_nu^t N^-1 d_nu) |
+    ! and then compute a CG search given that group. Then   |
+    ! unpack the amplitude vector in the correct way.       |
+    !                                                       |
+    ! Inputs:                                               |
+    !   dpar: class(dang_params)                            |
+    !   ddata: class(dang_data)                             |
+    !                                                       |
+    ! ===================================================== |
     implicit none
     type(dang_data),         intent(in)    :: ddata
     type(dang_params)                      :: dpar
-    integer(i4b),            intent(in)    :: map_n 
 
-    integer(i4b)                           :: i, j
+    integer(i4b)                           :: i, f
     real(dp), allocatable, dimension(:)    :: b
 
     do i = 1, ncg_groups
        write(*,*) "Computing a CG search of CG group ", i
-       call cg_groups(i)%p%compute_rhs(ddata,b)
-       call cg_groups(i)%p%cg_search(dpar,ddata,map_n,b)
-      if (i == 1) then
-          open(55,file='sampling_group_rhs_testing.txt')
-          do j = 1, size(b)
-             write(55,fmt='(2(E16.8))') b(j), cg_groups(1)%p%x(j)
-          end do
-          close(55)
-       end if
-       ! stop
-       call cg_groups(i)%p%unpack_amplitudes(dpar,ddata,map_n)
-       deallocate(b)
+       do f = 1, cg_groups(i)%p%nflag
+          call cg_groups(i)%p%compute_rhs(ddata,b,f)
+          call cg_groups(i)%p%cg_search(dpar,ddata,b,f)
+          call cg_groups(i)%p%unpack_amplitudes(dpar,ddata,f)
+          deallocate(b)
+       end do
     end do
 
   end subroutine sample_cg_groups
 
-  subroutine cg_search(self, dpar, ddata, map_n, b)
-
-    ! Implementation of the canned algorithm (B2) outlined in Jonathan Richard Shewuck (1994)                   
-    ! "An introduction to the Conjugate Gradient Method Without the Agonizing Pain"      
-
+  subroutine cg_search(self, dpar, ddata, b, flag_n)
+    ! ========================================================= |
+    ! Implementation of the canned algorithm (B2) outlined      |
+    ! in Jonathan Richard Shewuck (1994) An Introduction to     |
+    ! the Conjugate Gradient Method Without the Agonizing Pain" |    
+    !                                                           |
+    ! Inputs:                                                   |
+    !   self: class(dang_cg_group) - the cg_group being sampled |
+    !   dpar: class(dang_params)   - access to the param object |
+    !   ddata: class(dang_data)    - access to the data object  |
+    !   b: array(dp)               - RHS of matrix equation     |
+    !   flag_n: integer            - poltype flag number        |
+    !                                                           |
+    ! ========================================================= |
     implicit none
 
     class(dang_cg_group)                   :: self
     type(dang_data),         intent(in)    :: ddata
     type(dang_params)                      :: dpar
 
-    integer(i4b),            intent(in)    :: map_n 
+    integer(i4b),            intent(in)    :: flag_n
+    ! integer(i4b),            intent(in)    :: map_n 
     real(dp), dimension(:),  intent(in)    :: b
 
     real(dp), allocatable, dimension(:)    :: r, q, d, b2, eta
@@ -195,9 +250,11 @@ contains
     real(dp)                               :: delta_old, delta_new
     real(dp)                               :: t3, t4, t5, t6
 
+    ! How big is the input RHS vector?
     m = size(b)
     
     ! Temporarily hard coded - size of N
+       ! n = npix
     n = 2*npix
 
     ! To ensure that we only allocate the CG group amplitude vector once
@@ -216,7 +273,7 @@ contains
        do i = 1, n
           eta(i) = rand_normal(0.d0,1.d0)
        end do
-       b2 = b + self%compute_sample_vector(ddata,eta,nbands,map_n,b)
+       b2 = b + self%compute_sample_vector(ddata,eta,nbands,b,flag_n)
     else if (trim(dpar%ml_mode) == 'optimize') then
        b2 = b
     end if
@@ -226,19 +283,20 @@ contains
     x_internal = self%x
     !-----------------------------
 
-    r  = b2 - self%compute_Ax(ddata, x_internal, nbands, map_n)
+    ! Do CG sampling as described by Schewuck 1994
+    r  = b2 - self%compute_Ax(ddata, x_internal, nbands, flag_n)
     d  = r
     delta_new = sum(r*r)
     delta_0   = delta_new
     i = 0
     do while( (i .lt. self%i_max) .and. (delta_new .gt. self%converge))
        t3         = mpi_wtime()
-       q          = self%compute_Ax(ddata, d, nbands, map_n)
+       q          = self%compute_Ax(ddata, d, nbands, flag_n)
        alpha      = delta_new/(sum(d*q))
        x_internal = x_internal + alpha*d
 
        if (mod(i,50) == 0) then
-          r = b2 - self%compute_Ax(ddata, x_internal, nbands, map_n)
+          r = b2 - self%compute_Ax(ddata, x_internal, nbands, flag_n)
        else
           r = r - alpha*q
        end if
@@ -259,11 +317,26 @@ contains
 
     self%x = x_internal
 
+    ! Deallocate
     deallocate(eta,b2,x_internal,r)
 
   end subroutine cg_search
 
-  subroutine compute_rhs(self,ddata,b)
+  subroutine compute_rhs(self,ddata,b,flag_n)
+    ! ===================================================== |
+    ! Subroutine which compute RHS of the matrix            |
+    ! equation:                                             |
+    !   sum_nu(T_nu^t N^-1 T_nu) = sum_nu(T_nu^t N^-1 d_nu) |
+    ! to initialize the CG group.                           |
+    ! ----------------------------------------------------- |                   
+    !                                                       |
+    ! Inputs:                                               |
+    !   self: class(dang_cg_group)                          |
+    !   ddata: class(dang_data)                             |
+    !   b: array(dp)           - RHS of matrix equation     |
+    !   flag_n: integer        - poltype flag number        |
+    !                                                       |
+    ! ===================================================== |
     implicit none
 
     class(dang_cg_group)                               :: self
@@ -272,14 +345,20 @@ contains
     type(dang_comps),                    pointer       :: c
     integer(i4b)                                       :: component
     real(dp), allocatable, dimension(:,:,:)            :: data
+    integer(i4b),                        intent(in)    :: flag_n
 
     integer(i4b)                            :: i, j, k, y
     integer(i4b)                            :: l, m, n
     integer(i4b)                            :: offset, z
-
     integer(i4b)                            :: map_n
 
-    map_n = 2 ! Dummy variable for now
+    if (iand(self%pol_flag(flag_n),1) .ne. 0) then
+       map_n = 1
+    else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
+       map_n = 2
+    else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
+       map_n = 3
+    end if
 
     ! Here is an object we'll call data, which we will correct to be the                                                      
     ! portion of the sky signal we wish to fit to      
@@ -291,17 +370,24 @@ contains
     n = nbands      ! number of bands included
 
     ! Iterate through CG group components to construct arrays
+    ! Counting through the components to figure out array sizes 
     do i = 1, self%ncg_components
        if (self%cg_component(i)%p%type == 'template') then
-          if (self%cg_component(i)%p%polfit) then
+          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+          ! if (self%cg_component(i)%p%polfit) then
              m = m + self%cg_component(i)%p%nfit
-          else
-             m = m + 2*self%cg_component(i)%p%nfit
+          else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+             m = m + self%cg_component(i)%p%nfit
+             ! m = m + 2*self%cg_component(i)%p%nfit
           end if
        else
-          ! This needs to be adjusted to properly account for solving for
-          ! different combinations of poltypes
-          m = m + 2*l
+          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+             m = m + 2*l
+          else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+             m = m + 3*l
+          else
+             m = m + l
+          end if
        end if
     end do
 
@@ -344,16 +430,41 @@ contains
           do i = 1, l
              do j = 1, n
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) then
-                   b(i)   = 0.d0
-                   b(l+i) = 0.d0
+                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                      b(i)     = 0.d0
+                      b(l+i)   = 0.d0
+                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                      b(i)     = 0.d0
+                      b(l+i)   = 0.d0
+                      b(2*l+i) = 0.d0
+                   else 
+                      b(i)     = 0.d0
+                   end if
                    cycle
                 else
-                   b(i) = b(i) + (data(i-1,map_n,j)*&
-                        & self%cg_component(k)%p%eval_sed(j,i-1,map_n))/&
-                        & (ddata%rms_map(i-1,map_n,j)**2.d0)
-                   b(l+i) = b(l+i) + (data(i-1,map_n+1,j)*&
-                        & self%cg_component(k)%p%eval_sed(j,i-1,map_n+1))/&
-                        & (ddata%rms_map(i-1,map_n+1,j)**2.d0)
+                   ! Bit flag selection for matrix building
+                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                      b(i) = b(i) + (data(i-1,2,j)*&
+                           & self%cg_component(k)%p%eval_sed(j,i-1,2))/&
+                           & (ddata%rms_map(i-1,2,j)**2.d0)
+                      b(l+i) = b(l+i) + (data(i-1,3,j)*&
+                           & self%cg_component(k)%p%eval_sed(j,i-1,3))/&
+                           & (ddata%rms_map(i-1,3,j)**2.d0)
+                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                      b(i) = b(i) + (data(i-1,1,j)*&
+                           & self%cg_component(k)%p%eval_sed(j,i-1,1))/&
+                           & (ddata%rms_map(i-1,1,j)**2.d0)
+                      b(l+i) = b(l+i) + (data(i-1,2,j)*&
+                           & self%cg_component(k)%p%eval_sed(j,i-1,2))/&
+                           & (ddata%rms_map(i-1,2,j)**2.d0)
+                      b(l+i) = b(2*l+i) + (data(i-1,3,j)*&
+                           & self%cg_component(k)%p%eval_sed(j,i-1,3))/&
+                           & (ddata%rms_map(i-1,3,j)**2.d0)
+                   else
+                      b(i) = b(i) + (data(i-1,map_n,j)*&
+                           & self%cg_component(k)%p%eval_sed(j,i-1,map_n))/&
+                           & (ddata%rms_map(i-1,map_n,j)**2.d0)
+                   end if
                 end if
              end do
           end do
@@ -368,10 +479,23 @@ contains
                 !!$OMP DO SCHEDULE(static)
                 do i = 1, l
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
-                        & data(i-1,map_n,j)*self%cg_component(k)%p%template(i-1,map_n)
-                   b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,map_n+1,j)**2.d0)*&
-                        & data(i-1,map_n+1,j)*self%cg_component(k)%p%template(i-1,map_n+1)
+                   ! Bit flag selection for matrix building
+                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
+                           & data(i-1,2,j)*self%cg_component(k)%p%template(i-1,2)
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
+                           & data(i-1,3,j)*self%cg_component(k)%p%template(i-1,3)
+                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
+                           & data(i-1,1,j)*self%cg_component(k)%p%template(i-1,1)
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
+                           & data(i-1,2,j)*self%cg_component(k)%p%template(i-1,2)
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
+                           & data(i-1,3,j)*self%cg_component(k)%p%template(i-1,3)
+                   else
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
+                           & data(i-1,map_n,j)*self%cg_component(k)%p%template(i-1,map_n)
+                   end if
                 end do
                 !!$OMP END DO
                 !!$OMP END PARALLEL
@@ -383,20 +507,10 @@ contains
     end do
   end subroutine compute_rhs
 
-  function compute_Ax(self, ddata, x, nbands, map_n) result(res)
-    implicit none
-    class(dang_cg_group)                  :: self
-    type(dang_data),        intent(in)    :: ddata
-    real(dp), dimension(:), intent(in)    :: x
-    integer(i4b),           intent(in)    :: nbands, map_n
-
-    real(dp), allocatable, dimension(:)   :: temp1, temp2, temp3, res
-
-    integer(i4b)                          :: i, j, k
-    integer(i4b)                          :: l, m, n, offset
-
-    ! How this works: result = sum_nu(T_nu^t N_nu^-1 T_nu)*x       
-    !--------------------------------------------------------------                   
+  function compute_Ax(self, ddata, x, nbands, flag_n) result(res)
+    ! =========================================================== |
+    ! How this works: result = sum_nu(T_nu^t N_nu^-1 T_nu)*x      |
+    ! ----------------------------------------------------------- |                   
     ! Suppose T_nu is of size n, m, and input vector is of size m |                    
     ! Then N^-1 is of size n, n                                   |                     
     ! And T_nu^t is of size m, n                                  |                            
@@ -409,25 +523,52 @@ contains
     ! temp2 = N_nu^-1 temp1                                       |
     ! temp3 = T_nu^t temp2                                        |
     ! res   = sum_nu(temp3)                                       |
-    !--------------------------------------------------------------                   
+    ! ----------------------------------------------------------- |                   
+    !                                                             |        
+    ! Inputs:                                                     |        
+    !   self: class(dang_cg_group)  - the CG group to compute     | 
+    !   ddata: class(dang_data)     - access to the data object   |        
+    !   x: array(dp)  - vector we multiple the matrix to          |
+    !   nbands: integer             - # of bands we evaluate over |
+    !   flag_n: integer             - poltype flag number         |
+    !                                                             |        
+    ! =========================================================== |
 
-    n      = size(x)
-    offset = 0
+    implicit none
+    class(dang_cg_group)                  :: self
+    type(dang_data),        intent(in)    :: ddata
+    real(dp), dimension(:), intent(in)    :: x
+    integer(i4b),           intent(in)    :: nbands, flag_n
+    real(dp), allocatable, dimension(:)   :: temp1, temp2, temp3, res
+
+    integer(i4b)                          :: i, j, k, map_n
+    integer(i4b)                          :: l, m, n, offset
+
+    ! Initialize CG group stuff based off of pol_flags
+    if (iand(self%pol_flag(flag_n),1) .ne. 0) then
+       map_n = 1
+    else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
+       map_n = 2
+    else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
+       map_n = 3
+    end if
+
+    n      = size(x) ! Size of the input array
+    l      = 1 ! Used for template fit counting
+    offset = 0 ! Usage below
     
-    ! do i = 1, self%ncg_components                                                     
-    !    if (self%cg_component(k)%p%type /= 'template') then                           
-    !       if (self%cg_component(k)%p%joint) then                                     
-    !          offset = offset + 2*npix                                                 
-    !       else                                                                        
-    !          offset = offset + npix                                                  
-    !       end if                                                                     
-    !    end if                                                                        
-    ! end do 
-
-    ! THERE IS CURRENTLY NO SUPPORT FOR MULTI-TEMPLATE HANDLING
-
-    offset = offset + 2*npix
-    l = 1
+    ! Count up the offset for the template handling at the end of the 
+    do i = 1, self%ncg_components                                                     
+       if (self%cg_component(i)%p%type /= 'template') then                           
+          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+             offset = offset + 2*npix
+          else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+             offset = offset + 3*npix
+          else
+             offset = offset + npix
+          end if
+       end if
+    end do
 
     allocate(temp1(offset))
     allocate(temp2(offset))
@@ -447,9 +588,16 @@ contains
              !$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                temp1(i)      = x(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
-                ! This is just for the joint stuff - add modularity later
-                temp1(npix+i) = x(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n+1)
+                if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                   temp1(i)        = x(i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
+                   temp1(npix+i)   = x(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                   temp1(i)        = x(i)*self%cg_component(k)%p%eval_sed(j,i-1,1)
+                   temp1(npix+i)   = x(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
+                   temp1(2*npix+i) = x(2*npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                else
+                   temp1(i)        = x(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                end if
              end do
              !$OMP END DO
              !$OMP END PARALLEL
@@ -459,9 +607,19 @@ contains
                 !$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp1(i)      = temp1(i) + x(offset+l)*self%cg_component(k)%p%template(i-1,map_n)
-                   temp1(npix+i) = temp1(npix+i) + x(offset+l)*&
-                        & self%cg_component(k)%p%template(i-1,map_n+1)
+                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                      temp1(i)      = temp1(i) + x(offset+l)*self%cg_component(k)%p%template(i-1,2)
+                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*&
+                           & self%cg_component(k)%p%template(i-1,3)
+                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                      temp1(i)      = temp1(i) + x(offset+l)*self%cg_component(k)%p%template(i-1,1)
+                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*&
+                           & self%cg_component(k)%p%template(i-1,2)
+                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*&
+                           & self%cg_component(k)%p%template(i-1,3)
+                   else
+                      temp1(i)      = temp1(i) + x(offset+l)*self%cg_component(k)%p%template(i-1,map_n)
+                   end if
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -474,8 +632,16 @@ contains
        !$OMP DO SCHEDULE(static)
        do i = 1, npix
           if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-          temp2(i)      = temp1(i)/(ddata%rms_map(i-1,map_n,j)**2.d0)
-          temp2(npix+i) = temp1(npix+i)/(ddata%rms_map(i-1,map_n+1,j)**2.d0)
+          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+             temp2(i)        = temp1(i)/(ddata%rms_map(i-1,2,j)**2.d0)
+             temp2(npix+i)   = temp1(npix+i)/(ddata%rms_map(i-1,3,j)**2.d0)
+          else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+             temp2(i)        = temp1(i)/(ddata%rms_map(i-1,1,j)**2.d0)
+             temp2(npix+i)   = temp1(npix+i)/(ddata%rms_map(i-1,2,j)**2.d0)
+             temp2(2*npix+i) = temp1(npix+i)/(ddata%rms_map(i-1,3,j)**2.d0)
+          else
+             temp2(i)        = temp1(i)/(ddata%rms_map(i-1,map_n,j)**2.d0)
+          end if
        end do
        !$OMP END DO
        !$OMP END PARALLEL
@@ -487,8 +653,16 @@ contains
              !$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                temp3(i)      = temp2(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
-                temp3(npix+i) = temp2(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                   temp3(i)        = temp2(i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
+                   temp3(npix+i)   = temp2(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                   temp3(i)        = temp2(i)*self%cg_component(k)%p%eval_sed(j,i-1,1)
+                   temp3(npix+i)   = temp2(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
+                   temp3(2*npix+i) = temp2(2*npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                else
+                   temp3(i)        = temp2(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                end if
              end do
              !$OMP END DO
              !$OMP END PARALLEL
@@ -498,9 +672,19 @@ contains
                 !!$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp3(offset+l) = temp3(offset+l) + temp2(i)*self%cg_component(k)%p%template(i-1,map_n)
-                   temp3(offset+l) = temp3(offset+l) + temp2(npix+i)*&
-                        & self%cg_component(k)%p%template(i-1,map_n+1)
+                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                      temp3(offset+l) = temp3(offset+l) + temp2(i)*self%cg_component(k)%p%template(i-1,2)
+                      temp3(offset+l) = temp3(offset+l) + temp2(npix+i)*&
+                           & self%cg_component(k)%p%template(i-1,3)
+                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                      temp3(offset+l) = temp3(offset+l) + temp2(i)*self%cg_component(k)%p%template(i-1,1)
+                      temp3(offset+l) = temp3(offset+l) + temp2(npix+i)*&
+                           & self%cg_component(k)%p%template(i-1,2)
+                      temp3(offset+l) = temp3(offset+l) + temp2(npix+i)*&
+                           & self%cg_component(k)%p%template(i-1,3)
+                   else
+                      temp3(offset+l) = temp3(offset+l) + temp2(i)*self%cg_component(k)%p%template(i-1,map_n)
+                   end if
                 end do
                 !!$OMP END DO
                 !!$OMP END PARALLEL
@@ -512,21 +696,10 @@ contains
     end do
   end function compute_Ax
 
-  function compute_sample_vector(self, ddata, eta, nbands, map_n, b) result(res)
-    implicit none
-    class(dang_cg_group)                  :: self
-    type(dang_data),        intent(in)    :: ddata
-    
-    real(dp), dimension(:), intent(in)    :: eta, b
-    integer(i4b),           intent(in)    :: nbands, map_n
-    
-    real(dp), allocatable, dimension(:)   :: temp1, temp2, res
-
-    integer(i4b)                          :: i, j, k
-    integer(i4b)                          :: offset, l, m, n
-
-    ! How this works: result = sum_nu(T_nu^t N_nu^{-1/2})vec                                       
-    !--------------------------------------------------------------                                
+  function compute_sample_vector(self, ddata, eta, nbands, b, flag_n) result(res)
+    ! =========================================================== |
+    ! How this works: result = sum_nu(T_nu^t N_nu^{-1/2})vec      | 
+    ! ----------------------------------------------------------- |        
     ! Suppose T_nu is of size n, m, and input vector is of size m |                                
     ! Then N^{-1/2} is of size n, n                               |                                
     ! And T_nu^t is of size m, n                                  |                                
@@ -537,25 +710,63 @@ contains
     !                                                             |                                
     ! temp1 = N_nu^{-1/2}vec                                      |
     ! temp2 = T_nu^t temp1                                        |
-    ! res   = sum_nu(temp2)                                      |
-    !--------------------------------------------------------------                                
+    ! res   = sum_nu(temp2)                                       |
+    ! ----------------------------------------------------------- |                                
+    !                                                             |                                
+    ! Inputs:                                                     |        
+    !   self: class(dang_cg_group)  - the CG group to compute     | 
+    !   ddata: class(dang_data)     - access to the data object   |        
+    !   eta: array(dp)  - vector of univariates for sampling term |
+    !   nbands: integer             - # of bands we evaluate over |
+    !   b: array(dp)                - RHS of matrix equation      |
+    !   flag_n: integer             - poltype flag number         |
+    !                                                             |                                
+    ! Outputs:                                                    |                                
+    !                                                             |                                
+    !   res: array(dp)              - resulting vector            |                                
+    !                                                             |                                
+    ! =========================================================== |
+    implicit none
+    class(dang_cg_group)                  :: self
+    type(dang_data),        intent(in)    :: ddata
+    
+    real(dp), dimension(:), intent(in)    :: eta, b
+    integer(i4b),           intent(in)    :: nbands, flag_n
+    
+    real(dp), allocatable, dimension(:)   :: temp1, temp2, res
+
+    integer(i4b)                          :: i, j, k, map_n
+    integer(i4b)                          :: offset, l, m, n
+
+
+    ! Initialize CG group stuff based off of pol_flags
+    if (iand(self%pol_flag(flag_n),1) .ne. 0) then
+       map_n = 1
+    else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
+       map_n = 2
+    else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
+       map_n = 3
+    end if
 
     n      = size(eta)
     m      = size(b)
     offset = 0
     l      = 1
     
-    ! do i = 1, self%ncg_components
-    !    if (self%cg_component(k)%p%type /= 'template') then
-    !       if (self%cg_component(k)%p%joint) then
-    !          offset = offset + 2*npix
-    !       else
-    !          offset = offset + npix
-    !       end if
-    !    end if
-    ! end do
+    ! Count up the offset for the template handling at the end of the 
+    do i = 1, self%ncg_components                                                     
+       if (self%cg_component(i)%p%type /= 'template') then                           
+          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+             offset = offset + 2*npix
+          else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+             offset = offset + 3*npix
+          else
+             offset = offset + npix
+          end if
+       end if
+    end do
 
-    offset = offset + 2*npix
+    ! offset = offset + 2*npix
 
     allocate(temp1(n))
     allocate(temp2(m))
@@ -571,9 +782,16 @@ contains
        !!$OMP DO SCHEDULE(static)
        do i = 1, npix
           if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-          temp1(i)      = eta(i)/(ddata%rms_map(i-1,map_n,j))
-          ! This is just for the joint stuff - add modularity later
-          temp1(npix+i) = eta(npix+i)/(ddata%rms_map(i-1,map_n+1,j))
+          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+             temp1(i)        = eta(i)/(ddata%rms_map(i-1,2,j))
+             temp1(npix+i)   = eta(npix+i)/(ddata%rms_map(i-1,3,j))
+          else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+             temp1(i)        = eta(i)/(ddata%rms_map(i-1,1,j))
+             temp1(npix+i)   = eta(npix+i)/(ddata%rms_map(i-1,2,j))
+             temp1(2*npix+i) = eta(2*npix+i)/(ddata%rms_map(i-1,3,j))
+          else
+             temp1(i)        = eta(i)/(ddata%rms_map(i-1,map_n,j))
+          end if
        end do
        !!$OMP END DO
        !!$OMP END PARALLEL
@@ -584,9 +802,16 @@ contains
              !!$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                temp2(i) = temp1(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
-                ! This is just for the joint stuff - add modularity later
-                temp2(npix+i) = temp1(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n+1)
+                if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                   temp2(i)        = temp1(i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
+                   temp2(npix+i)   = temp1(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                   temp2(i)        = temp1(i)*self%cg_component(k)%p%eval_sed(j,i-1,1)
+                   temp2(npix+i)   = temp1(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
+                   temp2(2*npix+i) = temp1(2*npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                else
+                   temp2(i)        = temp1(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                end if
              end do
              !!$OMP END DO
              !!$OMP END PARALLEL
@@ -596,10 +821,19 @@ contains
                 !!$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp2(offset+l) = temp2(offset+l) + temp1(i)*self%cg_component(k)%p%template(i-1,map_n)
-                   ! This is just for the joint stuff - add modularity later
-                   temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*&
-                        & self%cg_component(k)%p%template(i-1,map_n+1)
+                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                      temp2(offset+l) = temp2(offset+l) + temp1(i)*self%cg_component(k)%p%template(i-1,2)
+                      temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*&
+                           & self%cg_component(k)%p%template(i-1,3)
+                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                      temp2(offset+l) = temp2(offset+l) + temp1(i)*self%cg_component(k)%p%template(i-1,1)
+                      temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*&
+                           & self%cg_component(k)%p%template(i-1,2)
+                      temp2(offset+l) = temp2(offset+l) + temp1(2*npix+i)*&
+                           & self%cg_component(k)%p%template(i-1,3)
+                   else
+                      temp2(offset+l) = temp2(offset+l) + temp1(i)*self%cg_component(k)%p%template(i-1,map_n)
+                   end if
                 end do
                 !!$OMP END DO
                 !!$OMP END PARALLEL
@@ -611,14 +845,38 @@ contains
     end do
  end function compute_sample_vector
 
-  subroutine unpack_amplitudes(self, dpar, ddata, map_n)
+ subroutine unpack_amplitudes(self, dpar, ddata, flag_n)
+    ! =========================================================== |
+    !  This routine walks through the resulting amplitude vector, |                                
+    !  storing the amplitude results in the correct foregrounds.  | 
+    !                                                             |                                
+    ! ----------------------------------------------------------- |                                
+    !                                                             |                                
+    ! Inputs:                                                     |                                
+    !   self: class(dang_cg_group) - the cg_group being sampled   |
+    !   dpar: class(dang_params)   - access to the param object   |
+    !   ddata: class(dang_data)    - access to the data object    |
+    !   flag_n: integer            - poltype flag number          |
+    !                                                             |                                
+    ! =========================================================== |
     implicit none
     class(dang_cg_group)               :: self
     type(dang_data),     intent(in)    :: ddata
     type(dang_params)                  :: dpar
-    integer(i4b),        intent(in)    :: map_n 
+    integer(i4b),        intent(in)    :: flag_n
     
     integer(i4b)                       :: offset, i, j, k, l
+    integer(i4b)                       :: map_n 
+
+
+    ! Initialize CG group stuff based off of pol_flags
+    if (iand(self%pol_flag(flag_n),1) .ne. 0) then
+       map_n = 1
+    else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
+       map_n = 2
+    else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
+       map_n = 3
+    end if
 
     offset = 0
 
@@ -626,21 +884,50 @@ contains
     ! are properly stored
     do k = 1, self%ncg_components
        if (self%cg_component(k)%p%type /= 'template') then
-          do i = 1, npix
-             self%cg_component(k)%p%amplitude(i-1,map_n) = self%x(offset+i)
-          end do
-          offset = offset + npix
-          do i = 1, npix
-             self%cg_component(k)%p%amplitude(i-1,map_n+1) = self%x(offset+i)
-          end do
-          offset = offset + npix
+          ! Unravel according to polarization flags
+          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+             do i = 1, npix
+                self%cg_component(k)%p%amplitude(i-1,2) = self%x(offset+i)
+             end do
+             offset = offset + npix
+             do i = 1, npix
+                self%cg_component(k)%p%amplitude(i-1,3) = self%x(offset+i)
+             end do
+             offset = offset + npix
+          else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+             do i = 1, npix
+                self%cg_component(k)%p%amplitude(i-1,1) = self%x(offset+i)
+             end do
+             offset = offset + npix
+             do i = 1, npix
+                self%cg_component(k)%p%amplitude(i-1,2) = self%x(offset+i)
+             end do
+             offset = offset + npix
+             do i = 1, npix
+                self%cg_component(k)%p%amplitude(i-1,3) = self%x(offset+i)
+             end do
+             offset = offset + npix
+          else
+             do i = 1, npix
+                self%cg_component(k)%p%amplitude(i-1,2) = self%x(offset+i)
+             end do
+             offset = offset + npix
+          end if
        else
           l = 1
           do while (l .lt. self%cg_component(k)%p%nfit)
              do j = 1, nbands
                 if (self%cg_component(k)%p%corr(j)) then
-                   self%cg_component(k)%p%template_amplitudes(j,map_n)   = self%x(offset+l)
-                   self%cg_component(k)%p%template_amplitudes(j,map_n+1) = self%x(offset+l)
+                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                      self%cg_component(k)%p%template_amplitudes(j,2)     = self%x(offset+l)
+                      self%cg_component(k)%p%template_amplitudes(j,3)     = self%x(offset+l)
+                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                      self%cg_component(k)%p%template_amplitudes(j,1)     = self%x(offset+l)
+                      self%cg_component(k)%p%template_amplitudes(j,2)     = self%x(offset+l)
+                      self%cg_component(k)%p%template_amplitudes(j,3)     = self%x(offset+l)
+                   else
+                      self%cg_component(k)%p%template_amplitudes(j,map_n) = self%x(offset+l)
+                   end if
                    l = l + 1
                 end if
              end do

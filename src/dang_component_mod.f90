@@ -446,10 +446,10 @@ contains
           end if
        ! else if (trim(dpar%fg_label(ind)) == 'mbb') then
        else if (ind == 2) then
-          z = h / (k_B*self%T_d(pix,map_n))
+          z = h / (k_B*19.6d0)!self%T_d(pix,map_n))
           do i = 1, bp%n
              compute_spectrum = compute_spectrum + bp%tau0(i)*(exp(z*353.d0*1d9)-1.d0) / &
-                  (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/353.d9)**(self%beta_d(pix,map_n)+1.d0)
+                  (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/353.d9)**(1.53d0+1.d0)!(self%beta_d(pix,map_n)+1.d0)
           end do
        end if
     end if
