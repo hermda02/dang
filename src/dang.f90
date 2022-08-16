@@ -101,7 +101,8 @@ program dang
      call initialize_components(dpar)
      call initialize_cg_groups(dpar)
      write(*,*) '--------------------------'
-     stop
+
+     component_list(1)%p%template_amplitudes(:,:) = 1.d-4
      
      ! Debug initialization here
      ! dcomps%HI_amps(:) = 1.d-4
@@ -222,52 +223,63 @@ contains
  ! ------------------------------------------------------------------------------------------ 
  subroutine hi_fit
    
-   real(dp) :: dummy1, dummy2, s
+   ! real(dp) :: dummy1, dummy2, s
 
-   do j = 1, nbands
-      ! Compute the residual for each map
-      do i = 0, npix-1
-         if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
-         ddata%res_map(i,1,j) = (ddata%sig_map(i,1,j)-ddata%offset(j))/ddata%gain(j) &
-              - dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))
-      end do
-      ! Compute the chisq for each band
-      ddata%band_chisq(j) = 0.d0
-      do i = 0, npix-1
-         if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
-         ddata%band_chisq(j) = ddata%band_chisq(j) + (ddata%res_map(i,1,j)/ddata%rms_map(i,1,j))**2
-      end do
-   end do
-   call write_maps(dpar,ddata)
+   ! do j = 1, nbands
+   !    ! Compute the residual for each map
+   !    do i = 0, npix-1
+   !       if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
+   !       ddata%res_map(i,1,j) = (ddata%sig_map(i,1,j)-ddata%offset(j))/ddata%gain(j) &
+   !            - dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))
+   !    end do
+   !    ! Compute the chisq for each band
+   !    ddata%band_chisq(j) = 0.d0
+   !    do i = 0, npix-1
+   !       if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
+   !       ddata%band_chisq(j) = ddata%band_chisq(j) + (ddata%res_map(i,1,j)/ddata%rms_map(i,1,j))**2
+   !    end do
+   ! end do
+   ! call write_maps(dpar,ddata)
    
    do iter = 1, dpar%ngibbs
       
-      if (iter > 1) then
-         do j = 1, nbands
-            if (dpar%fit_gain(j)) then
-               call sample_band_gain(dpar, ddata, dcomps, 1, j, 1, 1)
-            end if
-            if (dpar%fit_offs(j)) then
-               call sample_band_offset(dpar, ddata, dcomps, 1, j, 1, 1)
-            end if
-         end do
-      end if
+      ! if (iter > 1) then
+      !    do j = 1, nbands
+      !       if (dpar%fit_gain(j)) then
+      !          call sample_band_gain(dpar, ddata, dcomps, 1, j, 1, 1)
+      !       end if
+      !       if (dpar%fit_offs(j)) then
+      !          call sample_band_offset(dpar, ddata, dcomps, 1, j, 1, 1)
+      !       end if
+      !    end do
+      ! end if
       
-      write(*,*) 'Fit templates'
-      ! call template_fit(dpar, ddata, dcomps, 1)
-      ! call write_stats_to_term(ddata,dpar,dcomps,iter)
-      write(*,*) 'Sample Td'
-      call sample_HI_T(dpar, ddata, dcomps, 1, 1000)
-      write(*,*) 'Done sampling'
-
-      ! How good is the fit and what are the parameters looking like?
-      ! call update_ddata(ddata,dpar,dcomps)
+      ! ------------------------------------------------------------------------------------------
+      ! Sample each CG group for amplitudes
+      ! ------------------------------------------------------------------------------------------
+      call sample_cg_groups(dpar,ddata)
+      call ddata%update_sky_model
       call write_stats_to_term(ddata,dpar,dcomps,iter)
+      
+      ! ------------------------------------------------------------------------------------------
+      ! Sample each spectral parameter
+      ! ------------------------------------------------------------------------------------------
+      call sample_spectral_parameters(ddata)
+      call ddata%update_sky_model
+      call write_stats_to_term(ddata,dpar,dcomps,iter)
+
+      ! ------------------------------------------------------------------------------------------
+      ! Write out the data
+      ! ------------------------------------------------------------------------------------------
+      do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+         if (rank == master) then
+            call write_data(dpar,ddata,k)
+         end if
+      end do
       if (mod(iter,dpar%iter_out) .EQ. 0) then
          call write_maps(dpar,ddata)
       end if
-      call write_data(dpar,ddata,1)
-      write(*,*) ''
+      ! ------------------------------------------------------------------------------------------
 
    end do
  end subroutine hi_fit

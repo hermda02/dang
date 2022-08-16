@@ -148,7 +148,14 @@ contains
     self%sky_model(:,:,:) = 0.d0
     do l = 1, ncomp
        c => component_list(l)%p
-       if (c%type /= 'template') then
+       if (c%type == 'hi_fit') then
+          do i = 0, npix-1
+             do j = 1, nbands
+                self%sky_model(i,1,j) = self%sky_model(i,1,j) + &
+                        & c%eval_sed(j,i,1)*c%template_amplitudes(j,1)
+             end do
+          end do
+       else if (c%type /= 'template') then
           do i = 0, npix-1
              do k = 1, nmaps
                 do j = 1, nbands
@@ -511,7 +518,8 @@ contains
              if (nbands .lt. 10) then
                 write(*,fmt='(i6, a, f10.5, a, f10.3, a, 10e10.3)')&
                      iter, " - chisq: " , self%chisq, " - T_d: ",&
-                     mask_avg(dcomps%T_d(:,1),self%masks(:,1)), ' - A_HI: ', dcomps%HI_amps
+                     mask_avg(component_list(1)%p%indices(:,1,1),self%masks(:,1)),&
+                     ' - A_HI: ', component_list(1)%p%template_amplitudes(:,1)
                 write(*,fmt='(a)') '---------------------------------------------'
              else
                 write(*,fmt='(i6, a, E10.3, a, e10.3)')&
@@ -657,57 +665,56 @@ contains
     ! Commented out this whole section for now
     else if (trim(dpar%mode) == 'hi_fit') then
        
+       write(iter_str, '(i0.5)') iter
+       do j = 1, nbands
+          title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
+          map(:,1)   = component_list(1)%p%template_amplitudes(j,1)*component_list(1)%p%template(:,1)
+          do i = 0, npix-1
+             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                map(i,1) = missval
+             end if
+          end do
+          call write_bintab(map,npix,1, header, nlheader, trim(title))
+       end do
+       ! Write out residual maps
+       do j = 1, nbands
+          title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
+          map(:,:)   = dat%res_map(:,:,j)
+          do i = 0, npix-1
+             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                map(i,1) = missval
+             end if
+          end do
+          call write_bintab(map,npix,1, header, nlheader, trim(title))
+       end do
 
-       ! write(iter_str, '(i0.5)') iter
-       ! do j = 1, nbands
-       !    title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
-       !    map(:,1)   = dcomps%HI_amps(j)*dcomps%HI(:,1)
-       !    do i = 0, npix-1
-       !       if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-       !          map(i,1) = missval
-       !       end if
-       !    end do
-       !    call write_bintab(map,npix,1, header, nlheader, trim(title))
-       ! end do
-       ! ! Write out residual maps
-       ! do j = 1, nbands
-       !    title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
-       !    map(:,:)   = dat%res_map(:,:,j)
-       !    do i = 0, npix-1
-       !       if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-       !          map(i,1) = missval
-       !       end if
-       !    end do
-       !    call write_bintab(map,npix,1, header, nlheader, trim(title))
-       ! end do
+       ! Write out T_d map
+       title = trim(dpar%outdir) // 'T_d_k'// trim(iter_str) // '.fits'
+       map(:,1)   = component_list(1)%p%indices(:,1,1)
+       do i = 0, npix-1
+          if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+             map(i,1) = missval
+          end if
+       end do
+       call write_bintab(map,npix,1, header, nlheader, trim(title))
 
-       ! ! Write out T_d map
-       ! title = trim(dpar%outdir) // 'T_d_k'// trim(iter_str) // '.fits'
-       ! map(:,1)   = dcomps%T_d(:,1)
-       ! do i = 0, npix-1
-       !    if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-       !       map(i,1) = missval
-       !    end if
-       ! end do
-       ! call write_bintab(map,npix,1, header, nlheader, trim(title))
-
-       ! ! Compute and write out \chi^2 map
-       ! dat%chi_map = 0.d0
-       ! do i = 0, npix-1
-       !    do j = 1, nbands
-       !       s = dat%gain(j)*dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))+dat%offset(j)
-       !       dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
-       !    end do
-       ! end do
-       ! dat%chi_map(:,1) = dat%chi_map(:,1)!/(nbands)
-       ! title = trim(dpar%outdir) // 'chisq_k' // trim(iter_str) // '.fits'
-       ! map(:,1)   = dat%chi_map(:,1)
-       ! do i = 0, npix-1
-       !    if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-       !       map(i,1) = missval
-       !    end if
-       ! end do
-       ! call write_bintab(map,npix,1, header, nlheader, trim(title))
+       ! Compute and write out \chi^2 map
+       dat%chi_map = 0.d0
+       do i = 0, npix-1
+          do j = 1, nbands
+             s = dat%gain(j)*component_list(1)%p%template_amplitudes(j,1)*component_list(1)%p%eval_sed(j,i-1,k)+dat%offset(j)
+             dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
+          end do
+       end do
+       dat%chi_map(:,1) = dat%chi_map(:,1)!/(nbands)
+       title = trim(dpar%outdir) // 'chisq_k' // trim(iter_str) // '.fits'
+       map(:,1)   = dat%chi_map(:,1)
+       do i = 0, npix-1
+          if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+             map(i,1) = missval
+          end if
+       end do
+       call write_bintab(map,npix,1, header, nlheader, trim(title))
     end if
     
   end subroutine write_maps
