@@ -30,12 +30,27 @@ contains
        if (c%nindices == 0) cycle
        do j = 1, c%nindices
           if (c%sample_index(j)) then
-             ! Should probably include some modes for varying
-             ! poltype combinations
-             ! if (c%joint_index(l)) then
-             ! 
-             write(*,*) 'Sampling spectral index for ', trim(c%label)
-             call sample_index_mh(ddata,c,j,-1)
+             do k = 1, c%nflag(j)
+                if (iand(c%pol_flag(j,k),1) .ne. 0) then
+                   write(*,*) 'Sampling spectral index for ', trim(c%label), 'poltype = I.'
+                   call sample_index_mh(ddata,c,j,1)
+                else if (iand(c%pol_flag(j,k),2) .ne. 0) then
+                   write(*,*) 'Sampling spectral index for ', trim(c%label), 'poltype = Q.'
+                   call sample_index_mh(ddata,c,j,2)
+                else if (iand(c%pol_flag(j,k),4) .ne. 0) then
+                   write(*,*) 'Sampling spectral index for ', trim(c%label), 'poltype = U.'
+                   call sample_index_mh(ddata,c,j,3)
+                else if (iand(c%pol_flag(j,k),8) .ne. 0) then
+                   write(*,*) 'Sampling spectral index for ', trim(c%label), 'poltype = Q+U.'
+                   call sample_index_mh(ddata,c,j,-1)
+                else if (iand(c%pol_flag(j,k),15) .ne. 0) then
+                   write(*,*) 'Sampling spectral index for ', trim(c%label), 'poltype = I+Q+U.'
+                   call sample_index_mh(ddata,c,j,-2)
+                else
+                   write(*,*) "There is something wrong with the poltype flag"
+                   write(*,*) "for component ", trim(c%label)
+                end if
+             end do
           end if
        end do
     end do
@@ -99,14 +114,18 @@ contains
     ! mh_mode :
     !    1 --- corresponds to sampling for the poltype which is input to the routine
     !    2 --- sampling for Q+U jointly
+    !    3 --- sampling for I+Q+U jointly
     !=================================================
     if (map_n == -1) then
        mh_mode = 2
+    else if (map_n == -2) then
+       mh_mode = 3
     else
        mh_mode = 1
     end if
     
     ! Now time to begin sampling
+    ! Index mode 1 corresponds to full sky value for the spectral parameter
     if (c%index_mode(nind) == 1) then
        lnl = 0.d0
        ! Ensure proper handling of poltypes
@@ -114,9 +133,13 @@ contains
           do l = 1, c%nindices
              sample(l)   = c%indices(0,map_n,l)
           end do
-       else
+       else if (mh_mode == 2) then
           do l = 1, c%nindices
              sample(l)   = c%indices(0,2,l)
+          end do
+       else if (mh_mode == 3) then
+          do l = 1, c%nindices
+             sample(l)   = c%indices(0,1,l)
           end do
        end if
        
@@ -128,9 +151,17 @@ contains
                 model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,sample)
              end do
           end do
-       else
+       else if (mh_mode == 2) then
           do i = 0, npix-1
-             do k = 1, nmaps
+             do k = 2, 3
+                do j = 1, nbands
+                   model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,sample)
+                end do
+             end do
+          end do
+       else if (mh_mode == 3) then
+          do i = 0, npix-1
+             do k = 1, 3
                 do j = 1, nbands
                    model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,sample)
                 end do
@@ -161,9 +192,17 @@ contains
                    model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,theta)
                 end do
              end do
-          else
+          else if (mh_mode == 2) then
              do i = 0, npix-1
-                do k = 1, nmaps
+                do k = 2, 3
+                   do j = 1, nbands
+                      model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,theta)
+                   end do
+                end do
+             end do
+          else if (mh_mode == 3) then
+             do i = 0, npix-1
+                do k = 1, 3
                    do j = 1, nbands
                       model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,theta)
                    end do
@@ -197,12 +236,13 @@ contains
              end if
           end if
        end do
-       stop
        ! Ensure proper handling of poltypes
        if (mh_mode == 1) then
           c%indices(:,map_n,nind) = sample(nind)
-       else
-          c%indices(:,2:3,nind)   = sample(nind)
+       else if (mh_mode == 2) then
+          c%indices(:,2:3,nind) = sample(nind)
+       else if (mh_mode == 3) then
+          c%indices(:,1:3,nind) = sample(nind)
        end if
 
     else if (c%index_mode(nind) == 2) then
@@ -232,8 +272,14 @@ contains
              do j = 1, nbands
                 model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,sample)
              end do
-          else
-             do k = 1, nmaps
+          else if (mh_mode == 2) then
+             do k = 2, 3
+                do j = 1, nbands
+                   model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,sample)
+                end do
+             end do
+          else if (mh_mode == 3) then
+             do k = 1, 3
                 do j = 1, nbands
                    model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,sample)
                 end do
@@ -261,8 +307,14 @@ contains
                 do j = 1, nbands
                    model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,theta)
                 end do
-             else
-                do k = 1, nmaps
+             else if (mh_mode == 2) then
+                do k = 2, 3
+                   do j = 1, nbands
+                      model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,theta)
+                   end do
+                end do
+             else if (mh_mode == 3) then
+                do k = 1, 3
                    do j = 1, nbands
                       model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,theta)
                    end do
@@ -299,8 +351,10 @@ contains
           ! Ensure proper handling of poltypes
           if (mh_mode == 1) then
              c%indices(i,map_n,nind) = sample(nind)
-          else
+          else if (mh_mode == 2) then
              c%indices(i,2:3,nind) = sample(nind)
+          else if (mh_mode == 3) then
+             c%indices(i,1:3,nind) = sample(nind)
           end if
        end do
        !$OMP END DO

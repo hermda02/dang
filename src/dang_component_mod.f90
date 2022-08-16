@@ -35,6 +35,10 @@ module dang_component_mod
      character(len=16), allocatable, dimension(:)     :: prior_type
      real(dp),          allocatable, dimension(:,:)   :: gauss_prior
      real(dp),          allocatable, dimension(:,:)   :: uni_prior
+
+     ! Poltype information
+     integer(i4b),      allocatable, dimension(:)     :: nflag
+     integer(i4b),      allocatable, dimension(:,:)   :: pol_flag
     
    contains
 
@@ -69,7 +73,9 @@ contains
     class(dang_comps), pointer    :: constructor
     integer(i4b),      intent(in) :: component
 
-    integer(i4b)                  :: i
+    integer(i4b)                  :: i, j, count
+
+    integer(i4b), allocatable, dimension(:) :: flag_buffer
 
     allocate(constructor)
 
@@ -80,15 +86,19 @@ contains
     if (trim(constructor%type) == 'mbb') then
        ! Allocate arrays to appropriate size for each component type
        constructor%nindices = 2
-       allocate(constructor%gauss_prior(2,2))
-       allocate(constructor%uni_prior(2,2))
-       allocate(constructor%sample_index(2))
-       allocate(constructor%prior_type(2))
-       allocate(constructor%index_mode(2))
+       allocate(constructor%gauss_prior(constructor%nindices,2))
+       allocate(constructor%uni_prior(constructor%nindices,2))
+       allocate(constructor%sample_index(constructor%nindices))
+       allocate(constructor%prior_type(constructor%nindices))
+       allocate(constructor%index_mode(constructor%nindices))
+
+       ! Allocate general pol_type flag array
+       allocate(constructor%nflag(constructor%nindices))
+       allocate(constructor%pol_flag(constructor%nindices,3)) ! The three is here because that's the max number of poltypes we can handle
 
        ! Allocate maps for the components
        allocate(constructor%amplitude(0:npix-1,nmaps))
-       allocate(constructor%indices(0:npix-1,nmaps,2))
+       allocate(constructor%indices(0:npix-1,nmaps,constructor%nindices))
 
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
@@ -101,7 +111,19 @@ contains
                & nmaps, nullval, anynull, header=header)
        end if
 
+       ! Initialize pol_flag arrays
+       constructor%nflag = 0
+       constructor%pol_flag = 0
+
        do i = 1, constructor%nindices
+
+          ! Load the poltype into the flag buffer, and store bit flags for each component
+          flag_buffer = return_poltype_flag(dpar%fg_spec_poltype(component,i))
+          constructor%nflag = size(flag_buffer)
+          do j = 1, size(flag_buffer)
+             constructor%pol_flag(i,j) = flag_buffer(j)
+          end do
+
           ! Do we sample this index?
           constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)
 
@@ -131,15 +153,19 @@ contains
     else if (trim(constructor%type) == 'power-law') then
        ! Allocate arrays to appropriate size for each component type
        constructor%nindices = 1
-       allocate(constructor%gauss_prior(1,2))
-       allocate(constructor%uni_prior(1,2))
-       allocate(constructor%sample_index(1))
-       allocate(constructor%prior_type(1))
-       allocate(constructor%index_mode(1))
+       allocate(constructor%gauss_prior(constructor%nindices,2))
+       allocate(constructor%uni_prior(constructor%nindices,2))
+       allocate(constructor%sample_index(constructor%nindices))
+       allocate(constructor%prior_type(constructor%nindices))
+       allocate(constructor%index_mode(constructor%nindices))
+
+       ! Allocate general pol_type flag array
+       allocate(constructor%nflag(constructor%nindices))
+       allocate(constructor%pol_flag(constructor%nindices,3)) ! The three is here because that's the max number of poltypes we can handle
        
        ! Allocate maps for the components
        allocate(constructor%amplitude(0:npix-1,nmaps))
-       allocate(constructor%indices(0:npix-1,nmaps,1))
+       allocate(constructor%indices(0:npix-1,nmaps,constructor%nindices))
        
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
@@ -152,7 +178,19 @@ contains
                & nmaps, nullval, anynull, header=header)
        end if
 
+       ! Initialize pol_flag arrays
+       constructor%nflag = 0
+       constructor%pol_flag = 0
+
        do i = 1, constructor%nindices
+
+          ! Load the poltype into the flag buffer, and store bit flags for each component
+          flag_buffer = return_poltype_flag(dpar%fg_spec_poltype(component,i))
+          constructor%nflag = size(flag_buffer)
+          do j = 1, size(flag_buffer)
+             constructor%pol_flag(i,j) = flag_buffer(j)
+          end do
+
           ! Do we sample this index?
           constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)
 
@@ -187,6 +225,21 @@ contains
                                                        ! fit template amplitude (template_amplitudes)
        allocate(constructor%template_amplitudes(nbands,nmaps))
        allocate(constructor%template(0:npix-1,nmaps))
+
+       ! Allocate general pol_type flag array
+       allocate(constructor%nflag(1))
+       allocate(constructor%pol_flag(1,3)) ! The three is here because that's the max number of poltypes we can handle
+
+       ! Initialize pol_flag arrays
+       constructor%nflag = 0
+       constructor%pol_flag = 0
+
+       ! Load the poltype into the flag buffer, and store bit flags for each component
+       flag_buffer = return_poltype_flag(dpar%fg_spec_poltype(component,1))
+       constructor%nflag = size(flag_buffer)
+       do j = 1, size(flag_buffer)
+          constructor%pol_flag(1,j) = flag_buffer(j)
+       end do
 
        constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
        constructor%corr                = dpar%fg_temp_corr(component,:)

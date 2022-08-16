@@ -72,7 +72,6 @@ module dang_param_mod
      integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
      logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_spec   ! Logical - sample fg parameter?
      integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
-     ! logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_joint  ! Logical - sample fg spec param jointly in Q and U?
      character(len=512), allocatable, dimension(:,:)   :: fg_spec_file   ! Fg spectral parameter input map
      character(len=10),  allocatable, dimension(:,:)   :: fg_spec_poltype ! Fg spectral parameter poltype
      logical(lgt),       allocatable, dimension(:,:)   :: fg_temp_corr   ! Logical - do we template correct this band?
@@ -618,8 +617,6 @@ contains
                   par_lgt=par%fg_samp_spec(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_POLTYPE'//itext, len_itext=len_itext,&
                   par_string=par%fg_spec_poltype(i,1))
-             ! call get_parameter_hashtable(htbl, 'COMP_BETA_JOINT'//itext, len_itext=len_itext,&
-             !      par_lgt=par%fg_spec_joint(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
                   par_string=par%fg_spec_file(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_REGION'//itext, len_itext=len_itext,&
@@ -627,22 +624,16 @@ contains
              call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR'//itext, len_itext=len_itext,&
                   par_string=par%fg_prior_type(i,1))
           else if (trim(par%fg_type(i)) == 'mbb') then
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
+             call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&
                   par_dp=par%fg_gauss(i,1,1))
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
+             call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR_GAUSS_STD'//itext, len_itext=len_itext,&
                   par_dp=par%fg_gauss(i,1,2))
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
+             call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR_UNI_LOW'//itext, len_itext=len_itext,&
                   par_dp=par%fg_uni(i,1,1))
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
+             call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR_UNI_HIGH'//itext, len_itext=len_itext,&
                   par_dp=par%fg_uni(i,1,2))
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_T_MEAN'//itext, len_itext=len_itext,&
-                  par_dp=par%fg_gauss(i,2,1))
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_T_STD'//itext, len_itext=len_itext,&
-                  par_dp=par%fg_gauss(i,2,2))
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_LOW'//itext, len_itext=len_itext,&
-                  par_dp=par%fg_uni(i,2,1))
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_T_HIGH'//itext, len_itext=len_itext,&
-                  par_dp=par%fg_uni(i,2,2))
+             call get_parameter_hashtable(htbl, 'COMP_BETA_POLTYPE'//itext, len_itext=len_itext,&
+                  par_string=par%fg_spec_poltype(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA'//itext, len_itext=len_itext, par_dp=par%fg_init(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
                   par_string=par%fg_spec_file(i,1))
@@ -650,6 +641,16 @@ contains
                   par_int=par%fg_samp_nside(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
                   par_lgt=par%fg_samp_spec(i,1))
+             call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&
+                  par_dp=par%fg_gauss(i,2,1))
+             call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_STD'//itext, len_itext=len_itext,&
+                  par_dp=par%fg_gauss(i,2,2))
+             call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_UNI_LOW'//itext, len_itext=len_itext,&
+                  par_dp=par%fg_uni(i,2,1))
+             call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_UNI_HIGH'//itext, len_itext=len_itext,&
+                  par_dp=par%fg_uni(i,2,2))
+             call get_parameter_hashtable(htbl, 'COMP_T_POLTYPE'//itext, len_itext=len_itext,&
+                  par_string=par%fg_spec_poltype(i,2))
              call get_parameter_hashtable(htbl, 'COMP_T'//itext, len_itext=len_itext, par_dp=par%fg_init(i,2))
              call get_parameter_hashtable(htbl, 'COMP_T_SAMP_NSIDE'//itext, len_itext=len_itext,&
                   par_int=par%fg_samp_nside(i,2))
@@ -658,6 +659,8 @@ contains
              call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
                   par_string=par%fg_spec_file(i,2))
           else if (trim(par%fg_type(i)) == 'template') then
+             call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
+                  par_string=par%fg_spec_poltype(i,1))
              do j = 1, par%numband
                 call int2string(j,jtext)
                 call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&

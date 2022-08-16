@@ -222,16 +222,6 @@ contains
   end function mask_sum
 
   function return_poltype_flag(string) result(flag)
-    implicit none
-
-    character(len=10),               intent(in) :: string
-    integer(i4b)                                :: count, local_flag, nflag
-    integer(i4b)                                :: i, j
-    integer(i4b),     allocatable, dimension(:) :: flag
-    character(len=5), allocatable, dimension(:) :: pol_list
-
-
-    count = count_delimits(string,',')
     ! ====================================================================
     ! Here is how our bitwise poltype flagging works:
     !
@@ -248,6 +238,16 @@ contains
     ! T + Q + U     1  1  1  1   = 15
     !
     ! ====================================================================
+    implicit none
+
+    character(len=10),               intent(in) :: string
+    integer(i4b)                                :: count, local_flag, nflag
+    integer(i4b)                                :: i, j
+    integer(i4b),     allocatable, dimension(:) :: flag
+    character(len=5), allocatable, dimension(:) :: pol_list
+
+
+    count = count_delimits(string,',')
 
     nflag = 0
     local_flag = 0

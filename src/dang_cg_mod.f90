@@ -20,6 +20,7 @@ module dang_cg_mod
      integer(i4b) :: i_max
      real(dp)     :: converge
      integer(i4b) :: nflag
+     logical(lgt) :: sample
      integer(i4b),            allocatable, dimension(:) :: pol_flag
      type(component_pointer), allocatable, dimension(:) :: cg_component
 
@@ -77,6 +78,7 @@ contains
     constructor_cg%cg_group       = cg_group
     constructor_cg%i_max          = dpar%cg_max_iter(cg_group)
     constructor_cg%converge       = dpar%cg_convergence(cg_group)
+    constructor_cg%sample         = dpar%cg_group_sample(cg_group)
 
     ! How many components in this CG group?
     do i = 1, dpar%ncomp
@@ -150,13 +152,15 @@ contains
     real(dp), allocatable, dimension(:)    :: b
 
     do i = 1, ncg_groups
-       write(*,*) "Computing a CG search of CG group ", i
-       do f = 1, cg_groups(i)%p%nflag
-          call cg_groups(i)%p%compute_rhs(ddata,b,f)
-          call cg_groups(i)%p%cg_search(dpar,ddata,b,f)
-          call cg_groups(i)%p%unpack_amplitudes(dpar,ddata,f)
-          deallocate(b)
-       end do
+       if (cg_groups(i)%p%sample) then
+          write(*,*) "Computing a CG search of CG group ", i
+          do f = 1, cg_groups(i)%p%nflag
+             call cg_groups(i)%p%compute_rhs(ddata,b,f)
+             call cg_groups(i)%p%cg_search(dpar,ddata,b,f)
+             call cg_groups(i)%p%unpack_amplitudes(dpar,ddata,f)
+             deallocate(b)
+          end do
+       end if
     end do
 
   end subroutine sample_cg_groups
