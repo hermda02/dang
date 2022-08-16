@@ -10,25 +10,28 @@ module dang_component_mod
   public dang_comps, component_pointer, component_list
 
   type :: dang_comps
-     
+
+     ! General component information
      character(len=16)                                :: label, type      ! Component label and type
-     logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
      real(dp)                                         :: nu_ref           ! Reference frequency
-     integer(i4b)                                     :: cg_group         ! CG group number
-     logical(lgt)                                     :: polfit           ! (Template only)
-     logical(lgt),      allocatable, dimension(:)     :: corr             ! Do we correct this band?
+     integer(i4b)                                     :: cg_group         ! CG group number 
      integer(i4b)                                     :: nfit             ! (Template only)
      integer(i4b)                                     :: nindices         ! How many indices does the component have?
+     logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
+     logical(lgt),      allocatable, dimension(:)     :: corr             ! Do we correct this band?
 
+     ! Sky/template information
      real(dp),          allocatable, dimension(:,:,:) :: indices             ! Indices maps
      real(dp),          allocatable, dimension(:,:)   :: amplitude           ! Amplitude maps
      real(dp),          allocatable, dimension(:,:)   :: template            ! Template map
      real(dp),          allocatable, dimension(:,:)   :: template_amplitudes ! Template amplitudes
      integer(i4b),      allocatable, dimension(:)     :: index_mode          ! Fullsky/per-pixel
 
+     ! Old (to be deprecated)
      real(dp),          allocatable, dimension(:,:)   :: beta_s, beta_d, T_d, HI
      real(dp),          allocatable, dimension(:)     :: HI_amps
 
+     ! Prior information
      character(len=16), allocatable, dimension(:)     :: prior_type
      real(dp),          allocatable, dimension(:,:)   :: gauss_prior
      real(dp),          allocatable, dimension(:,:)   :: uni_prior
@@ -185,7 +188,6 @@ contains
        allocate(constructor%template_amplitudes(nbands,nmaps))
        allocate(constructor%template(0:npix-1,nmaps))
 
-       ! constructor%polfit              = .true. ! WARNING HARD CODED TO .true. FOR NOW
        constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
        constructor%corr                = dpar%fg_temp_corr(component,:)
        constructor%template_amplitudes = 0.d0

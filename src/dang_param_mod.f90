@@ -72,8 +72,9 @@ module dang_param_mod
      integer(i4b),       allocatable, dimension(:)     :: fg_ref_loc     ! Fg reference band
      logical(lgt),       allocatable, dimension(:,:)   :: fg_samp_spec   ! Logical - sample fg parameter?
      integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
-     logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_joint  ! Logical - sample fg spec param jointly in Q and U?
+     ! logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_joint  ! Logical - sample fg spec param jointly in Q and U?
      character(len=512), allocatable, dimension(:,:)   :: fg_spec_file   ! Fg spectral parameter input map
+     character(len=10),  allocatable, dimension(:,:)   :: fg_spec_poltype ! Fg spectral parameter poltype
      logical(lgt),       allocatable, dimension(:,:)   :: fg_temp_corr   ! Logical - do we template correct this band?
      character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
      real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
@@ -93,11 +94,11 @@ module dang_param_mod
      real(dp)                                          :: HI_Td_step     ! Td sampling step size
 
      ! CG group parameters
-     integer(i4b)                                      :: ncggroup
+     integer(i4b)                                      :: ncggroup       ! How many CG groups do we expect to read?
      logical(lgt),       allocatable, dimension(:)     :: cg_group_sample ! Do we sample that cg group?
-     integer(i4b),       allocatable, dimension(:)     :: cg_max_iter
-     real(dp),           allocatable, dimension(:)     :: cg_convergence
-     character(len=10),  allocatable, dimension(:)     :: cg_poltype
+     integer(i4b),       allocatable, dimension(:)     :: cg_max_iter    ! What is the maximum # of CG iterations we perform?
+     real(dp),           allocatable, dimension(:)     :: cg_convergence ! What is the convergence criterion for the CG group?
+     character(len=10),  allocatable, dimension(:)     :: cg_poltype     ! What is the CG group poltype?
 
   end type dang_params
   
@@ -531,7 +532,7 @@ contains
        
        allocate(par%fg_filename(n))
        allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n),par%fg_ref_loc(n))
-       allocate(par%fg_spec_joint(n,2))
+       allocate(par%fg_spec_poltype(n,2))
        allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
        allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
        allocate(par%fg_spec_file(n,2))
@@ -562,10 +563,14 @@ contains
        ! Load the CG group specific parameters
        do i = 1, n4
           call int2string(i, itext)
-          call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%cg_group_sample(i))
-          call get_parameter_hashtable(htbl, 'CG_GROUP_MAX_ITER'//itext, len_itext=len_itext, par_int=par%cg_max_iter(i))
-          call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, par_dp=par%cg_convergence(i))
-          call get_parameter_hashtable(htbl, 'CG_POLTYPE'//itext, len_itext=len_itext, par_string=par%cg_poltype(i))
+          call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, &
+               par_lgt=par%cg_group_sample(i))
+          call get_parameter_hashtable(htbl, 'CG_GROUP_MAX_ITER'//itext, len_itext=len_itext, &
+               par_int=par%cg_max_iter(i))
+          call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, &
+               par_dp=par%cg_convergence(i))
+          call get_parameter_hashtable(htbl, 'CG_POLTYPE'//itext, len_itext=len_itext, &
+               par_string=par%cg_poltype(i))
        end do
        
        ! Load the template specific parameter (TO BE DEPRECATED)
@@ -598,21 +603,23 @@ contains
           call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
           call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
           if (trim(par%fg_type(i)) == 'power-law') then
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_MEAN'//itext, len_itext=len_itext,&
+             call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&
                   par_dp=par%fg_gauss(i,1,1))
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_GAUSS_BETA_STD'//itext, len_itext=len_itext,&
+             call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR_GAUSS_STD'//itext, len_itext=len_itext,&
                   par_dp=par%fg_gauss(i,1,2))
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_LOW'//itext, len_itext=len_itext,&
+             call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR_UNI_LOW'//itext, len_itext=len_itext,&
                   par_dp=par%fg_uni(i,1,1))
-             call get_parameter_hashtable(htbl, 'COMP_PRIOR_UNI_BETA_HIGH'//itext, len_itext=len_itext,&
+             call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR_UNI_HIGH'//itext, len_itext=len_itext,&
                   par_dp=par%fg_uni(i,1,2))
              call get_parameter_hashtable(htbl, 'COMP_BETA'//itext, len_itext=len_itext, par_dp=par%fg_init(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_SAMP_NSIDE'//itext, len_itext=len_itext,&
                   par_int=par%fg_samp_nside(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_SAMPLE'//itext, len_itext=len_itext,&
                   par_lgt=par%fg_samp_spec(i,1))
-             call get_parameter_hashtable(htbl, 'COMP_BETA_JOINT'//itext, len_itext=len_itext,&
-                  par_lgt=par%fg_spec_joint(i,1))
+             call get_parameter_hashtable(htbl, 'COMP_BETA_POLTYPE'//itext, len_itext=len_itext,&
+                  par_string=par%fg_spec_poltype(i,1))
+             ! call get_parameter_hashtable(htbl, 'COMP_BETA_JOINT'//itext, len_itext=len_itext,&
+             !      par_lgt=par%fg_spec_joint(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_INPUT_MAP'//itext, len_itext=len_itext,&
                   par_string=par%fg_spec_file(i,1))
              call get_parameter_hashtable(htbl, 'COMP_BETA_REGION'//itext, len_itext=len_itext,&
@@ -686,43 +693,7 @@ contains
     end if
     
   end subroutine read_comp_params
-  
-  subroutine delimit_string(string, delimiter, list)
-    implicit none
-    character(len=*), intent(in)                :: string, delimiter
-    character(len=*), dimension(:), intent(out) :: list
-    integer(i4b)                                :: i, j, k
     
-    j = 1
-    k = 1
-    do i=1,len_trim(string)
-       if (string(i:i) == trim(delimiter)) then
-          list(k) = trim(string(j:i-1))
-          j = i+1
-          k = k + 1
-       end if
-    end do
-    
-    if (k < len(list)+1) then
-       list(k) = trim(string(j:))
-    end if
-    
-  end subroutine delimit_string
-
-  function count_delimits(string, delimiter) result(ndel)
-    implicit none
-    character(len=*), intent(in) :: string, delimiter
-    integer(i4b)                 :: i, j, k, ndel
-
-    ndel = 0
-    do i = 1,len_trim(string)
-       if (string(i:i) == trim(delimiter)) then
-          ndel = ndel + 1
-       end if
-    end do
-
-  end function count_delimits
-  
   function get_token(string, sep, num, group, allow_empty) result(res)
     implicit none
     character(len=*)           :: string, sep

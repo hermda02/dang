@@ -103,65 +103,8 @@ contains
        end if
     end do
 
-    ! Figure out the polarization flag information
-    constructor_cg%pol_flag = 0
-
-    count = count_delimits(dpar%cg_poltype(cg_group),',')
-    ! ====================================================================
-    ! Here is how our bitwise poltype flagging works:
-    !
-    !               P  U  Q  T
-    !
-    ! T             0  0  0  1   = 1
-    !
-    !     Q + U     1  0  0  0   = 8
-    !
-    ! T,  Q,  U     0  1  1  1   = 7
-    !
-    ! T,  Q + U     1  0  0  1   = 9
-    !
-    ! T + Q + U     1  1  1  1   = 15
-    !
-    ! ====================================================================
-
-    flag = 0
-    nflag = 0
-    allocate(pol_list(count+1))
-    call delimit_string(dpar%cg_poltype(cg_group),',',pol_list)
-
-    do i = 1, count+1
-       if (pol_list(i) == 'T') then
-          flag = flag + 2**0
-          nflag = nflag + 1
-       else if (pol_list(i) == 'Q') then
-          flag = flag + 2**1
-          nflag = nflag + 1
-       else if (pol_list(i) == 'U') then
-          flag = flag + 2**2
-          nflag = nflag + 1
-       else if (pol_list(i) == 'Q+U') then
-          flag = flag + 2**3
-          nflag = nflag + 1
-       else if (pol_list(i) == 'T+Q+U') then
-          flag = 0
-          nflag = nflag + 1
-       end if
-    end do
-
-    constructor_cg%nflag    = nflag
-
-    allocate(constructor_cg%pol_flag(nflag))
-
-    do i = 1, nflag     
-       do j = 0, 3
-          if (iand(flag,2**j) .ne. 0) then
-             constructor_cg%pol_flag(i) = 2**j
-          end if
-       end do
-       if (iand(flag,0) .ne. 0) then
-          constructor_cg%pol_flag(i) = 0
-       end if
-    end do
+    constructor_cg%pol_flag = return_poltype_flag(dpar%cg_poltype(cg_group))
+    constructor_cg%nflag = size(constructor_cg%pol_flag)
 
   end function constructor_cg
 
