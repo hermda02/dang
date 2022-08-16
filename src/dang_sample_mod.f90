@@ -393,54 +393,54 @@ contains
     end if
   end function evaluate_lnL
 
-  function sample_fg_amp(dpar, dat, comp, ind, map_n)
-    !------------------------------------------------------------------------
-    ! Samples spectral amplitude (per pixel), following the spectrum of foreground 'type'. Returns a full map of amplitudes.
-    !------------------------------------------------------------------------
-    implicit none
+  ! function sample_fg_amp(dpar, dat, comp, ind, map_n)
+  !   !------------------------------------------------------------------------
+  !   ! Samples spectral amplitude (per pixel), following the spectrum of foreground 'type'. Returns a full map of amplitudes.
+  !   !------------------------------------------------------------------------
+  !   implicit none
     
-    class(dang_params)                   :: dpar
-    type(dang_comps)                     :: comp
-    type(dang_data)                      :: dat
-    integer(i4b),             intent(in) :: ind
-    integer(i4b),             intent(in) :: map_n
-    integer(i4b)                         :: f
-    real(dp)                             :: sum1, sum2, spec
-    real(dp)                             :: amp, num, t, sam
-    real(dp), dimension(0:npix-1,nbands) :: map2fit
-    real(dp), dimension(0:npix-1)        :: sample_fg_amp, norm
+  !   class(dang_params)                   :: dpar
+  !   type(dang_comps)                     :: comp
+  !   type(dang_data)                      :: dat
+  !   integer(i4b),             intent(in) :: ind
+  !   integer(i4b),             intent(in) :: map_n
+  !   integer(i4b)                         :: f
+  !   real(dp)                             :: sum1, sum2, spec
+  !   real(dp)                             :: amp, num, t, sam
+  !   real(dp), dimension(0:npix-1,nbands) :: map2fit
+  !   real(dp), dimension(0:npix-1)        :: sample_fg_amp, norm
     
-    map2fit = dat%sig_map(:,map_n,:)
+  !   map2fit = dat%sig_map(:,map_n,:)
 
-    norm = 0.d0
+  !   norm = 0.d0
 
-    ! remove all other fg signals
-    do f = 1, nfgs
-       if (f /= ind) then
-          map2fit(:,:) = map2fit(:,:) - dat%fg_map(:,map_n,1:,f)
-       end if
-    end do
+  !   ! remove all other fg signals
+  !   do f = 1, nfgs
+  !      if (f /= ind) then
+  !         map2fit(:,:) = map2fit(:,:) - dat%fg_map(:,map_n,1:,f)
+  !      end if
+  !   end do
     
-    ! sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  |
-    ! sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  + (T_nu)^T N_nu^{-1/2} eta|
+  !   ! sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  |
+  !   ! sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  + (T_nu)^T N_nu^{-1/2} eta|
     
-    do i = 0, npix-1
-       sum1    = 0.0d0
-       sum2    = 0.0d0
-       do j = 1, nbands
-          spec    = compute_spectrum(dpar,comp,bp(j),ind,i,map_n)
-          sum1    = sum1 + (map2fit(i,j)*spec)/dat%rms_map(i,map_n,j)**2.d0
-          sum2    = sum2 + (spec)**2.d0/dat%rms_map(i,map_n,j)**2.d0
-          norm(i) = norm(i) + spec/dat%rms_map(i,map_n,j)
-       end do
-       if (trim(dpar%ml_mode) == 'sample') then
-          amp        = sum1/sum2 + rand_normal(0.d0,1.d0)*norm(i)/sum2
-       else if (trim(dpar%ml_mode) == 'optimize') then
-          amp        = sum1/sum2
-       end if
-       sample_fg_amp(i) = amp
-    end do
-  end function sample_fg_amp
+  !   do i = 0, npix-1
+  !      sum1    = 0.0d0
+  !      sum2    = 0.0d0
+  !      do j = 1, nbands
+  !         spec    = compute_spectrum(dpar,comp,bp(j),ind,i,map_n)
+  !         sum1    = sum1 + (map2fit(i,j)*spec)/dat%rms_map(i,map_n,j)**2.d0
+  !         sum2    = sum2 + (spec)**2.d0/dat%rms_map(i,map_n,j)**2.d0
+  !         norm(i) = norm(i) + spec/dat%rms_map(i,map_n,j)
+  !      end do
+  !      if (trim(dpar%ml_mode) == 'sample') then
+  !         amp        = sum1/sum2 + rand_normal(0.d0,1.d0)*norm(i)/sum2
+  !      else if (trim(dpar%ml_mode) == 'optimize') then
+  !         amp        = sum1/sum2
+  !      end if
+  !      sample_fg_amp(i) = amp
+  !   end do
+  ! end function sample_fg_amp
 
   subroutine template_fit(dpar, dat, comp, map_n, temp_num)
     !------------------------------------------------------------------------
@@ -985,46 +985,5 @@ contains
     prob = sqrt(sum)
 
   end function eval_jeffreys_prior
-
-  function eval_full_jeffreys_prior(dpar, dat, comp, map_n, ind, val, pixel) result(prob)
-    implicit none
-
-    class(dang_params)                    :: dpar
-    type(dang_comps),       intent(inout) :: comp
-    type(dang_data)                       :: dat
-    real(dp),               intent(in)    :: val
-    integer(i4b),           intent(in)    :: map_n, ind
-    integer(i4b), optional, intent(in)    :: pixel
-    real(dp)                              :: prob, sum, ss_Q, ss_U
-    integer(i4b)                          :: i, j, k
-
-    prob = 0.d0
-    sum = 0.d0
-
-    if (trim(dpar%fg_label(ind)) == 'synch') then
-       ! Is this evaluated for a single pixel?
-       if (present(pixel)) then
-          do j = 1, nbands
-             ss_Q  = dat%fg_map(pixel,2,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,pixel,2,val)
-             ss_U  = dat%fg_map(pixel,3,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,pixel,3,val)
-             sum = sum + val*compute_spectrum(dpar,comp,bp(j),ind,pixel,2,(3*val-1))&
-                  &/(dat%rms_map(pixel,2,j)*dat%rms_map(pixel,3,j))&
-                  *sqrt(ss_Q**2/dat%rms_map(pixel,2,j)**2 + ss_U**2/dat%rms_map(pixel,3,j))
-          end do
-       else
-          do i = 0, npix-1
-             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-             do j = 1, nbands
-                ss_Q  = dat%fg_map(i,2,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,i,2,val)
-                ss_U  = dat%fg_map(i,3,0,ind)*compute_spectrum(dpar,comp,bp(j),ind,i,3,val)
-                sum = sum + val*compute_spectrum(dpar,comp,bp(j),ind,i,2,(3*val-1))&
-                     &/(dat%rms_map(i,2,j)*dat%rms_map(i,3,j))&
-                     *sqrt(ss_Q**2/dat%rms_map(i,2,j)**2 + ss_U**2/dat%rms_map(i,3,j))
-             end do
-          end do
-       end if
-    end if
-  end function eval_full_jeffreys_prior
-
   
 end module dang_sample_mod

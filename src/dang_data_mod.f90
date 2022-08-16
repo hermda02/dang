@@ -214,32 +214,41 @@ contains
     integer(i4b)                               :: i, j, k
     character(len=256)                         :: title
 
+    real(dp)                                   :: T_d, beta
+
     allocate(thermal_map(0:npix-1,nmaps,nbands))
 
+    write(*,'(a,a)') 'Dust correcting band ', trim(dpar%band_label(band))
     if (trim(dpar%dust_corr_type) == 'uniform') then
-       comp%T_d    = dpar%mbb_gauss(1,1)
-       comp%beta_d = dpar%mbb_gauss(2,1)
+       T_d    = dpar%mbb_gauss(1,1)
+       beta   = dpar%mbb_gauss(2,1)
+       do i = 0, npix-1
+          do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+             thermal_map(i,k,band) = self%temps(i,k,1)*evaluate_mbb(bp(band),353.d9,T_d,beta)
+             self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
+          end do
+       end do
     else if (trim(dpar%dust_corr_type) == 'sample') then
-       if (dpar%mbb_gauss(1,2) .gt. 0.d0) then
-          comp%T_d    = rand_normal(dpar%mbb_gauss(1,1),dpar%mbb_gauss(1,2))
-       else 
-          comp%T_d    = dpar%mbb_gauss(1,1)
-       end if
-       if (dpar%mbb_gauss(2,2) .gt. 0.d0) then
-          comp%beta_d = rand_normal(dpar%mbb_gauss(2,1),dpar%mbb_gauss(2,2))
-       else
-          comp%beta_d = dpar%mbb_gauss(2,1)
-       end if
+       do i = 0, npix-1
+          do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+             if (dpar%mbb_gauss(1,2) .gt. 0.d0) then
+                T_d    = rand_normal(dpar%mbb_gauss(1,1),dpar%mbb_gauss(1,2))
+             else 
+                T_d    = dpar%mbb_gauss(1,1)
+             end if
+             if (dpar%mbb_gauss(2,2) .gt. 0.d0) then
+                beta = rand_normal(dpar%mbb_gauss(2,1),dpar%mbb_gauss(2,2))
+             else
+                beta = dpar%mbb_gauss(2,1)
+             end if
+             thermal_map(i,k,band) = self%temps(i,k,1)*evaluate_mbb(bp(band),353.d9,T_d,beta)
+             self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
+          end do
+       end do
     else if (trim(dpar%dust_corr_type) == 'planck') then
        stop
     end if
-    write(*,'(a,a)') 'Dust correcting band ', trim(dpar%band_label(band))
-    do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-       do i = 0, npix-1
-          thermal_map(i,k,band) = self%temps(i,k,1)*compute_spectrum(dpar,comp,bp(band),2,i,k)
-          self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
-       end do
-    end do
+
 
     if (present(iter)) then
        write(iter_str, '(i0.5)') iter

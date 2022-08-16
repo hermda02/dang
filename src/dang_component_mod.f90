@@ -402,57 +402,28 @@ contains
     eval_sed = spectrum
 
   end function eval_sed
-  
-  function compute_spectrum(dpar, self, bp, ind, pix, map_n, index)
-    ! always computed in RJ units
-    
-    implicit none
-    class(dang_params)             :: dpar
-    type(dang_comps)               :: self
-    type(bandinfo)                 :: bp
-    integer(i4b),       intent(in) :: ind
-    integer(i4b),       optional   :: pix
-    integer(i4b),       optional   :: map_n
-    integer(i4b)                   :: i
-    real(dp),           optional   :: index
-    real(dp)                       :: z, compute_spectrum
 
-    ! if (trim(dpar%fg_label(ind)) == 'power-law') then
+  function evaluate_mbb(bp,nu_ref,T_d,beta)
+    implicit none
+    type(bandinfo)           :: bp
+    real(dp),     intent(in) :: nu_ref
+    real(dp),     intent(in) :: T_d
+    real(dp),     intent(in) :: beta
+    real(dp)                 :: evaluate_mbb, z
+    integer(i4b)             :: i
+
+    evaluate_mbb = 0.d0
+    z = h / (k_B*T_d)
     if (bp%id == 'delta') then
-       if (ind == 1) then
-          if (present(index)) then
-             compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**index
-          else 
-             compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
-          end if
-          !else if (trim(dpar%fg_label(ind)) == 'mbb') then
-       else if (ind == 2) then
-          z = h / (k_B*19.6d0)!self%T_d(pix,map_n))
-          compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
-               (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(353.d0*1d9))**(1.53d0+1.d0)!(self%beta_d(pix,map_n)+1.d0)
-       end if
+       evaluate_mbb = evaluate_mbb + (exp(z*nu_ref)-1.d0) / &
+                  (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(nu_ref))**(beta+1.d0)
     else
-       compute_spectrum = 0.d0
-       ! Compute for LFI bandpass
-       if (ind == 1) then
-          if (present(index)) then
-             do i = 1, bp%n
-                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**index
-             end do
-          else 
-             do i = 1, bp%n
-                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
-             end do
-          end if
-       ! else if (trim(dpar%fg_label(ind)) == 'mbb') then
-       else if (ind == 2) then
-          z = h / (k_B*19.6d0)!self%T_d(pix,map_n))
-          do i = 1, bp%n
-             compute_spectrum = compute_spectrum + bp%tau0(i)*(exp(z*353.d0*1d9)-1.d0) / &
-                  (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/353.d9)**(1.53d0+1.d0)!(self%beta_d(pix,map_n)+1.d0)
-          end do
-       end if
+       do i = 1, bp%n
+          evaluate_mbb = evaluate_mbb + (exp(z*nu_ref)-1.d0) / &
+               (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/(nu_ref))**(beta+1.d0)
+       end do
     end if
-  end function compute_spectrum
-  
+
+  end function evaluate_mbb
+    
 end module dang_component_mod
