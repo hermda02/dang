@@ -121,8 +121,9 @@ contains
     type(dang_params)             :: dpar
     integer(i4b)                  :: i, count
 
-    allocate(cg_groups(dpar%ncggroup))
+    write(*,*) 'Initializing CG groups'
 
+    allocate(cg_groups(dpar%ncggroup))
     count = 0
     do i = 1, dpar%ncggroup
        ! write(*,*) 'Initialize CG group ', i
@@ -371,7 +372,39 @@ contains
     ! Compute the RHS of the matrix equation Ax=b
     offset = 0
     do k = 1, self%ncg_components
-       if (self%cg_component(k)%p%type /= 'template') then
+       if (self%cg_component(k)%p%type == 'hi_fit') then
+          z = 1
+          do j = 1, n
+             if (self%cg_component(k)%p%corr(j)) then
+                !!$OMP PARALLEL PRIVATE(i)
+                !!$OMP DO SCHEDULE(static)
+                do i = 1, l
+                   if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                   ! Bit flag selection for matrix building
+                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
+                           & data(i-1,2,j)*self%cg_component(k)%p%eval_sed(j,i-1,2)
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
+                           & data(i-1,3,j)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
+                           & data(i-1,1,j)*self%cg_component(k)%p%eval_sed(j,i-1,1)
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
+                           & data(i-1,2,j)*self%cg_component(k)%p%eval_sed(j,i-1,2)
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
+                           & data(i-1,3,j)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                   else
+                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
+                           & data(i-1,map_n,j)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                   end if
+                end do
+                !!$OMP END DO
+                !!$OMP END PARALLEL
+                z = z + 1
+             end if
+          end do
+          offset = offset + self%cg_component(k)%p%nfit
+       else if (self%cg_component(k)%p%type /= 'template') then
           !$OMP PARALLEL PRIVATE(i,j)
           !$OMP DO SCHEDULE(static)
           do i = 1, l

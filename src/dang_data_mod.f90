@@ -51,7 +51,7 @@ contains
     class(dang_data),       intent(inout) :: self
     type(dang_params),      intent(in)    :: dpar
 
-    write(*,*) "Init data maps"
+    write(*,*) "Initializing data maps"
     
     allocate(self%fg_map(0:npix-1,nmaps,0:nbands,nfgs))    
     self%fg_map(:,:,:,:) = 0.d0

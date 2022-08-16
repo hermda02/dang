@@ -96,15 +96,15 @@ program dang
      
      ! Initialize ddata and components
      call ddata%init_data_maps(dpar)
-     call init_hi_fit(dcomps, dpar, npix)
-     call read_data_maps(ddata,dpar)
-     call convert_maps(ddata,dpar)
-     call mask_hi(ddata, dpar, dcomps)
-     npixpar    = nump
-     nglobalpar = nbands
+     call ddata%read_data_maps(dpar)
+     call ddata%convert_maps(dpar)
+     call initialize_components(dpar)
+     call initialize_cg_groups(dpar)
+     write(*,*) '--------------------------'
+     stop
      
      ! Debug initialization here
-     dcomps%HI_amps(:) = 1.d-4
+     ! dcomps%HI_amps(:) = 1.d-4
 
      ! call init_components(dpar)
 

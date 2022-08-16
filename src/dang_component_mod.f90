@@ -107,8 +107,8 @@ contains
        if (trim(dpar%fg_filename(component)) == 'none') then
           constructor%amplitude = 0.d0
        else
-          call read_bintab(trim(dpar%fg_filename(component)),constructor%amplitude, npix, &
-               & nmaps, nullval, anynull, header=header)
+          call read_bintab(trim(dpar%datadir)//trim(dpar%fg_filename(component)),&
+               constructor%amplitude, npix, nmaps, nullval, anynull, header=header)
        end if
 
        ! Initialize pol_flag arrays
@@ -145,8 +145,8 @@ contains
           if (trim(dpar%fg_spec_file(component,i)) == 'none') then
              constructor%indices(:,:,i)   = dpar%fg_init(component,i)
           else
-             call read_bintab(trim(dpar%fg_spec_file(component,i)),constructor%indices(:,:,i), npix, &
-                  & nmaps, nullval, anynull, header=header)
+             call read_bintab(trim(dpar%datadir)//trim(dpar%fg_spec_file(component,i)),&
+                  constructor%indices(:,:,i), npix, nmaps, nullval, anynull, header=header)
           end if
        end do
 
@@ -174,8 +174,8 @@ contains
        if (trim(dpar%fg_filename(component)) == 'none') then
           constructor%amplitude = 0.d0
        else
-          call read_bintab(trim(dpar%fg_filename(component)),constructor%amplitude, npix, &
-               & nmaps, nullval, anynull, header=header)
+          call read_bintab(trim(dpar%datadir)//trim(dpar%fg_filename(component)),&
+               constructor%amplitude, npix, nmaps, nullval, anynull, header=header)
        end if
 
        ! Initialize pol_flag arrays
@@ -212,8 +212,8 @@ contains
           if (trim(dpar%fg_spec_file(component,i)) == 'none') then
              constructor%indices(:,:,i)   = dpar%fg_init(component,i)
           else
-             call read_bintab(trim(dpar%fg_spec_file(component,i)),constructor%indices(:,:,i), npix, &
-                  & nmaps, nullval, anynull, header=header)
+             call read_bintab(trim(dpar%datadir)//trim(dpar%fg_spec_file(component,i)),&
+                  constructor%indices(:,:,i), npix, nmaps, nullval, anynull, header=header)
           end if
        end do
 
@@ -250,8 +250,8 @@ contains
           write(*,*) "Error: template filename == 'none' "
           stop
        else
-          call read_bintab(trim(dpar%fg_filename(component)),constructor%template, npix, &
-               & nmaps, nullval, anynull, header=header)
+          call read_bintab(trim(dpar%datadir)//trim(dpar%fg_filename(component)),&
+               constructor%template, npix, nmaps, nullval, anynull, header=header)
        end if
 
     else if (trim(constructor%type) == 'hi_fit') then
@@ -287,8 +287,24 @@ contains
        constructor%corr                = dpar%fg_temp_corr(component,:)
        constructor%template_amplitudes = 0.d0
 
+       ! Allocate general pol_type flag array
+       allocate(constructor%nflag(2))
+       allocate(constructor%pol_flag(2,3)) ! The three is here because that's the max number of poltypes we can handle
+
+       ! Initialize pol_flag arrays
+       constructor%nflag = 0
+       constructor%pol_flag = 0
 
        do i = 1, constructor%nindices
+
+          ! Load the poltype into the flag buffer, and store bit flags for each component
+          flag_buffer = return_poltype_flag(dpar%fg_spec_poltype(component,i))
+          constructor%nflag = size(flag_buffer)
+          do j = 1, size(flag_buffer)
+             constructor%pol_flag(i,j) = flag_buffer(j)
+          end do
+
+
           ! Do we sample this index?
           constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)
 
@@ -310,18 +326,26 @@ contains
           if (trim(dpar%fg_spec_file(component,i)) == 'none') then
              constructor%indices(:,:,i)   = dpar%fg_init(component,i)
           else
-             call read_bintab(trim(dpar%fg_spec_file(component,i)),constructor%indices(:,:,i), npix, &
-                  & nmaps, nullval, anynull, header=header)
+             call read_bintab(trim(dpar%datadir)//trim(dpar%fg_spec_file(component,i)),&
+                  constructor%indices(:,:,i), npix, nmaps, nullval, anynull, header=header)
           end if
        end do
+
+       ! Load the poltype into the flag buffer, and store bit flags for each component
+       flag_buffer = return_poltype_flag(dpar%fg_spec_poltype(component,2))
+       constructor%nflag = size(flag_buffer)
+       do j = 1, size(flag_buffer)
+          constructor%pol_flag(i,j) = flag_buffer(j)
+       end do
+
 
        ! Some error handling
        if (trim(dpar%fg_filename(component)) == 'none') then
           write(*,*) "Error: template filename == 'none' "
           stop
        else
-          call read_bintab(trim(dpar%fg_filename(component)),constructor%template, npix, &
-               & nmaps, nullval, anynull, header=header)
+          call read_bintab(trim(dpar%datadir)//trim(dpar%fg_filename(component)),&
+               constructor%template, npix, nmaps, nullval, anynull, header=header)
        end if
 
     ! Some error handling
@@ -335,6 +359,8 @@ contains
     implicit none
     type(dang_params)             :: dpar
     integer(i4b)                  :: i
+
+    write(*,*) 'Initializing components'
 
     allocate(component_list(dpar%ncomp))
 
@@ -448,12 +474,7 @@ contains
     else if (trim(self%type) == 'template') then
        spectrum = 1.d0
     else if (trim(self%type) == 'hi_fit') then
-       if (bp(band)%id == 'delta') then
-
-       else
-          
-
-       end if
+       spectrum = self%template(pix,map_n)*planck(bp(band),self%indices(pix,map_n,1))
     end if
     
     eval_sed = spectrum
