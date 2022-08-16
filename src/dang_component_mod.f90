@@ -10,28 +10,35 @@ module dang_component_mod
   public dang_comps, component_pointer, component_list
 
   type :: dang_comps
-     
+
+     ! General component information
      character(len=16)                                :: label, type      ! Component label and type
-     logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
      real(dp)                                         :: nu_ref           ! Reference frequency
-     integer(i4b)                                     :: cg_group         ! CG group number
-     logical(lgt)                                     :: polfit           ! (Template only)
-     logical(lgt),      allocatable, dimension(:)     :: corr             ! Do we correct this band?
+     integer(i4b)                                     :: cg_group         ! CG group number 
      integer(i4b)                                     :: nfit             ! (Template only)
      integer(i4b)                                     :: nindices         ! How many indices does the component have?
+     logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
+     logical(lgt),      allocatable, dimension(:)     :: corr             ! Do we correct this band?
 
+     ! Sky/template information
      real(dp),          allocatable, dimension(:,:,:) :: indices             ! Indices maps
      real(dp),          allocatable, dimension(:,:)   :: amplitude           ! Amplitude maps
      real(dp),          allocatable, dimension(:,:)   :: template            ! Template map
      real(dp),          allocatable, dimension(:,:)   :: template_amplitudes ! Template amplitudes
      integer(i4b),      allocatable, dimension(:)     :: index_mode          ! Fullsky/per-pixel
 
+     ! Old (to be deprecated)
      real(dp),          allocatable, dimension(:,:)   :: beta_s, beta_d, T_d, HI
      real(dp),          allocatable, dimension(:)     :: HI_amps
 
+     ! Prior information
      character(len=16), allocatable, dimension(:)     :: prior_type
      real(dp),          allocatable, dimension(:,:)   :: gauss_prior
      real(dp),          allocatable, dimension(:,:)   :: uni_prior
+
+     ! Poltype information
+     integer(i4b),      allocatable, dimension(:)     :: nflag
+     integer(i4b),      allocatable, dimension(:,:)   :: pol_flag
     
    contains
 
@@ -66,7 +73,9 @@ contains
     class(dang_comps), pointer    :: constructor
     integer(i4b),      intent(in) :: component
 
-    integer(i4b)                  :: i
+    integer(i4b)                  :: i, j, count
+
+    integer(i4b), allocatable, dimension(:) :: flag_buffer
 
     allocate(constructor)
 
@@ -77,15 +86,19 @@ contains
     if (trim(constructor%type) == 'mbb') then
        ! Allocate arrays to appropriate size for each component type
        constructor%nindices = 2
-       allocate(constructor%gauss_prior(2,2))
-       allocate(constructor%uni_prior(2,2))
-       allocate(constructor%sample_index(2))
-       allocate(constructor%prior_type(2))
-       allocate(constructor%index_mode(2))
+       allocate(constructor%gauss_prior(constructor%nindices,2))
+       allocate(constructor%uni_prior(constructor%nindices,2))
+       allocate(constructor%sample_index(constructor%nindices))
+       allocate(constructor%prior_type(constructor%nindices))
+       allocate(constructor%index_mode(constructor%nindices))
+
+       ! Allocate general pol_type flag array
+       allocate(constructor%nflag(constructor%nindices))
+       allocate(constructor%pol_flag(constructor%nindices,3)) ! The three is here because that's the max number of poltypes we can handle
 
        ! Allocate maps for the components
        allocate(constructor%amplitude(0:npix-1,nmaps))
-       allocate(constructor%indices(0:npix-1,nmaps,2))
+       allocate(constructor%indices(0:npix-1,nmaps,constructor%nindices))
 
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
@@ -98,7 +111,19 @@ contains
                & nmaps, nullval, anynull, header=header)
        end if
 
+       ! Initialize pol_flag arrays
+       constructor%nflag = 0
+       constructor%pol_flag = 0
+
        do i = 1, constructor%nindices
+
+          ! Load the poltype into the flag buffer, and store bit flags for each component
+          flag_buffer = return_poltype_flag(dpar%fg_spec_poltype(component,i))
+          constructor%nflag = size(flag_buffer)
+          do j = 1, size(flag_buffer)
+             constructor%pol_flag(i,j) = flag_buffer(j)
+          end do
+
           ! Do we sample this index?
           constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)
 
@@ -128,15 +153,19 @@ contains
     else if (trim(constructor%type) == 'power-law') then
        ! Allocate arrays to appropriate size for each component type
        constructor%nindices = 1
-       allocate(constructor%gauss_prior(1,2))
-       allocate(constructor%uni_prior(1,2))
-       allocate(constructor%sample_index(1))
-       allocate(constructor%prior_type(1))
-       allocate(constructor%index_mode(1))
+       allocate(constructor%gauss_prior(constructor%nindices,2))
+       allocate(constructor%uni_prior(constructor%nindices,2))
+       allocate(constructor%sample_index(constructor%nindices))
+       allocate(constructor%prior_type(constructor%nindices))
+       allocate(constructor%index_mode(constructor%nindices))
+
+       ! Allocate general pol_type flag array
+       allocate(constructor%nflag(constructor%nindices))
+       allocate(constructor%pol_flag(constructor%nindices,3)) ! The three is here because that's the max number of poltypes we can handle
        
        ! Allocate maps for the components
        allocate(constructor%amplitude(0:npix-1,nmaps))
-       allocate(constructor%indices(0:npix-1,nmaps,1))
+       allocate(constructor%indices(0:npix-1,nmaps,constructor%nindices))
        
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
@@ -149,7 +178,19 @@ contains
                & nmaps, nullval, anynull, header=header)
        end if
 
+       ! Initialize pol_flag arrays
+       constructor%nflag = 0
+       constructor%pol_flag = 0
+
        do i = 1, constructor%nindices
+
+          ! Load the poltype into the flag buffer, and store bit flags for each component
+          flag_buffer = return_poltype_flag(dpar%fg_spec_poltype(component,i))
+          constructor%nflag = size(flag_buffer)
+          do j = 1, size(flag_buffer)
+             constructor%pol_flag(i,j) = flag_buffer(j)
+          end do
+
           ! Do we sample this index?
           constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)
 
@@ -185,11 +226,26 @@ contains
        allocate(constructor%template_amplitudes(nbands,nmaps))
        allocate(constructor%template(0:npix-1,nmaps))
 
-       constructor%polfit              = .true. ! WARNING HARD CODED TO .true. FOR NOW
+       ! Allocate general pol_type flag array
+       allocate(constructor%nflag(1))
+       allocate(constructor%pol_flag(1,3)) ! The three is here because that's the max number of poltypes we can handle
+
+       ! Initialize pol_flag arrays
+       constructor%nflag = 0
+       constructor%pol_flag = 0
+
+       ! Load the poltype into the flag buffer, and store bit flags for each component
+       flag_buffer = return_poltype_flag(dpar%fg_spec_poltype(component,1))
+       constructor%nflag = size(flag_buffer)
+       do j = 1, size(flag_buffer)
+          constructor%pol_flag(1,j) = flag_buffer(j)
+       end do
+
        constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
        constructor%corr                = dpar%fg_temp_corr(component,:)
        constructor%template_amplitudes = 0.d0
 
+       ! Some error handling
        if (trim(dpar%fg_filename(component)) == 'none') then
           write(*,*) "Error: template filename == 'none' "
           stop
@@ -259,6 +315,7 @@ contains
           end if
        end do
 
+       ! Some error handling
        if (trim(dpar%fg_filename(component)) == 'none') then
           write(*,*) "Error: template filename == 'none' "
           stop
@@ -267,10 +324,10 @@ contains
                & nmaps, nullval, anynull, header=header)
        end if
 
+    ! Some error handling
     else
        write(*,*) "Warning - unrecognized component type detected"
        stop
-
     end if
   end function constructor
 
@@ -402,57 +459,28 @@ contains
     eval_sed = spectrum
 
   end function eval_sed
-  
-  function compute_spectrum(dpar, self, bp, ind, pix, map_n, index)
-    ! always computed in RJ units
-    
-    implicit none
-    class(dang_params)             :: dpar
-    type(dang_comps)               :: self
-    type(bandinfo)                 :: bp
-    integer(i4b),       intent(in) :: ind
-    integer(i4b),       optional   :: pix
-    integer(i4b),       optional   :: map_n
-    integer(i4b)                   :: i
-    real(dp),           optional   :: index
-    real(dp)                       :: z, compute_spectrum
 
-    ! if (trim(dpar%fg_label(ind)) == 'power-law') then
+  function evaluate_mbb(bp,nu_ref,T_d,beta)
+    implicit none
+    type(bandinfo)           :: bp
+    real(dp),     intent(in) :: nu_ref
+    real(dp),     intent(in) :: T_d
+    real(dp),     intent(in) :: beta
+    real(dp)                 :: evaluate_mbb, z
+    integer(i4b)             :: i
+
+    evaluate_mbb = 0.d0
+    z = h / (k_B*T_d)
     if (bp%id == 'delta') then
-       if (ind == 1) then
-          if (present(index)) then
-             compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**index
-          else 
-             compute_spectrum = (bp%nu_c/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
-          end if
-          !else if (trim(dpar%fg_label(ind)) == 'mbb') then
-       else if (ind == 2) then
-          z = h / (k_B*19.6d0)!self%T_d(pix,map_n))
-          compute_spectrum = (exp(z*353.d0*1d9)-1.d0) / &
-               (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(353.d0*1d9))**(1.53d0+1.d0)!(self%beta_d(pix,map_n)+1.d0)
-       end if
+       evaluate_mbb = evaluate_mbb + (exp(z*nu_ref)-1.d0) / &
+                  (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(nu_ref))**(beta+1.d0)
     else
-       compute_spectrum = 0.d0
-       ! Compute for LFI bandpass
-       if (ind == 1) then
-          if (present(index)) then
-             do i = 1, bp%n
-                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**index
-             end do
-          else 
-             do i = 1, bp%n
-                compute_spectrum = compute_spectrum + bp%tau0(i)*(bp%nu0(i)/dpar%fg_nu_ref(ind))**self%beta_s(pix,map_n)
-             end do
-          end if
-       ! else if (trim(dpar%fg_label(ind)) == 'mbb') then
-       else if (ind == 2) then
-          z = h / (k_B*self%T_d(pix,map_n))
-          do i = 1, bp%n
-             compute_spectrum = compute_spectrum + bp%tau0(i)*(exp(z*353.d0*1d9)-1.d0) / &
-                  (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/353.d9)**(self%beta_d(pix,map_n)+1.d0)
-          end do
-       end if
+       do i = 1, bp%n
+          evaluate_mbb = evaluate_mbb + bp%tau0(i)*(exp(z*nu_ref)-1.d0) / &
+               (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/(nu_ref))**(beta+1.d0)
+       end do
     end if
-  end function compute_spectrum
-  
+
+  end function evaluate_mbb
+    
 end module dang_component_mod
