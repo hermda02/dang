@@ -185,11 +185,12 @@ contains
        allocate(constructor%template_amplitudes(nbands,nmaps))
        allocate(constructor%template(0:npix-1,nmaps))
 
-       constructor%polfit              = .true. ! WARNING HARD CODED TO .true. FOR NOW
+       ! constructor%polfit              = .true. ! WARNING HARD CODED TO .true. FOR NOW
        constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
        constructor%corr                = dpar%fg_temp_corr(component,:)
        constructor%template_amplitudes = 0.d0
 
+       ! Some error handling
        if (trim(dpar%fg_filename(component)) == 'none') then
           write(*,*) "Error: template filename == 'none' "
           stop
@@ -259,6 +260,7 @@ contains
           end if
        end do
 
+       ! Some error handling
        if (trim(dpar%fg_filename(component)) == 'none') then
           write(*,*) "Error: template filename == 'none' "
           stop
@@ -266,11 +268,11 @@ contains
           call read_bintab(trim(dpar%fg_filename(component)),constructor%template, npix, &
                & nmaps, nullval, anynull, header=header)
        end if
-
+ 
+    ! Some error handling
     else
        write(*,*) "Warning - unrecognized component type detected"
        stop
-
     end if
   end function constructor
 
@@ -419,7 +421,7 @@ contains
                   (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(nu_ref))**(beta+1.d0)
     else
        do i = 1, bp%n
-          evaluate_mbb = evaluate_mbb + (exp(z*nu_ref)-1.d0) / &
+          evaluate_mbb = evaluate_mbb + bp%tau0(i)*(exp(z*nu_ref)-1.d0) / &
                (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/(nu_ref))**(beta+1.d0)
        end do
     end if
