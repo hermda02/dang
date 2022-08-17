@@ -218,25 +218,7 @@ contains
  ! Specifically for the hi_fitting mode
  ! ------------------------------------------------------------------------------------------ 
  subroutine hi_fit
-   
-   ! real(dp) :: dummy1, dummy2, s
 
-   ! do j = 1, nbands
-   !    ! Compute the residual for each map
-   !    do i = 0, npix-1
-   !       if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
-   !       ddata%res_map(i,1,j) = (ddata%sig_map(i,1,j)-ddata%offset(j))/ddata%gain(j) &
-   !            - dcomps%HI_amps(j)*dcomps%HI(i,1)*planck(bp(j),dcomps%T_d(i,1))
-   !    end do
-   !    ! Compute the chisq for each band
-   !    ddata%band_chisq(j) = 0.d0
-   !    do i = 0, npix-1
-   !       if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
-   !       ddata%band_chisq(j) = ddata%band_chisq(j) + (ddata%res_map(i,1,j)/ddata%rms_map(i,1,j))**2
-   !    end do
-   ! end do
-   ! call write_maps(dpar,ddata)
-   
    do iter = 1, dpar%ngibbs
       
       ! if (iter > 1) then

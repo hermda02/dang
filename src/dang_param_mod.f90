@@ -73,6 +73,7 @@ module dang_param_mod
      integer(i4b),       allocatable, dimension(:,:)   :: fg_samp_nside  ! Fg parameter nside sampling
      character(len=512), allocatable, dimension(:,:)   :: fg_spec_file   ! Fg spectral parameter input map
      character(len=10),  allocatable, dimension(:,:)   :: fg_spec_poltype ! Fg spectral parameter poltype
+     real(dp),           allocatable, dimension(:,:)   :: fg_spec_step   ! Fg index step-size of MH
      logical(lgt),       allocatable, dimension(:,:)   :: fg_temp_corr   ! Logical - do we template correct this band?
      character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
      real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
@@ -539,6 +540,7 @@ contains
        allocate(par%fg_cg_group(n))
        allocate(par%fg_temp_corr(n,par%numband))
        allocate(par%fg_nfit(n))
+       allocate(par%fg_spec_step(n,2))
 
        par%temp_nfit = 0
        par%fg_nfit   = 0
@@ -626,6 +628,8 @@ contains
          par_string=par%fg_ind_region(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR'//itext, len_itext=len_itext,&
          par_string=par%fg_prior_type(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_BETA_STEPSIZE'//itext,len_itext=len_itext,&
+         par_dp=par%fg_spec_step(comp,1))
 
   end subroutine read_power_law
 
@@ -691,6 +695,8 @@ contains
          par_string=par%fg_ind_region(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR'//itext, len_itext=len_itext,&
          par_string=par%fg_prior_type(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_BETA_STEPSIZE'//itext,len_itext=len_itext,&
+         par_dp=par%fg_spec_step(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&
          par_dp=par%fg_gauss(comp,2,1))
     call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_STD'//itext, len_itext=len_itext,&
@@ -712,6 +718,8 @@ contains
          par_string=par%fg_ind_region(comp,2))
     call get_parameter_hashtable(htbl, 'COMP_T_PRIOR'//itext, len_itext=len_itext,&
          par_string=par%fg_prior_type(comp,2))
+    call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&
+         par_dp=par%fg_spec_step(comp,2))
 
   end subroutine read_mbb
 
@@ -750,13 +758,14 @@ contains
     allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
     allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
     allocate(par%fg_spec_file(n,2))
+    allocate(par%fg_spec_step(n,2))
     allocate(par%fg_ind_region(n,2))
     allocate(par%fg_prior_type(n,2))
     allocate(par%fg_init(n,2))
     allocate(par%fg_cg_group(n))
     allocate(par%fg_temp_corr(n,par%numband))
     allocate(par%fg_nfit(n))
-    
+   
     ! CG Group stuff
     allocate(par%cg_group_sample(n2))
     allocate(par%cg_max_iter(n2))
@@ -805,6 +814,8 @@ contains
             par_string=par%fg_ind_region(i,1))
        call get_parameter_hashtable(htbl, 'COMP_T_PRIOR'//itext, len_itext=len_itext,&
             par_string=par%fg_prior_type(i,1))
+       call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&
+            par_dp=par%fg_spec_step(i,1))
     end do
        
     ! Load the CG group specific parameters

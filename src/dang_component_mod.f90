@@ -17,6 +17,7 @@ module dang_component_mod
      integer(i4b)                                     :: cg_group         ! CG group number 
      integer(i4b)                                     :: nfit             ! (Template only)
      integer(i4b)                                     :: nindices         ! How many indices does the component have?
+     real(dp),          allocatable, dimension(:)     :: step_size        ! M-H step size
      logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
      logical(lgt),      allocatable, dimension(:)     :: corr             ! Do we correct this band?
 
@@ -92,6 +93,7 @@ contains
        allocate(constructor%sample_index(constructor%nindices))
        allocate(constructor%prior_type(constructor%nindices))
        allocate(constructor%index_mode(constructor%nindices))
+       allocate(constructor%step_size(constructor%nindices))
 
        ! Allocate general pol_type flag array
        allocate(constructor%nflag(constructor%nindices))
@@ -134,6 +136,9 @@ contains
           else if (trim(dpar%fg_ind_region(component,i)) == 'per-pixel') then
              constructor%index_mode = 2
           end if
+
+          ! Define MH step siz
+          constructor%step_size(i) = dpar%fg_spec_step(component,i)
 
           ! Define prior for likelihood evaluation
           constructor%prior_type(i)    = dpar%fg_prior_type(component,i)
@@ -159,6 +164,7 @@ contains
        allocate(constructor%sample_index(constructor%nindices))
        allocate(constructor%prior_type(constructor%nindices))
        allocate(constructor%index_mode(constructor%nindices))
+       allocate(constructor%step_size(constructor%nindices))
 
        ! Allocate general pol_type flag array
        allocate(constructor%nflag(constructor%nindices))
@@ -201,6 +207,9 @@ contains
           else if (trim(dpar%fg_ind_region(component,i)) == 'per-pixel') then
              constructor%index_mode = 2
           end if
+
+          ! Define MH step siz
+          constructor%step_size(i) = dpar%fg_spec_step(component,i)
 
           ! Define prior for likelihood evaluation
           constructor%prior_type(i)    = dpar%fg_prior_type(component,i)
@@ -274,6 +283,7 @@ contains
        allocate(constructor%sample_index(1))
        allocate(constructor%prior_type(1))
        allocate(constructor%index_mode(1))
+       allocate(constructor%step_size(1))
        
        ! Allocate maps for the components
        allocate(constructor%template_amplitudes(nbands,nmaps))
@@ -287,6 +297,10 @@ contains
        constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
        constructor%corr                = dpar%fg_temp_corr(component,:)
        constructor%template_amplitudes = 0.d0
+
+       !HARD CODED
+       constructor%step_size(1) = dpar%fg_spec_step(component,1)
+       !!!!
 
        ! Allocate general pol_type flag array
        allocate(constructor%nflag(1))
@@ -487,7 +501,11 @@ contains
     else if (trim(self%type) == 'template') then
        spectrum = 1.d0
     else if (trim(self%type) == 'hi_fit') then
-       spectrum = self%template(pix,map_n)*planck(bp(band),self%indices(pix,map_n,1))
+       if (present(index)) then
+          spectrum = self%template(pix,map_n)*planck(bp(band),index(1))
+       else
+          spectrum = self%template(pix,map_n)*planck(bp(band),self%indices(pix,map_n,1))
+       end if
     end if
     
     eval_sed = spectrum

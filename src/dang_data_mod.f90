@@ -469,7 +469,7 @@ contains
     self%chisq = 0.d0
     do i = 0, npix-1
        if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
-       do k = 1,1!2,3!dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
           do j = 1, nbands
              self%chisq = self%chisq + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
                   & (self%rms_map(i,k,j)**2.d0)
@@ -732,35 +732,6 @@ contains
 
     if (trim(dpar%mode) == 'comp_sep') then
        
-       ! title = trim(dpar%outdir) // 'pixel_23000_A_d_' // trim(tqu(map_n)) // '.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(30,file=title, status="old",position="append", action="write")
-       ! else
-       !    open(30,file=title, status="new", action="write")
-       ! endif
-       ! write(30,*) dat%fg_map(23000,map_n,2,2)
-       ! close(30)
-       
-       ! title = trim(dpar%outdir) // 'pixel_23000_A_s_' // trim(tqu(map_n)) // '.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(31,file=title, status="old",position="append", action="write")
-       ! else
-       !    open(31,file=title, status="new", action="write")
-       ! endif
-       ! write(31,*) dat%fg_map(23000,map_n,2,1)
-       ! close(31)       
-       ! title = trim(dpar%outdir) // 'pixel_23000_beta_s_' // trim(tqu(map_n)) // '.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(32,file=title, status="old",position="append", action="write")
-       ! else
-       !    open(32,file=title, status="new", action="write")
-       ! endif
-       ! write(32,*) dcomps%beta_s(23000,map_n)
-       ! close(32)
-       
        title = trim(dpar%outdir) // 'total_chisq_' // trim(tqu(map_n)) // '.dat'
        inquire(file=title,exist=exist)
        if (exist) then
@@ -793,26 +764,26 @@ contains
        write(nband_str, '(i4)') nbands
 
        fmt = '('//trim(nband_str)//'(E17.8))'
-       ! title = trim(dpar%outdir) // 'HI_amplitudes.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(35,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(35,file=title,status="new",action="write")
-       ! end if
-       ! write(35,fmt=fmt) dcomps%HI_amps
-       ! close(35)
+       title = trim(dpar%outdir) // 'HI_amplitudes.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(35,file=title,status="old",position="append",action="write") 
+       else
+          open(35,file=title,status="new",action="write")
+       end if
+       write(35,fmt=fmt) component_list(1)%p%template_amplitudes(:,1)
+       close(35)
        
-       ! title = trim(dpar%outdir)//'HI_chisq.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(36,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(36,file=title,status="new",action="write")
-       ! end if
-       ! call compute_chisq(dat,dpar)!,dcomps,1)
-       ! write(36,'(E17.8)') dat%chisq
-       ! close(36)
+       title = trim(dpar%outdir)//'HI_chisq.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(36,file=title,status="old",position="append",action="write") 
+       else
+          open(36,file=title,status="new",action="write")
+       end if
+       call compute_chisq(dat,dpar)
+       write(36,'(E17.8)') dat%chisq
+       close(36)
 
        ! title = trim(dpar%outdir)//'band_gains.dat'
        ! inquire(file=title,exist=exist)
@@ -834,15 +805,15 @@ contains
        ! write(38,fmt=fmt) dat%offset
        ! close(38)
 
-       ! title = trim(dpar%outdir)//'HI_Td_mean.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(39,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(39,file=title,status="new",action="write")
-       ! end if
-       ! write(39,'(E17.8)') mask_avg(dcomps%T_d(:,1),dat%masks(:,1))
-       ! close(39)
+       title = trim(dpar%outdir)//'HI_Td_mean.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(39,file=title,status="old",position="append",action="write") 
+       else
+          open(39,file=title,status="new",action="write")
+       end if
+       write(39,'(E17.8)') mask_avg(component_list(1)%p%indices(:,1,1),dat%masks(:,1))
+       close(39)
 
        ! title = trim(dpar%outdir)//'band_chisq.dat'
        ! inquire(file=title,exist=exist)
