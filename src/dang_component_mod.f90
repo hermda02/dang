@@ -43,6 +43,7 @@ module dang_component_mod
    contains
 
      procedure :: eval_sed
+     procedure :: eval_signal
 
   end type dang_comps
 
@@ -288,8 +289,8 @@ contains
        constructor%template_amplitudes = 0.d0
 
        ! Allocate general pol_type flag array
-       allocate(constructor%nflag(2))
-       allocate(constructor%pol_flag(2,3)) ! The three is here because that's the max number of poltypes we can handle
+       allocate(constructor%nflag(1))
+       allocate(constructor%pol_flag(1,3)) ! The three is here because that's the max number of poltypes we can handle
 
        ! Initialize pol_flag arrays
        constructor%nflag = 0
@@ -303,7 +304,6 @@ contains
           do j = 1, size(flag_buffer)
              constructor%pol_flag(i,j) = flag_buffer(j)
           end do
-
 
           ! Do we sample this index?
           constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)
@@ -330,14 +330,6 @@ contains
                   constructor%indices(:,:,i), npix, nmaps, nullval, anynull, header=header)
           end if
        end do
-
-       ! Load the poltype into the flag buffer, and store bit flags for each component
-       flag_buffer = return_poltype_flag(dpar%fg_spec_poltype(component,2))
-       constructor%nflag = size(flag_buffer)
-       do j = 1, size(flag_buffer)
-          constructor%pol_flag(i,j) = flag_buffer(j)
-       end do
-
 
        ! Some error handling
        if (trim(dpar%fg_filename(component)) == 'none') then
@@ -409,6 +401,27 @@ contains
        end do
     end if
   end function planck
+
+  function eval_signal(self, band, pix, map_n, index)
+    implicit none
+    class(dang_comps)                  :: self
+    integer(i4b),           intent(in) :: band
+    integer(i4b),           optional   :: pix
+    integer(i4b),           optional   :: map_n
+    integer(i4b)                       :: i
+    real(dp), dimension(:), optional   :: index
+    real(dp)                           :: eval_signal
+
+    if (trim(self%type) == 'hi_fit') then
+       eval_signal = self%template_amplitudes(band,map_n)*self%eval_sed(band,pix,map_n,index)
+    else if (trim(self%type) == 'template') then
+       eval_signal = self%template_amplitudes(band,map_n)*self%template(pix,map_n)
+    else 
+       eval_signal = self%amplitude(pix,map_n)*self%eval_sed(band,pix,map_n,index)
+    end if
+
+  end function eval_signal
+
 
   function eval_sed(self, band, pix, map_n, index)
     ! always computed in RJ units

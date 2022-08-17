@@ -469,7 +469,7 @@ contains
     self%chisq = 0.d0
     do i = 0, npix-1
        if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
-       do k = 2,3!dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+       do k = 1,1!2,3!dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
           do j = 1, nbands
              self%chisq = self%chisq + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
                   & (self%rms_map(i,k,j)**2.d0)
@@ -516,7 +516,7 @@ contains
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
              if (nbands .lt. 10) then
-                write(*,fmt='(i6, a, f10.5, a, f10.3, a, 10e10.3)')&
+                write(*,fmt='(i6, a, f16.5, a, f10.3, a, 10e10.3)')&
                      iter, " - chisq: " , self%chisq, " - T_d: ",&
                      mask_avg(component_list(1)%p%indices(:,1,1),self%masks(:,1)),&
                      ' - A_HI: ', component_list(1)%p%template_amplitudes(:,1)
@@ -702,7 +702,7 @@ contains
        dat%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
-             s = dat%gain(j)*component_list(1)%p%template_amplitudes(j,1)*component_list(1)%p%eval_sed(j,i-1,k)+dat%offset(j)
+             s = dat%gain(j)*component_list(1)%p%template_amplitudes(j,1)*component_list(1)%p%eval_sed(j,i-1,1)+dat%offset(j)
              dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
           end do
        end do

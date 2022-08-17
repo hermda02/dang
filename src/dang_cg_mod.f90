@@ -187,7 +187,6 @@ contains
     type(dang_params)                      :: dpar
 
     integer(i4b),            intent(in)    :: flag_n
-    ! integer(i4b),            intent(in)    :: map_n 
     real(dp), dimension(:),  intent(in)    :: b
 
     real(dp), allocatable, dimension(:)    :: r, q, d, b2, eta
@@ -320,13 +319,13 @@ contains
     ! Iterate through CG group components to construct arrays
     ! Counting through the components to figure out array sizes 
     do i = 1, self%ncg_components
-       if (self%cg_component(i)%p%type == 'template') then
+       if (self%cg_component(i)%p%type == 'hi_fit') then
+          m = m + self%cg_component(i)%p%nfit
+       else if (self%cg_component(i)%p%type == 'template') then
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-          ! if (self%cg_component(i)%p%polfit) then
              m = m + self%cg_component(i)%p%nfit
           else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
              m = m + self%cg_component(i)%p%nfit
-             ! m = m + 2*self%cg_component(i)%p%nfit
           end if
        else
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -356,6 +355,13 @@ contains
                    end do
                 end do
              end do
+          else if (c%type == 'hi_fit') then
+             do i = 0, npix-1
+                if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                do j = 1, nbands
+                   data(i,1,j) = data(i,1,j) - c%eval_sed(j,i,1)*c%template_amplitudes(j,1)
+                end do
+             end do
           else
              do i = 0, npix-1
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
@@ -372,10 +378,11 @@ contains
     ! Compute the RHS of the matrix equation Ax=b
     offset = 0
     do k = 1, self%ncg_components
-       if (self%cg_component(k)%p%type == 'hi_fit') then
+       c => self%cg_component(k)%p
+       if (c%type == 'hi_fit') then
           z = 1
           do j = 1, n
-             if (self%cg_component(k)%p%corr(j)) then
+             if (c%corr(j)) then
                 !!$OMP PARALLEL PRIVATE(i)
                 !!$OMP DO SCHEDULE(static)
                 do i = 1, l
@@ -383,19 +390,19 @@ contains
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*self%cg_component(k)%p%eval_sed(j,i-1,2)
+                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
-                           & data(i-1,1,j)*self%cg_component(k)%p%eval_sed(j,i-1,1)
+                           & data(i-1,1,j)*c%eval_sed(j,i-1,1)
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*self%cg_component(k)%p%eval_sed(j,i-1,2)
+                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
                    else
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
-                           & data(i-1,map_n,j)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                           & data(i-1,map_n,j)*c%eval_sed(j,i-1,map_n)
                    end if
                 end do
                 !!$OMP END DO
@@ -403,8 +410,8 @@ contains
                 z = z + 1
              end if
           end do
-          offset = offset + self%cg_component(k)%p%nfit
-       else if (self%cg_component(k)%p%type /= 'template') then
+          offset = offset + c%nfit
+       else if (c%type /= 'template') then
           !$OMP PARALLEL PRIVATE(i,j)
           !$OMP DO SCHEDULE(static)
           do i = 1, l
@@ -425,24 +432,24 @@ contains
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                       b(i) = b(i) + (data(i-1,2,j)*&
-                           & self%cg_component(k)%p%eval_sed(j,i-1,2))/&
+                           & c%eval_sed(j,i-1,2))/&
                            & (ddata%rms_map(i-1,2,j)**2.d0)
                       b(l+i) = b(l+i) + (data(i-1,3,j)*&
-                           & self%cg_component(k)%p%eval_sed(j,i-1,3))/&
+                           & c%eval_sed(j,i-1,3))/&
                            & (ddata%rms_map(i-1,3,j)**2.d0)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
                       b(i) = b(i) + (data(i-1,1,j)*&
-                           & self%cg_component(k)%p%eval_sed(j,i-1,1))/&
+                           & c%eval_sed(j,i-1,1))/&
                            & (ddata%rms_map(i-1,1,j)**2.d0)
                       b(l+i) = b(l+i) + (data(i-1,2,j)*&
-                           & self%cg_component(k)%p%eval_sed(j,i-1,2))/&
+                           & c%eval_sed(j,i-1,2))/&
                            & (ddata%rms_map(i-1,2,j)**2.d0)
                       b(l+i) = b(2*l+i) + (data(i-1,3,j)*&
-                           & self%cg_component(k)%p%eval_sed(j,i-1,3))/&
+                           & c%eval_sed(j,i-1,3))/&
                            & (ddata%rms_map(i-1,3,j)**2.d0)
                    else
                       b(i) = b(i) + (data(i-1,map_n,j)*&
-                           & self%cg_component(k)%p%eval_sed(j,i-1,map_n))/&
+                           & c%eval_sed(j,i-1,map_n))/&
                            & (ddata%rms_map(i-1,map_n,j)**2.d0)
                    end if
                 end if
@@ -454,7 +461,7 @@ contains
        else
           z = 1
           do j = 1, n
-             if (self%cg_component(k)%p%corr(j)) then
+             if (c%corr(j)) then
                 !!$OMP PARALLEL PRIVATE(i)
                 !!$OMP DO SCHEDULE(static)
                 do i = 1, l
@@ -462,19 +469,19 @@ contains
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*self%cg_component(k)%p%template(i-1,2)
+                           & data(i-1,2,j)*c%template(i-1,2)
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*self%cg_component(k)%p%template(i-1,3)
+                           & data(i-1,3,j)*c%template(i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
-                           & data(i-1,1,j)*self%cg_component(k)%p%template(i-1,1)
+                           & data(i-1,1,j)*c%template(i-1,1)
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*self%cg_component(k)%p%template(i-1,2)
+                           & data(i-1,2,j)*c%template(i-1,2)
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*self%cg_component(k)%p%template(i-1,3)
+                           & data(i-1,3,j)*c%template(i-1,3)
                    else
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
-                           & data(i-1,map_n,j)*self%cg_component(k)%p%template(i-1,map_n)
+                           & data(i-1,map_n,j)*c%template(i-1,map_n)
                    end if
                 end do
                 !!$OMP END DO
@@ -482,7 +489,7 @@ contains
                 z = z + 1
              end if
           end do
-          offset = offset + self%cg_component(k)%p%nfit
+          offset = offset + c%nfit
        end if
     end do
   end subroutine compute_rhs
@@ -519,7 +526,8 @@ contains
     type(dang_data),        intent(in)    :: ddata
     real(dp), dimension(:), intent(in)    :: x
     integer(i4b),           intent(in)    :: nbands, flag_n
-    real(dp), allocatable, dimension(:)   :: temp1, temp2, temp3, res
+    real(dp), allocatable,  dimension(:)  :: temp1, temp2, temp3, res
+    type(dang_comps),       pointer       :: c
 
     integer(i4b)                          :: i, j, k, map_n
     integer(i4b)                          :: l, m, n, offset
@@ -534,24 +542,32 @@ contains
     end if
 
     n      = size(x) ! Size of the input array
+    m      = 0 ! Size of the number of pixels in the noise covariance matrix
     l      = 1 ! Used for template fit counting
     offset = 0 ! Usage below
     
+    
     ! Count up the offset for the template handling at the end of the 
     do i = 1, self%ncg_components                                                     
-       if (self%cg_component(i)%p%type /= 'template') then                           
+       if (self%cg_component(i)%p%type == 'hi_fit') then
+          offset = 0
+          m      = m + npix
+       else if (self%cg_component(i)%p%type /= 'template') then                           
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
              offset = offset + 2*npix
+             m      = m + 2*npix
           else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
              offset = offset + 3*npix
+             m      = m + 3*npix
           else
              offset = offset + npix
+             m      = m + npix
           end if
        end if
     end do
 
-    allocate(temp1(offset))
-    allocate(temp2(offset))
+    allocate(temp1(m))
+    allocate(temp2(m))
     allocate(temp3(n))
     allocate(res(n))
 
@@ -563,42 +579,47 @@ contains
        temp3 = 0.d0
        ! Solving temp1 = (T_nu)x
        do k = 1, self%ncg_components
-          if (self%cg_component(k)%p%type /= 'template') then
+          c => self%cg_component(k)%p
+          if (c%type /= 'template' .and. c%type /= 'hi_fit') then
              !$OMP PARALLEL PRIVATE(i)
              !$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                   temp1(i)        = x(i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
-                   temp1(npix+i)   = x(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                   temp1(i)        = x(i)       *c%eval_sed(j,i-1,2)
+                   temp1(npix+i)   = x(npix+i)  *c%eval_sed(j,i-1,3)
                 else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                   temp1(i)        = x(i)*self%cg_component(k)%p%eval_sed(j,i-1,1)
-                   temp1(npix+i)   = x(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
-                   temp1(2*npix+i) = x(2*npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                   temp1(i)        = x(i)       *c%eval_sed(j,i-1,1)
+                   temp1(npix+i)   = x(npix+i)  *c%eval_sed(j,i-1,2)
+                   temp1(2*npix+i) = x(2*npix+i)*c%eval_sed(j,i-1,3)
                 else
-                   temp1(i)        = x(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                   temp1(i)        = x(i)       *c%eval_sed(j,i-1,map_n)
                 end if
              end do
              !$OMP END DO
              !$OMP END PARALLEL
-          else
-             if (self%cg_component(k)%p%corr(j)) then
+          else if (c%type == 'hi_fit') then
+             if (c%corr(j)) then
+                do i = 1, npix
+                   if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                   temp1(i) = temp1(i) + x(j)*c%eval_sed(j,i-1,map_n)
+                end do
+             end if
+          else if (c%type == 'template') then
+             if (c%corr(j)) then
                 !$OMP PARALLEL PRIVATE(i)
                 !$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      temp1(i)      = temp1(i) + x(offset+l)*self%cg_component(k)%p%template(i-1,2)
-                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*&
-                           & self%cg_component(k)%p%template(i-1,3)
+                      temp1(i)      = temp1(i)      + x(offset+l)*c%template(i-1,2)
+                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*c%template(i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      temp1(i)      = temp1(i) + x(offset+l)*self%cg_component(k)%p%template(i-1,1)
-                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*&
-                           & self%cg_component(k)%p%template(i-1,2)
-                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*&
-                           & self%cg_component(k)%p%template(i-1,3)
+                      temp1(i)      = temp1(i)      + x(offset+l)*c%template(i-1,1)
+                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*c%template(i-1,2)
+                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*c%template(i-1,3)
                    else
-                      temp1(i)      = temp1(i) + x(offset+l)*self%cg_component(k)%p%template(i-1,map_n)
+                      temp1(i)      = temp1(i) + x(offset+l)*c%template(i-1,map_n)
                    end if
                 end do
                 !$OMP END DO
@@ -628,42 +649,50 @@ contains
 
        ! Solving (T_nu^t)temp2
        do k = 1, self%ncg_components
-          if (self%cg_component(k)%p%type /= 'template') then
+          c => self%cg_component(k)%p
+          if (c%type /= 'template' .and. c%type /= 'hi_fit') then
              !$OMP PARALLEL PRIVATE(i)
              !$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                   temp3(i)        = temp2(i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
-                   temp3(npix+i)   = temp2(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                   temp3(i)        = temp2(i)*c%eval_sed(j,i-1,2)
+                   temp3(npix+i)   = temp2(npix+i)*c%eval_sed(j,i-1,3)
                 else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                   temp3(i)        = temp2(i)*self%cg_component(k)%p%eval_sed(j,i-1,1)
-                   temp3(npix+i)   = temp2(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
-                   temp3(2*npix+i) = temp2(2*npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                   temp3(i)        = temp2(i)*c%eval_sed(j,i-1,1)
+                   temp3(npix+i)   = temp2(npix+i)*c%eval_sed(j,i-1,2)
+                   temp3(2*npix+i) = temp2(2*npix+i)*c%eval_sed(j,i-1,3)
                 else
-                   temp3(i)        = temp2(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                   temp3(i)        = temp2(i)*c%eval_sed(j,i-1,map_n)
                 end if
              end do
              !$OMP END DO
              !$OMP END PARALLEL
-          else
-             if (self%cg_component(k)%p%corr(j)) then
+          else if (c%type == 'hi_fit') then
+             if (c%corr(j)) then
+                do i = 1, npix
+                   if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                   temp3(j) = temp3(j) + temp2(i)*c%eval_sed(j,i-1,1)
+                end do
+             end if
+          else if (c%type == 'template') then
+             if (c%corr(j)) then
                 !!$OMP PARALLEL PRIVATE(i)
                 !!$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      temp3(offset+l) = temp3(offset+l) + temp2(i)*self%cg_component(k)%p%template(i-1,2)
+                      temp3(offset+l) = temp3(offset+l) + temp2(i)*c%template(i-1,2)
                       temp3(offset+l) = temp3(offset+l) + temp2(npix+i)*&
-                           & self%cg_component(k)%p%template(i-1,3)
+                           & c%template(i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      temp3(offset+l) = temp3(offset+l) + temp2(i)*self%cg_component(k)%p%template(i-1,1)
+                      temp3(offset+l) = temp3(offset+l) + temp2(i)*c%template(i-1,1)
                       temp3(offset+l) = temp3(offset+l) + temp2(npix+i)*&
-                           & self%cg_component(k)%p%template(i-1,2)
+                           & c%template(i-1,2)
                       temp3(offset+l) = temp3(offset+l) + temp2(npix+i)*&
-                           & self%cg_component(k)%p%template(i-1,3)
+                           & c%template(i-1,3)
                    else
-                      temp3(offset+l) = temp3(offset+l) + temp2(i)*self%cg_component(k)%p%template(i-1,map_n)
+                      temp3(offset+l) = temp3(offset+l) + temp2(i)*c%template(i-1,map_n)
                    end if
                 end do
                 !!$OMP END DO
@@ -678,7 +707,7 @@ contains
 
   function compute_sample_vector(self, ddata, eta, nbands, b, flag_n) result(res)
     ! =========================================================== |
-    ! How this works: result = sum_nu(T_nu^t N_nu^{-1/2})vec      | 
+    ! How this works: result = sum_nu(T_nu^t N_nu^{-1/2})eta      | 
     ! ----------------------------------------------------------- |        
     ! Suppose T_nu is of size n, m, and input vector is of size m |                                
     ! Then N^{-1/2} is of size n, n                               |                                
@@ -714,6 +743,7 @@ contains
     integer(i4b),           intent(in)    :: nbands, flag_n
     
     real(dp), allocatable, dimension(:)   :: temp1, temp2, res
+    type(dang_comps),       pointer       :: c
 
     integer(i4b)                          :: i, j, k, map_n
     integer(i4b)                          :: offset, l, m, n
@@ -760,6 +790,7 @@ contains
 
        !!$OMP PARALLEL PRIVATE(i)
        !!$OMP DO SCHEDULE(static)
+       ! Solving temp1 = N^{-1/2}eta
        do i = 1, npix
           if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -776,43 +807,49 @@ contains
        !!$OMP END DO
        !!$OMP END PARALLEL
 
+       ! Solving temp2 = T^t temp1
        do k = 1, self%ncg_components
-          if (self%cg_component(k)%p%type /= 'template') then
+          c => self%cg_component(k)%p
+          if (c%type /= 'template' .and. c%type /= 'hi_fit') then
              !!$OMP PARALLEL PRIVATE(i)
              !!$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                   temp2(i)        = temp1(i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
-                   temp2(npix+i)   = temp1(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                   temp2(i)        = temp1(i)*c%eval_sed(j,i-1,2)
+                   temp2(npix+i)   = temp1(npix+i)*c%eval_sed(j,i-1,3)
                 else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                   temp2(i)        = temp1(i)*self%cg_component(k)%p%eval_sed(j,i-1,1)
-                   temp2(npix+i)   = temp1(npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,2)
-                   temp2(2*npix+i) = temp1(2*npix+i)*self%cg_component(k)%p%eval_sed(j,i-1,3)
+                   temp2(i)        = temp1(i)*c%eval_sed(j,i-1,1)
+                   temp2(npix+i)   = temp1(npix+i)*c%eval_sed(j,i-1,2)
+                   temp2(2*npix+i) = temp1(2*npix+i)*c%eval_sed(j,i-1,3)
                 else
-                   temp2(i)        = temp1(i)*self%cg_component(k)%p%eval_sed(j,i-1,map_n)
+                   temp2(i)        = temp1(i)*c%eval_sed(j,i-1,map_n)
                 end if
              end do
              !!$OMP END DO
              !!$OMP END PARALLEL
-          else
-             if (self%cg_component(k)%p%corr(j)) then
+          else if (c%type == 'hi_fit') then
+             if (c%corr(j)) then
+                do i = 1, npix
+                   if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+                   temp2(j) = temp2(j) + temp1(i)*c%eval_sed(j,i-1,map_n)
+                end do
+             end if
+          else if (c%type == 'template') then
+             if (c%corr(j)) then
                 !!$OMP PARALLEL PRIVATE(i)
                 !!$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      temp2(offset+l) = temp2(offset+l) + temp1(i)*self%cg_component(k)%p%template(i-1,2)
-                      temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*&
-                           & self%cg_component(k)%p%template(i-1,3)
+                      temp2(offset+l) = temp2(offset+l) + temp1(i)*c%template(i-1,2)
+                      temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*c%template(i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      temp2(offset+l) = temp2(offset+l) + temp1(i)*self%cg_component(k)%p%template(i-1,1)
-                      temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*&
-                           & self%cg_component(k)%p%template(i-1,2)
-                      temp2(offset+l) = temp2(offset+l) + temp1(2*npix+i)*&
-                           & self%cg_component(k)%p%template(i-1,3)
+                      temp2(offset+l) = temp2(offset+l) + temp1(i)*c%template(i-1,1)
+                      temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*c%template(i-1,2)
+                      temp2(offset+l) = temp2(offset+l) + temp1(2*npix+i)*c%template(i-1,3)
                    else
-                      temp2(offset+l) = temp2(offset+l) + temp1(i)*self%cg_component(k)%p%template(i-1,map_n)
+                      temp2(offset+l) = temp2(offset+l) + temp1(i)*c%template(i-1,map_n)
                    end if
                 end do
                 !!$OMP END DO
@@ -842,8 +879,9 @@ contains
     implicit none
     class(dang_cg_group)               :: self
     type(dang_data),     intent(in)    :: ddata
-    type(dang_params)                  :: dpar
     integer(i4b),        intent(in)    :: flag_n
+    type(dang_params)                  :: dpar
+    type(dang_comps),    pointer       :: c
     
     integer(i4b)                       :: offset, i, j, k, l
     integer(i4b)                       :: map_n 
@@ -863,50 +901,61 @@ contains
     ! Let's unravel self%x such that the foreground amplitudes
     ! are properly stored
     do k = 1, self%ncg_components
-       if (self%cg_component(k)%p%type /= 'template') then
+       c => self%cg_component(k)%p
+       if (c%type /= 'template' .and. c%type /= 'hi_fit') then
           ! Unravel according to polarization flags
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
              do i = 1, npix
-                self%cg_component(k)%p%amplitude(i-1,2) = self%x(offset+i)
+                c%amplitude(i-1,2) = self%x(offset+i)
              end do
              offset = offset + npix
              do i = 1, npix
-                self%cg_component(k)%p%amplitude(i-1,3) = self%x(offset+i)
+                c%amplitude(i-1,3) = self%x(offset+i)
              end do
              offset = offset + npix
           else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
              do i = 1, npix
-                self%cg_component(k)%p%amplitude(i-1,1) = self%x(offset+i)
+                c%amplitude(i-1,1) = self%x(offset+i)
              end do
              offset = offset + npix
              do i = 1, npix
-                self%cg_component(k)%p%amplitude(i-1,2) = self%x(offset+i)
+                c%amplitude(i-1,2) = self%x(offset+i)
              end do
              offset = offset + npix
              do i = 1, npix
-                self%cg_component(k)%p%amplitude(i-1,3) = self%x(offset+i)
+                c%amplitude(i-1,3) = self%x(offset+i)
              end do
              offset = offset + npix
           else
              do i = 1, npix
-                self%cg_component(k)%p%amplitude(i-1,2) = self%x(offset+i)
+                c%amplitude(i-1,2) = self%x(offset+i)
              end do
              offset = offset + npix
           end if
-       else
+       else if (c%type == 'hi_fit') then
           l = 1
-          do while (l .lt. self%cg_component(k)%p%nfit)
+          do while (l .lt. c%nfit)
              do j = 1, nbands
-                if (self%cg_component(k)%p%corr(j)) then
+                if (c%corr(j)) then
+                   c%template_amplitudes(j,map_n) = self%x(offset+l)
+                   l = l + 1
+                end if
+             end do
+          end do
+       else if (c%type == 'template') then
+          l = 1
+          do while (l .lt. c%nfit)
+             do j = 1, nbands
+                if (c%corr(j)) then
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      self%cg_component(k)%p%template_amplitudes(j,2)     = self%x(offset+l)
-                      self%cg_component(k)%p%template_amplitudes(j,3)     = self%x(offset+l)
+                      c%template_amplitudes(j,2)     = self%x(offset+l)
+                      c%template_amplitudes(j,3)     = self%x(offset+l)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      self%cg_component(k)%p%template_amplitudes(j,1)     = self%x(offset+l)
-                      self%cg_component(k)%p%template_amplitudes(j,2)     = self%x(offset+l)
-                      self%cg_component(k)%p%template_amplitudes(j,3)     = self%x(offset+l)
+                      c%template_amplitudes(j,1)     = self%x(offset+l)
+                      c%template_amplitudes(j,2)     = self%x(offset+l)
+                      c%template_amplitudes(j,3)     = self%x(offset+l)
                    else
-                      self%cg_component(k)%p%template_amplitudes(j,map_n) = self%x(offset+l)
+                      c%template_amplitudes(j,map_n) = self%x(offset+l)
                    end if
                    l = l + 1
                 end if

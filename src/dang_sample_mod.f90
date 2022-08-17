@@ -32,19 +32,19 @@ contains
           if (c%sample_index(j)) then
              do k = 1, c%nflag(j)
                 if (iand(c%pol_flag(j,k),1) .ne. 0) then
-                   write(*,*) 'Sampling spectral index for ', trim(c%label), 'poltype = I.'
+                   write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = I.'
                    call sample_index_mh(ddata,c,j,1)
                 else if (iand(c%pol_flag(j,k),2) .ne. 0) then
-                   write(*,*) 'Sampling spectral index for ', trim(c%label), 'poltype = Q.'
+                   write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = Q.'
                    call sample_index_mh(ddata,c,j,2)
                 else if (iand(c%pol_flag(j,k),4) .ne. 0) then
-                   write(*,*) 'Sampling spectral index for ', trim(c%label), 'poltype = U.'
+                   write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = U.'
                    call sample_index_mh(ddata,c,j,3)
                 else if (iand(c%pol_flag(j,k),8) .ne. 0) then
-                   write(*,*) 'Sampling spectral index for ', trim(c%label), 'poltype = Q+U.'
+                   write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = Q+U.'
                    call sample_index_mh(ddata,c,j,-1)
                 else if (iand(c%pol_flag(j,k),15) .ne. 0) then
-                   write(*,*) 'Sampling spectral index for ', trim(c%label), 'poltype = I+Q+U.'
+                   write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = I+Q+U.'
                    call sample_index_mh(ddata,c,j,-2)
                 else
                    write(*,*) "There is something wrong with the poltype flag"
@@ -148,14 +148,14 @@ contains
        if (mh_mode == 1) then
           do i = 0, npix-1
              do j = 1, nbands
-                model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,sample)
+                model(i,map_n,j) = c%eval_signal(j,i,map_n,sample)
              end do
           end do
        else if (mh_mode == 2) then
           do i = 0, npix-1
              do k = 2, 3
                 do j = 1, nbands
-                   model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,sample)
+                   model(i,k,j) = c%eval_signal(j,i,k,sample)
                 end do
              end do
           end do
@@ -163,7 +163,7 @@ contains
           do i = 0, npix-1
              do k = 1, 3
                 do j = 1, nbands
-                   model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,sample)
+                   model(i,k,j) = c%eval_signal(j,i,k,sample)
                 end do
              end do
           end do
@@ -189,14 +189,14 @@ contains
           if (mh_mode == 1) then
              do i = 0, npix-1
                 do j = 1, nbands
-                   model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,theta)
+                   model(i,map_n,j) = c%eval_signal(j,i,map_n,sample)
                 end do
              end do
           else if (mh_mode == 2) then
              do i = 0, npix-1
                 do k = 2, 3
                    do j = 1, nbands
-                      model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,theta)
+                      model(i,k,j) = c%eval_signal(j,i,k,sample)
                    end do
                 end do
              end do
@@ -204,7 +204,7 @@ contains
              do i = 0, npix-1
                 do k = 1, 3
                    do j = 1, nbands
-                      model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,theta)
+                      model(i,k,j) = c%eval_signal(j,i,k,sample)
                    end do
                 end do
              end do
@@ -270,18 +270,18 @@ contains
           ! Ensure proper handling of poltypes
           if (mh_mode == 1) then
              do j = 1, nbands
-                model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,sample)
+                model(i,map_n,j) = c%eval_signal(j,i,map_n,sample)
              end do
           else if (mh_mode == 2) then
              do k = 2, 3
                 do j = 1, nbands
-                   model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,sample)
+                   model(i,k,j) = c%eval_signal(j,i,k,sample)
                 end do
              end do
           else if (mh_mode == 3) then
              do k = 1, 3
                 do j = 1, nbands
-                   model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,sample)
+                   model(i,k,j) = c%eval_signal(j,i,k,sample)
                 end do
              end do
           end if
@@ -305,18 +305,18 @@ contains
              ! Ensure proper handling of poltypes
              if (mh_mode == 1) then
                 do j = 1, nbands
-                   model(i,map_n,j) = c%amplitude(i,map_n)*c%eval_sed(j,i,map_n,theta)
+                   model(i,map_n,j) = c%eval_signal(j,i,map_n,sample)
                 end do
              else if (mh_mode == 2) then
                 do k = 2, 3
                    do j = 1, nbands
-                      model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,theta)
+                      model(i,k,j) = c%eval_signal(j,i,k,sample)
                    end do
                 end do
              else if (mh_mode == 3) then
                 do k = 1, 3
                    do j = 1, nbands
-                      model(i,k,j) = c%amplitude(i,k)*c%eval_sed(j,i,k,theta)
+                      model(i,k,j) = c%eval_signal(j,i,k,sample)
                    end do
                 end do
              end if
@@ -496,83 +496,83 @@ contains
   !   end do
   ! end function sample_fg_amp
 
-  subroutine template_fit(dpar, dat, comp, map_n, temp_num)
-    !------------------------------------------------------------------------
-    ! Simple linear fit of a template to data map with a sampling term
-    !------------------------------------------------------------------------
-    implicit none
+  ! subroutine template_fit(dpar, dat, comp, map_n, temp_num)
+  !   !------------------------------------------------------------------------
+  !   ! Simple linear fit of a template to data map with a sampling term
+  !   !------------------------------------------------------------------------
+  !   implicit none
     
-    type(dang_params)                       :: dpar
-    type(dang_comps)                        :: comp
-    type(dang_data)                         :: dat
-    real(dp), dimension(0:npix-1,nbands)    :: cov, nos, map
-    real(dp), allocatable, dimension(:,:,:) :: map2fit
-    integer(i4b),                intent(in) :: map_n
-    integer(i4b), optional,      intent(in) :: temp_num
-    real(dp)                                :: temp, sum1, sum2, norm
-    integer(i4b)                            :: i, j, k, n
+  !   type(dang_params)                       :: dpar
+  !   type(dang_comps)                        :: comp
+  !   type(dang_data)                         :: dat
+  !   real(dp), dimension(0:npix-1,nbands)    :: cov, nos, map
+  !   real(dp), allocatable, dimension(:,:,:) :: map2fit
+  !   integer(i4b),                intent(in) :: map_n
+  !   integer(i4b), optional,      intent(in) :: temp_num
+  !   real(dp)                                :: temp, sum1, sum2, norm
+  !   integer(i4b)                            :: i, j, k, n
 
-    nos = dat%rms_map(:,map_n,:)
-    cov = nos**2.d0
-    allocate(map2fit(0:npix-1,nmaps,nbands))
+  !   nos = dat%rms_map(:,map_n,:)
+  !   cov = nos**2.d0
+  !   allocate(map2fit(0:npix-1,nmaps,nbands))
     
-    map2fit = dat%sig_map
+  !   map2fit = dat%sig_map
     
-    if (trim(dpar%mode) == 'comp_sep') then
-       write(*,*) "Sampling for template "//trim(dpar%temp_label(temp_num))//", pol = "//trim(tqu(map_n))//"."
-       do j = 1, dpar%numinc
-          sum1 = 0.d0
-          sum2 = 0.d0
-          norm = 0.d0
-          temp = 0.d0
-          if (dpar%temp_corr(temp_num,j)) then
-             ! Remove the other foregrounds from the input data before fitting
-             do n = 1, dpar%ncomp
-                map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,n)
-             end do
-             do n = 1, dpar%ntemp
-                if (n == temp_num) cycle
-                map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,dpar%ncomp+n)
-             end do
-             ! Calculate template amplitude
-             do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-                sum1 = sum1 + ((map2fit(i,map_n,j)*dat%temps(i,map_n,temp_num))/cov(i,j))
-                sum2 = sum2 + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
-                norm = norm + dat%temps(i,map_n,temp_num)/dat%rms_map(i,map_n,j)
-             end do
-             if (trim(dpar%ml_mode) == 'sample') then
-                dat%temp_amps(j,map_n,temp_num) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
-             else if (trim(dpar%ml_mode) == 'optimize') then
-                dat%temp_amps(j,map_n,temp_num) = sum1/sum2
-             end if
-          end if
-       end do
-    else if (trim(dpar%mode) == 'hi_fit') then
-       do j = 1, dpar%numinc
-          sum1 = 0.d0
-          sum2 = 0.d0
-          norm = 0.d0
-          temp = 0.d0
-          if (dpar%temp_corr(1,j)) then
-             do i = 0, npix-1
-                if (comp%HI(i,1) > dpar%thresh) cycle
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-                temp = comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))
-                sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/dat%rms_map(i,map_n,j)**2.d0
-                sum2 = sum2 + (temp)**2.d0/dat%rms_map(i,map_n,j)**2.d0
-                norm = norm + temp/dat%rms_map(i,map_n,j)
-             end do
-          end if
+  !   if (trim(dpar%mode) == 'comp_sep') then
+  !      write(*,*) "Sampling for template "//trim(dpar%temp_label(temp_num))//", pol = "//trim(tqu(map_n))//"."
+  !      do j = 1, dpar%numinc
+  !         sum1 = 0.d0
+  !         sum2 = 0.d0
+  !         norm = 0.d0
+  !         temp = 0.d0
+  !         if (dpar%temp_corr(temp_num,j)) then
+  !            ! Remove the other foregrounds from the input data before fitting
+  !            do n = 1, dpar%ncomp
+  !               map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,n)
+  !            end do
+  !            do n = 1, dpar%ntemp
+  !               if (n == temp_num) cycle
+  !               map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,dpar%ncomp+n)
+  !            end do
+  !            ! Calculate template amplitude
+  !            do i = 0, npix-1
+  !               if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
+  !               sum1 = sum1 + ((map2fit(i,map_n,j)*dat%temps(i,map_n,temp_num))/cov(i,j))
+  !               sum2 = sum2 + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
+  !               norm = norm + dat%temps(i,map_n,temp_num)/dat%rms_map(i,map_n,j)
+  !            end do
+  !            if (trim(dpar%ml_mode) == 'sample') then
+  !               dat%temp_amps(j,map_n,temp_num) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
+  !            else if (trim(dpar%ml_mode) == 'optimize') then
+  !               dat%temp_amps(j,map_n,temp_num) = sum1/sum2
+  !            end if
+  !         end if
+  !      end do
+  !   else if (trim(dpar%mode) == 'hi_fit') then
+  !      do j = 1, dpar%numinc
+  !         sum1 = 0.d0
+  !         sum2 = 0.d0
+  !         norm = 0.d0
+  !         temp = 0.d0
+  !         if (dpar%temp_corr(1,j)) then
+  !            do i = 0, npix-1
+  !               if (comp%HI(i,1) > dpar%thresh) cycle
+  !               if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
+  !               temp = comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))
+  !               sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/dat%rms_map(i,map_n,j)**2.d0
+  !               sum2 = sum2 + (temp)**2.d0/dat%rms_map(i,map_n,j)**2.d0
+  !               norm = norm + temp/dat%rms_map(i,map_n,j)
+  !            end do
+  !         end if
 
-          if (trim(dpar%ml_mode) == 'sample') then
-             sum1 = sum1 + norm*rand_normal(0.d0,1.d0)
-          end if
-          comp%HI_amps(j) = sum1/sum2
-      end do
-    end if
+  !         if (trim(dpar%ml_mode) == 'sample') then
+  !            sum1 = sum1 + norm*rand_normal(0.d0,1.d0)
+  !         end if
+  !         comp%HI_amps(j) = sum1/sum2
+  !     end do
+  !   end if
     
-  end subroutine template_fit
+  ! end subroutine template_fit
 
   subroutine sample_index_metropolis(data,rms,model,mask,theta_0,p_theta,step,map_n,pixel,lnL,sample)
     implicit none

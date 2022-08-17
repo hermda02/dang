@@ -548,6 +548,10 @@ contains
        allocate(par%cg_convergence(n2))
        allocate(par%cg_poltype(n2))
 
+       allocate(par%temp_file(1))
+
+       call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME01',par_string=par%temp_file(1))
+
        ! Load the CG group specific parameters
        do i = 1, n2
           call int2string(i, itext)

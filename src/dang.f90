@@ -48,7 +48,7 @@ program dang
   !----------------------------------------------------------------------------------------------------------
   ! General paramters
   if (trim(dpar%mode) == 'comp_sep') then
-     i = getsize_fits(dpar%temp_file(1), nside=nside, ordering=ordering, nmaps=nmaps)
+     i = getsize_fits(dpar%mask_file, nside=nside, ordering=ordering, nmaps=nmaps)
   else if (trim(dpar%mode) == 'hi_fit') then
      i = getsize_fits(dpar%mask_file,    nside=nside, ordering=ordering, nmaps=nmaps)
   else
@@ -89,6 +89,9 @@ program dang
      write(*,*) ''
      call initialize_components(dpar)
      call initialize_cg_groups(dpar)
+     write(*,*) '---------------------------'
+     write(*,*) ' Starting main Gibbs Chain '
+     write(*,*) '---------------------------'
      call comp_sep
   
   !------------------------------------------------------------------------------------------------
@@ -100,16 +103,9 @@ program dang
      call ddata%convert_maps(dpar)
      call initialize_components(dpar)
      call initialize_cg_groups(dpar)
-     write(*,*) '--------------------------'
-
-     component_list(1)%p%template_amplitudes(:,:) = 1.d-4
-     
-     ! Debug initialization here
-     ! dcomps%HI_amps(:) = 1.d-4
-
-     ! call init_components(dpar)
-
-     ! Start sampling routine
+     write(*,*) '---------------------------'
+     write(*,*) ' Starting main Gibbs Chain '
+     write(*,*) '---------------------------'
      call hi_fit   
   end if
 
