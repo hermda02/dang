@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 import os
 import sys
 
-def return_mean_map(list,outfile):
+hp.disable_warnings()
+
+def return_mean_map(list,outfile,mask):
     print('Creating '+str(outfile))
     nside = 64
     npix  = nside*nside*12
@@ -12,22 +14,22 @@ def return_mean_map(list,outfile):
 
     print(samples)
 
-    maps = np.empty((npix,samples))
-    out_map = np.empty(npix)
-    
-    maps = maps.T
+    out_map = np.empty((npix,3))
+
+    out_map[:][:] = 0.0
     
     for i in range(samples):
-        maps[i] = hp.read_map('../'+dir+'/'+list[i],verbose=False)
+        out_map = out_map + hp.read_map(list[i],verbose=False,field=(0,1,2)).T
 
-    maps = maps.T
-
+    out_map = out_map/float(samples)
     for i in range(npix):
-        out_map[i] = np.mean(maps[i][:])
+        if mask[i] == 0:
+            for j in range(3):
+                out_map[i][j] = hp.UNSEEN 
 
-    hp.write_map('../'+dir+'/'+str(outfile),out_map)
+    hp.write_map(str(outfile),out_map.T)
 
-def return_std_map(list,outfile):
+def return_std_map(list,outfile,mask):
     print('Creating '+str(outfile))
     nside = 64
     npix  = nside*nside*12
@@ -35,20 +37,26 @@ def return_std_map(list,outfile):
 
     print(samples)
 
-    maps = np.empty((npix,samples))
-    out_map = np.empty(npix)
+    maps = np.empty((npix,3,samples))
+    out_map = np.empty((npix,3))
     
     maps = maps.T
     
     for i in range(samples):
-        maps[i] = hp.read_map('../'+dir+'/'+list[i],verbose=False)
+        maps[i] = hp.read_map(list[i],verbose=False,field=(0,1,2))
 
     maps = maps.T
 
     for i in range(npix):
-        out_map[i] = np.std(maps[i][:])
+        if mask[i] == 0:
+            for j in range(3):
+                out_map[i][j] = hp.UNSEEN 
+        else:
+            for j in range(3):
+                out_map[i][j] = np.std(maps[i][j][:])
 
-    hp.write_map('../'+dir+'/'+outfile,out_map)
+
+    hp.write_map(outfile,out_map.T)
     
 def read_params(filename):
     labels = []
@@ -59,6 +67,8 @@ def read_params(filename):
                 numbands = int(line.split('=')[1])
             if line.startswith('NUMGIBBS'):
                 numgibbs = int(line.split('=')[1][:5])
+            if line.startswith('MASKFILE'):
+                maskfile = str.strip(line.split('=')[1])
                 
     blabs = []
     bfreq = []
@@ -74,168 +84,118 @@ def read_params(filename):
                 if line.startswith(bfreq[band]):
                     fre  = str.strip(line.split('=')[1])
                     freq.append(float(fre))
-    return labels, freq, numgibbs
+    return labels, freq, numgibbs, maskfile
 
 try:    
-    dir = sys.argv[1] #str(input('Which directory to mean? '))
-    files = os.listdir('../'+dir)
-    names, freq, num_samp = read_params('../'+dir+'/param_'+dir+'.txt')
+    files = os.listdir()
+    thing = [file for file in files if 'param' in file]
+    names, freq, num_samp, maskfile = read_params(thing[0])
     labels = [name.replace("'","") for name in names]
+    maskfile = maskfile.replace("'","")
     num_bands = len(freq)
     print(labels)
     print(freq)
-
 except:
     print("Input which directory you wish to point to (../ automatically included)")
     exit()
 
-res_1_Q = []
-res_2_Q = []
-res_3_Q = []
-res_4_Q = []
-res_5_Q = []
-res_6_Q = []
-res_7_Q = []
-res_8_Q = []
+# listed  = [s for s in files if (labels[0] in s and 'res' in s)]
+# samples = len(listed)
+# print(samples)
 
-res_1_U = []
-res_2_U = []
-res_3_U = []
-res_4_U = []
-res_5_U = []
-res_6_U = []
-res_7_U = []
-res_8_U = []
+mask = hp.read_map(str('../'+maskfile))
 
-synch_Qs = []
-synch_Us = []
-chi_Qs   = []
-chi_Us   = []
+# npix = np.shape(mask)[0]
 
-beta_ss  = []
+# residuals = np.empty((num_bands,samples,npix))
+# synchs    = np.empty((samples,npix))
+# chis      = np.empty((samples,npix))
+# betas     = np.empty((samples,npix))
+
+# for file in files:
+#     for j in range(num_bands):
+#         if (labels[j] in file) and ('res' in file):
+#             print(labels[j],file)
+#     # for i in range(samples):
+
+
+
+res_1 = []
+res_2 = []
+res_3 = []
+res_4 = []
+res_5 = []
+res_6 = []
+res_7 = []
+# res_8 = []
+
+synchs = []
+chis   = []
+
+beta_s  = []
 
 for file in files:
     
     # Residuals Q
+    if file.startswith(labels[0]+'_residual'):
+        if file.endswith('.fits'):
+            res_1.append(file)
+
+    if file.startswith(labels[1]+'_residual'):
+        if file.endswith('.fits'):
+            res_2.append(file)
     
-    if file.startswith(labels[0]+'_residual_Q'):
+    if file.startswith(labels[2]+'_residual'):
         if file.endswith('.fits'):
-            res_1_Q.append(file)
+            res_3.append(file)
 
-    if file.startswith(labels[1]+'_residual_Q'):
+    if file.startswith(labels[3]+'_residual'):
         if file.endswith('.fits'):
-            res_2_Q.append(file)
-    
-    if file.startswith(labels[2]+'_residual_Q'):
-        if file.endswith('.fits'):
-            res_3_Q.append(file)
+            res_4.append(file)
 
-    if file.startswith(labels[3]+'_residual_Q'):
+    if file.startswith(labels[4]+'_residual'):
         if file.endswith('.fits'):
-            res_4_Q.append(file)
+            res_5.append(file)
 
-    if file.startswith(labels[4]+'_residual_Q'):
+    if file.startswith(labels[5]+'_residual'):
         if file.endswith('.fits'):
-            res_5_Q.append(file)
+            res_6.append(file)
 
-    if file.startswith(labels[5]+'_residual_Q'):
+    if file.startswith(labels[6]+'_residual'):
         if file.endswith('.fits'):
-            res_6_Q.append(file)
+            res_7.append(file)
 
-    if file.startswith(labels[6]+'_residual_Q'):
-        if file.endswith('.fits'):
-            res_7_Q.append(file)
 
-#    if file.startswith(labels[7]+'_residual_Q'):
-#        if file.endswith('.fits'):
-#            res_8_Q.append(file)
-
-    # Residuals U
-    
-    if file.startswith(labels[0]+'_residual_U'):
-        if file.endswith('.fits'):
-            res_1_U.append(file)
-
-    if file.startswith(labels[1]+'_residual_U'):
-        if file.endswith('.fits'):
-            res_2_U.append(file)
-    
-    if file.startswith(labels[2]+'_residual_U'):
-        if file.endswith('.fits'):
-            res_3_U.append(file)
-
-    if file.startswith(labels[3]+'_residual_U'):
-        if file.endswith('.fits'):
-            res_4_U.append(file)
-
-    if file.startswith(labels[4]+'_residual_U'):
-        if file.endswith('.fits'):
-            res_5_U.append(file)
-            
-    if file.startswith(labels[5]+'_residual_U'):
-        if file.endswith('.fits'):
-            res_6_U.append(file)
-
-    if file.startswith(labels[6]+'_residual_U'):
-        if file.endswith('.fits'):
-            res_7_U.append(file)
-            
-    # if file.startswith(labels[7]+'_residual_U'):
-    #     if file.endswith('.fits'):
-    #         res_8_U.append(file)
-            
     # Synch maps
             
-    if file.startswith('bp_044_synch_amplitude_Q'):
+    if file.startswith('bp_030_synch_amplitude'):
         if file.endswith('.fits'):
-            synch_Qs.append(file)
-            
-    if file.startswith('bp_044_synch_amplitude_U'):
-        if file.endswith('.fits'):
-            synch_Us.append(file)
+            synchs.append(file)
 
     # Synch beta
-    if file.startswith('synch_beta_Q'):
+    if file.startswith('synch_beta'):
         if file.endswith('.fits'):
-            beta_ss.append(file)
+            beta_s.append(file)
             
     # Chisquare maps
 
-    if file.startswith('chisq_Q'):
+    if file.startswith('chisq'):
         if file.endswith('.fits'):
-            chi_Qs.append(file)
-
-    if file.startswith('chisq_U'):
-        if file.endswith('.fits'):
-            chi_Us.append(file)
+            chis.append(file)
 
 
-return_mean_map(chi_Qs,'chisq_Q_mean.fits')
-return_mean_map(chi_Us,'chisq_U_mean.fits')
-return_mean_map(synch_Qs,'synch_Q_mean.fits')
-return_mean_map(synch_Us,'synch_U_mean.fits')
+return_mean_map(chis,'chisq_mean.fits',mask)
+return_mean_map(beta_s,'synch_beta_mean.fits',mask)
+return_mean_map(synchs,'synch_mean.fits',mask)
+return_std_map(synchs,'synch_std.fits',mask)
 
-return_mean_map(beta_ss,'synch_beta_mean.fits')
+return_std_map(beta_s,'synch_beta_std.fits',mask)
 
-return_std_map(synch_Qs,'synch_Q_std.fits')
-return_std_map(synch_Us,'synch_U_std.fits')
-
-return_std_map(beta_ss,'synch_beta_std.fits')
-
-return_mean_map(res_1_Q,labels[0]+'_residual_Q_mean.fits')
-return_mean_map(res_2_Q,labels[1]+'_residual_Q_mean.fits')
-return_mean_map(res_3_Q,labels[2]+'_residual_Q_mean.fits')
-return_mean_map(res_4_Q,labels[3]+'_residual_Q_mean.fits')
-return_mean_map(res_5_Q,labels[4]+'_residual_Q_mean.fits')
-return_mean_map(res_6_Q,labels[5]+'_residual_Q_mean.fits')
-return_mean_map(res_7_Q,labels[6]+'_residual_Q_mean.fits')
-#return_mean_map(res_8_Q,labels[7]+'_residual_Q_mean.fits')
-
-return_mean_map(res_1_U,labels[0]+'_residual_U_mean.fits')
-return_mean_map(res_2_U,labels[1]+'_residual_U_mean.fits')
-return_mean_map(res_3_U,labels[2]+'_residual_U_mean.fits')
-return_mean_map(res_4_U,labels[3]+'_residual_U_mean.fits')
-return_mean_map(res_5_U,labels[4]+'_residual_U_mean.fits')
-return_mean_map(res_6_U,labels[5]+'_residual_U_mean.fits')
-return_mean_map(res_7_U,labels[6]+'_residual_U_mean.fits')
-#return_mean_map(res_8_U,labels[7]+'_residual_U_mean.fits')
+return_mean_map(res_1,labels[0]+'_residual_mean.fits',mask)
+return_mean_map(res_2,labels[1]+'_residual_mean.fits',mask)
+return_mean_map(res_3,labels[2]+'_residual_mean.fits',mask)
+return_mean_map(res_4,labels[3]+'_residual_mean.fits',mask)
+return_mean_map(res_5,labels[4]+'_residual_mean.fits',mask)
+return_mean_map(res_6,labels[5]+'_residual_mean.fits',mask)
+return_mean_map(res_7,labels[6]+'_residual_mean.fits',mask)
+# #return_mean_map(res_8,labels[7]+'_residual_mean.fits')
