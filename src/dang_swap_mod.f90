@@ -10,10 +10,9 @@ module dang_swap_mod
     use dang_data_mod
     implicit none
 
-
 contains
 
-  subroutine swap_bp_maps(dat,dpar)
+  subroutine swap_comm_maps(dat,dpar)
     type(dang_params)                               :: dpar
     type(dang_data),                  intent(inout) :: dat
     character(len=512)                              :: chain_c
@@ -28,23 +27,23 @@ contains
     allocate(rms(0:npix-1,3))
     allocate(bp_maps(dpar%numband,2))
 
+    call RANDOM_SEED()
+    call RANDOM_NUMBER(temp)
+    
+    norm    = temp(1)*dpar%num_chains
+    chain_i = int(norm)+1
+    chain_c = dpar%bp_chain_list(chain_i)
+    
+    call RANDOM_SEED()
+    call RANDOM_NUMBER(temp)
+    
+    norm    = temp(1)*(dpar%bp_max-dpar%bp_burnin)
+    iter_i  = int(norm)+1+dpar%bp_burnin
+    
+    write(iter_str,'(i0.6)') iter_i
+    
     do j = 1, dpar%numband
        if (dpar%bp_map(j)) then
-
-          call RANDOM_SEED()
-          call RANDOM_NUMBER(temp)
-          
-          norm    = temp(1)*dpar%num_chains
-          chain_i = int(norm)+1
-          chain_c = dpar%bp_chain_list(chain_i)
-          
-          call RANDOM_SEED()
-          call RANDOM_NUMBER(temp)
-          
-          norm    = temp(1)*(dpar%bp_max-dpar%bp_burnin)
-          iter_i  = int(norm)+1+dpar%bp_burnin
-          
-          write(iter_str,'(i0.6)') iter_i
 
           ! Normal BP switching here
           bp_maps(j,1) = trim(dpar%bp_dir) // trim(dpar%band_label(j))//'_map_'//trim(chain_c)//&
@@ -65,6 +64,6 @@ contains
        end if
     end do
 
-  end subroutine swap_bp_maps
+  end subroutine swap_comm_maps
 
 end module dang_swap_mod

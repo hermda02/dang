@@ -83,7 +83,7 @@ program dang
      do j = 1, nbands
         ! Check to see if any maps need to be dust corrected
         if (dpar%dust_corr(j) .and. .not. dpar%bp_map(j)) then
-           call dust_correct_band(ddata,dpar,dcomps,j)
+           call dust_correct_band(ddata,dpar,j)
         end if
      end do
      write(*,*) ''
@@ -168,16 +168,16 @@ contains
       ! -- Swap in a different BeyondPlanck map each iteration -- |
       !-----------------------------------------------------------|
       if (dpar%bp_swap) then
-         call swap_bp_maps(ddata,dpar)
+         call swap_comm_maps(ddata,dpar)
          write(*,*) ''
          bp_iter = bp_iter + 1
-         call convert_bp_maps(ddata, dpar)
+         call convert_comm_maps(ddata, dpar)
          write(*,*) ''
          ! Check to see if any swapped maps need to be dust corrected                               
          do j = 1, nbands
             if (dpar%bp_map(j)) then
                if (dpar%dust_corr(j)) then
-                  call dust_correct_band(ddata,dpar,dcomps,j,iter)
+                  call dust_correct_band(ddata,dpar,j,iter)
                end if
             end if
          end do
@@ -221,22 +221,19 @@ contains
 
    do i = 1, ncomp
       if (component_list(i)%p%type == 'hi_fit') then
+         ! component_list(i)%p%template_amplitudes(:,1) = 1d-4
          call ddata%mask_hi(dpar,component_list(i)%p)
       end if
    end do
 
    do iter = 1, dpar%ngibbs
       
-      ! if (iter > 1) then
-      !    do j = 1, nbands
-      !       if (dpar%fit_gain(j)) then
-      !          call sample_band_gain(dpar, ddata, dcomps, 1, j, 1, 1)
-      !       end if
-      !       if (dpar%fit_offs(j)) then
-      !          call sample_band_offset(dpar, ddata, dcomps, 1, j, 1, 1)
-      !       end if
-      !    end do
-      ! end if
+      ! ------------------------------------------------------------------------------------------
+      ! Sample for band calibrators (gain/offset)      
+      ! ------------------------------------------------------------------------------------------
+      call sample_band_calibrators(dpar,ddata)
+      call ddata%update_sky_model
+      call write_stats_to_term(ddata,dpar,dcomps,iter)
       
       ! ------------------------------------------------------------------------------------------
       ! Sample each CG group for amplitudes

@@ -32,19 +32,20 @@ module dang_param_mod
      character(len=512)                              :: datadir        ! Directory to look for bandfiles in
      character(len=512)                              :: bp_dir         ! Directory for BP swap maps
      character(len=512)                              :: mask_file      ! Mask filename
+     character(len=512), allocatable, dimension(:)   :: band_calib     ! What component do we calibrate against?
+     logical(lgt),       allocatable, dimension(:)   :: band_inc       ! Is this band included?
      character(len=512), allocatable, dimension(:)   :: band_label     ! Band label
      character(len=512), allocatable, dimension(:)   :: band_mapfile   ! Band filename
      character(len=512), allocatable, dimension(:)   :: band_noisefile ! Band rms filename
+     real(dp),           allocatable, dimension(:)   :: band_nu        ! Band frequency (in GHz)
      character(len=512), allocatable, dimension(:)   :: band_unit      ! Band units (uK_CMB, uK_RJ, MJy/sr)
      character(len=512), allocatable, dimension(:)   :: bp_id          ! Band bandpass type
      character(len=512), allocatable, dimension(:)   :: bp_file        ! Band bandpass filename
-     real(dp),           allocatable, dimension(:)   :: band_nu        ! Band frequency (in GHz)
      real(dp),           allocatable, dimension(:)   :: init_gain      ! initial gain value for each band
      real(dp),           allocatable, dimension(:)   :: init_offset    ! initial offset value for each band
      logical(lgt),       allocatable, dimension(:)   :: bp_map         ! True false (know when to swap)
      logical(lgt),       allocatable, dimension(:)   :: fit_gain       ! Do we fit the gain for this band?
      logical(lgt),       allocatable, dimension(:)   :: fit_offs       ! Do we fit the offset for this band?
-     logical(lgt),       allocatable, dimension(:)   :: band_inc       ! Is this band included?
      
      ! Component parameters
      integer(i4b)                                      :: ncomp          ! # of foregrounds
@@ -383,8 +384,8 @@ contains
     call get_parameter_hashtable(htbl, 'SOLVER_MODE', par_string=par%mode)
     call get_parameter_hashtable(htbl, 'ML_MODE', par_string=par%ml_mode)
     call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
-    call get_parameter_hashtable(htbl, 'CG_ITER_MAX', par_int=par%cg_iter)
-    call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH', par_dp=par%cg_converge)
+    ! call get_parameter_hashtable(htbl, 'CG_ITER_MAX', par_int=par%cg_iter)
+    ! call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH', par_dp=par%cg_converge)
     call get_parameter_hashtable(htbl, 'OUTPUT_TEMP_UNCERTAINTY', par_lgt=par%output_unc)
     call get_parameter_hashtable(htbl, 'BP_SWAP',par_lgt=par%bp_swap)
     call get_parameter_hashtable(htbl, 'BP_BURN_IN',par_int=par%bp_burnin)
@@ -462,6 +463,7 @@ contains
     allocate(par%init_offset(n2))
     allocate(par%fit_gain(n2))
     allocate(par%fit_offs(n2))
+    allocate(par%band_calib(n2))
     
     ! Set up this way so as to only load information about included bands
     j = 0
@@ -492,6 +494,7 @@ contains
        call get_parameter_hashtable(htbl, 'BAND_FIT_OFFSET'//itext, len_itext=len_itext, par_lgt=par%fit_offs(j))
        call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offset(j))
        call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(j))
+       call get_parameter_hashtable(htbl, 'BAND_CALIBRATOR'//itext, len_itext=len_itext, par_string=par%band_calib(j))
        call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(j))
     end do
   end subroutine read_data_params

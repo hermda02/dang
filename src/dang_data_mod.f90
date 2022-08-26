@@ -9,30 +9,32 @@ module dang_data_mod
   type, public                                :: dang_data
 
      ! Storage
-    character(len=255)                        :: label
+    character(len=255)                                 :: label
+
+    integer(i4b)                                       :: npix
+    integer(i4b)                                       :: nfgs
+    integer(i4b)                                       :: nmaps
+    real(dp)                                           :: chisq
+
+    real(dp),          allocatable, dimension(:,:,:)   :: sig_map    ! data maps 
+    real(dp),          allocatable, dimension(:,:,:)   :: rms_map    ! noise maps
+    real(dp),          allocatable, dimension(:,:,:)   :: res_map    ! Residual maps
+    real(dp),          allocatable, dimension(:,:)     :: chi_map    ! Chisq map (for outputs)
+    real(dp),          allocatable, dimension(:,:,:,:) :: fg_map     ! Component maps (npix, nmaps, nbands, nfgs)
+    real(dp),          allocatable, dimension(:,:,:)   :: sky_model  ! Total sky model
+
+    real(dp),          allocatable, dimension(:)       :: gain       ! Where band gains are stored
+    real(dp),          allocatable, dimension(:)       :: offset     ! Where band offsets are stored
     
-    integer(i4b)                              :: npix
-    integer(i4b)                              :: nfgs
-    integer(i4b)                              :: nmaps
-    real(dp)                                  :: chisq
+    real(dp),          allocatable, dimension(:,:)     :: masks      ! Where masks are stored
 
-    real(dp), allocatable, dimension(:,:,:)   :: sig_map    ! data maps 
-    real(dp), allocatable, dimension(:,:,:)   :: rms_map    ! noise maps
-    real(dp), allocatable, dimension(:,:,:)   :: res_map    ! Residual maps
-    real(dp), allocatable, dimension(:,:)     :: chi_map    ! Chisq map (for outputs)
-    real(dp), allocatable, dimension(:,:,:,:) :: fg_map     ! Component maps (npix, nmaps, nbands, nfgs)
-    real(dp), allocatable, dimension(:,:,:)   :: sky_model  ! Total sky model
+    real(dp),          allocatable, dimension(:,:,:)   :: temps      ! Where template maps are stored   
+    real(dp),          allocatable, dimension(:,:,:)   :: temp_amps  ! Where template amplitudes are stored
+    real(dp),          allocatable, dimension(:,:)     :: temp_norm  ! Where we store template normalizations
 
-    real(dp), allocatable, dimension(:)       :: gain       ! Where band gains are stored
-    real(dp), allocatable, dimension(:)       :: offset     ! Where band offsets are stored
-    
-    real(dp), allocatable, dimension(:,:)     :: masks      ! Where masks are stored
+    real(dp),          allocatable, dimension(:)       :: band_chisq ! A variable to store the chisq of each band
 
-    real(dp), allocatable, dimension(:,:,:)   :: temps      ! Where template maps are stored   
-    real(dp), allocatable, dimension(:,:,:)   :: temp_amps  ! Where template amplitudes are stored
-    real(dp), allocatable, dimension(:,:)     :: temp_norm  ! Where we store template normalizations
-
-    real(dp), allocatable, dimension(:)       :: band_chisq ! A variable to store the chisq of each band
+    character(len=64), allocatable, dimension(:)       :: band_calibrator ! Which component are we calibrating agains
 
   contains
     procedure :: init_data_maps
@@ -51,6 +53,8 @@ contains
     implicit none
     class(dang_data),       intent(inout) :: self
     type(dang_params),      intent(in)    :: dpar
+
+    integer(i4b)                          :: j
 
     write(*,*) "Initializing data maps"
     
@@ -211,11 +215,10 @@ contains
     end do
   end subroutine mask_hi
   
-  subroutine dust_correct_band(self,dpar,comp,band,iter)
+  subroutine dust_correct_band(self,dpar,band,iter)
     implicit none
     type(dang_data),             intent(inout) :: self
     type(dang_params)                          :: dpar
-    type(dang_comps)                           :: comp
     integer(i4b),                intent(in)    :: band
     integer(i4b), optional,      intent(in)    :: iter
     real(dp), allocatable, dimension(:,:,:)    :: thermal_map
@@ -430,7 +433,7 @@ contains
 
   end subroutine convert_maps
   
-  subroutine convert_bp_maps(self,dpar)
+  subroutine convert_comm_maps(self,dpar)
     implicit none
     type(dang_data),   intent(inout) :: self
     type(dang_params), intent(inout) :: dpar
@@ -457,7 +460,7 @@ contains
        end if
     end do
     
-  end subroutine convert_bp_maps
+  end subroutine convert_comm_maps
 
   subroutine compute_chisq(self,dpar)
     use healpix_types
@@ -471,10 +474,17 @@ contains
     do i = 0, npix-1
        if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
        do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-          do j = 1, nbands
-             self%chisq = self%chisq + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
-                  & (self%rms_map(i,k,j)**2.d0)
-          end do
+          if (k == 1) then
+             do j = 1, nbands
+                self%chisq = self%chisq + (self%sig_map(i,k,j)/self%gain(j) - self%offset(j)&
+                     - self%sky_model(i,k,j))**2.d0 / (self%rms_map(i,k,j)**2.d0)
+             end do
+          else
+             do j = 1, nbands
+                self%chisq = self%chisq + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
+                     & (self%rms_map(i,k,j)**2.d0)
+             end do
+          end if
        end do
     end do
     self%chisq = self%chisq
@@ -535,11 +545,11 @@ contains
   end subroutine write_stats_to_term
 
   ! Data output routines
-  subroutine write_maps(dpar,dat)
+  subroutine write_maps(dpar,ddata)
     implicit none
     
     type(dang_params)                   :: dpar
-    type(dang_data)                     :: dat
+    type(dang_data)                     :: ddata
     type(dang_comps),         pointer   :: c
     real(dp), dimension(0:npix-1,nmaps) :: map
     real(dp)                            :: s, signal
@@ -571,7 +581,7 @@ contains
                    end do
                 end if
                 do i = 0, npix-1
-                   if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                   if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                       map(i,:) = missval
                    end if
                 end do
@@ -582,9 +592,9 @@ contains
           do n = 1, dpar%ncomp
              title = trim(dpar%outdir) // 'reference_'// trim(dpar%fg_label(n)) //&
                   '_amplitude_k' // trim(iter_str) // '.fits'
-             map(:,:)   = component_list(n)%p%amplitude!dat%fg_map(:,:,0,n)
+             map(:,:)   = component_list(n)%p%amplitude
              do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                    map(i,:) = missval
                 end if
              end do
@@ -593,9 +603,9 @@ contains
        end if
        do j = 1, nbands
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
-          map(:,:)   = dat%res_map(:,:,j)
+          map(:,:)   = ddata%res_map(:,:,j)
           do i = 0, npix-1
-             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+             if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                 map(i,:) = missval
              end if
           end do
@@ -603,9 +613,9 @@ contains
 
 
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
-          map(:,:)   = dat%sky_model(:,:,j)
+          map(:,:)   = ddata%sky_model(:,:,j)
           do i = 0, npix-1
-             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+             if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                 map(i,:) = missval
              end if
           end do
@@ -619,7 +629,7 @@ contains
              title = trim(dpar%outdir) // trim(c%label) // '_beta_k' // trim(iter_str) // '.fits'
              map(:,:)   = c%indices(:,:,1)
              do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                    map(i,:) = missval
                 end if
              end do
@@ -627,14 +637,14 @@ contains
              title = trim(dpar%outdir) // trim(c%label) // '_beta_k' // trim(iter_str) // '.fits'
              map(:,:)   = c%indices(:,:,1)
              do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                    map(i,:) = missval
                 end if
              end do
              title = trim(dpar%outdir) // trim(c%label) // '_T_k' // trim(iter_str) // '.fits'
              map(:,:)   = c%indices(:,:,2)
              do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                    map(i,:) = missval
                 end if
              end do
@@ -642,22 +652,22 @@ contains
        end do
        call write_result_map(trim(title), nside, ordering, header, map)
        do mn = 1, nmaps
-          dat%chi_map(:,mn) = 0.d0
+          ddata%chi_map(:,mn) = 0.d0
           do i = 0, npix-1
              do j = 1, nbands
                 s      = 0.d0
-                dat%chi_map(i,mn) = dat%chi_map(i,mn) + dat%masks(i,1)*(dat%sig_map(i,mn,j) - dat%sky_model(i,mn,j))**2.d0&
-                     & /dat%rms_map(i,mn,j)**2.d0
+                ddata%chi_map(i,mn) = ddata%chi_map(i,mn) + ddata%masks(i,1)*(ddata%sig_map(i,mn,j) - ddata%sky_model(i,mn,j))**2.d0&
+                     & /ddata%rms_map(i,mn,j)**2.d0
              end do
           end do
        end do
-       dat%chi_map(:,:) = dat%chi_map(:,:)/(nbands)
+       ddata%chi_map(:,:) = ddata%chi_map(:,:)/(nbands)
        title = trim(dpar%outdir) // 'chisq_k'// trim(iter_str) // '.fits'
-       map(:,:)   = dat%chi_map(:,:)
+       map(:,:)   = ddata%chi_map(:,:)
        do i = 0, npix-1
-          if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+          if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
              map(i,:) = missval
-             dat%chi_map(i,:) = missval
+             ddata%chi_map(i,:) = missval
           end if
        end do
        call write_result_map(trim(title), nside, ordering, header, map)
@@ -669,9 +679,9 @@ contains
        write(iter_str, '(i0.5)') iter
        do j = 1, nbands
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
-          map(:,1)   = dat%sky_model(:,1,j)!component_list(1)%p%template_amplitudes(j,1)*component_list(1)%p%template(:,1)
+          map(:,1)   = ddata%sky_model(:,1,j)!component_list(1)%p%template_amplitudes(j,1)*component_list(1)%p%template(:,1)
           do i = 0, npix-1
-             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+             if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                 map(i,1) = missval
              end if
           end do
@@ -680,9 +690,9 @@ contains
        ! Write out residual maps
        do j = 1, nbands
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
-          map(:,:)   = dat%res_map(:,:,j)
+          map(:,:)   = ddata%res_map(:,:,j)
           do i = 0, npix-1
-             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+             if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                 map(i,1) = missval
              end if
           end do
@@ -693,25 +703,25 @@ contains
        title = trim(dpar%outdir) // 'T_d_k'// trim(iter_str) // '.fits'
        map(:,1)   = component_list(1)%p%indices(:,1,1)
        do i = 0, npix-1
-          if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+          if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
              map(i,1) = missval
           end if
        end do
        call write_bintab(map,npix,1, header, nlheader, trim(title))
 
        ! Compute and write out \chi^2 map
-       dat%chi_map = 0.d0
+       ddata%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
-             s = dat%gain(j)*dat%sky_model(i,1,j)+dat%offset(j)
-             dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
+             s = ddata%gain(j)*ddata%sky_model(i,1,j)+ddata%offset(j)
+             ddata%chi_map(i,1) = ddata%chi_map(i,1) + ddata%masks(i,1)*(ddata%sig_map(i,1,j) - s)**2.d0/ddata%rms_map(i,1,j)**2.d0
           end do
        end do
-       dat%chi_map(:,1) = dat%chi_map(:,1)!/(nbands)
+       ddata%chi_map(:,1) = ddata%chi_map(:,1)!/(nbands)
        title = trim(dpar%outdir) // 'chisq_k' // trim(iter_str) // '.fits'
-       map(:,1)   = dat%chi_map(:,1)
+       map(:,1)   = ddata%chi_map(:,1)
        do i = 0, npix-1
-          if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+          if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
              map(i,1) = missval
           end if
        end do
@@ -719,11 +729,11 @@ contains
     end if
     
   end subroutine write_maps
-  
-  subroutine write_data(dpar,dat,map_n)
+ 
+  subroutine write_data(dpar,ddata,map_n)
     implicit none
     type(dang_params)                   :: dpar
-    type(dang_data)                     :: dat
+    type(dang_data)                     :: ddata
     type(dang_comps),         pointer   :: c
     integer(i4b),            intent(in) :: map_n
     integer(i4b)                        :: i, n
@@ -740,8 +750,8 @@ contains
        else
           open(33,file=title, status="new", action="write")
        endif
-       call compute_chisq(dat,dpar)!,dcomps,map_n)
-       write(33,*) dat%chisq
+       call compute_chisq(ddata,dpar)!,dcomps,map_n)
+       write(33,*) ddata%chisq
        close(33)
        
        do n = 1, ncomp
@@ -782,29 +792,29 @@ contains
        else
           open(36,file=title,status="new",action="write")
        end if
-       call compute_chisq(dat,dpar)
-       write(36,'(E17.8)') dat%chisq
+       call compute_chisq(ddata,dpar)
+       write(36,'(E17.8)') ddata%chisq
        close(36)
 
-       ! title = trim(dpar%outdir)//'band_gains.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(37,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(37,file=title,status="new",action="write")
-       ! end if
-       ! write(37,fmt=fmt) dat%gain
-       ! close(37)
+       title = trim(dpar%outdir)//'band_gains.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(37,file=title,status="old",position="append",action="write") 
+       else
+          open(37,file=title,status="new",action="write")
+       end if
+       write(37,fmt=fmt) ddata%gain
+       close(37)
 
-       ! title = trim(dpar%outdir)//'band_offsets.dat'
-       ! inquire(file=title,exist=exist)
-       ! if (exist) then
-       !    open(38,file=title,status="old",position="append",action="write") 
-       ! else
-       !    open(38,file=title,status="new",action="write")
-       ! end if
-       ! write(38,fmt=fmt) dat%offset
-       ! close(38)
+       title = trim(dpar%outdir)//'band_offsets.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(38,file=title,status="old",position="append",action="write") 
+       else
+          open(38,file=title,status="new",action="write")
+       end if
+       write(38,fmt=fmt) ddata%offset
+       close(38)
 
        title = trim(dpar%outdir)//'HI_Td_mean.dat'
        inquire(file=title,exist=exist)
@@ -813,7 +823,7 @@ contains
        else
           open(39,file=title,status="new",action="write")
        end if
-       write(39,'(E17.8)') mask_avg(component_list(1)%p%indices(:,1,1),dat%masks(:,1))
+       write(39,'(E17.8)') mask_avg(component_list(1)%p%indices(:,1,1),ddata%masks(:,1))
        close(39)
 
        ! title = trim(dpar%outdir)//'band_chisq.dat'
@@ -823,7 +833,7 @@ contains
        ! else
        !    open(40,file=title,status="new",action="write")
        ! end if
-       ! write(40,fmt=fmt) dat%band_chisq
+       ! write(40,fmt=fmt) ddata%band_chisq
        ! close(40)
 
     end if
