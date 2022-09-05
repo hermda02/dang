@@ -502,18 +502,18 @@ contains
 
     if (trim(dpar%mode) == 'comp_sep') then
        write(*,fmt='(a)') '---------------------------------------------'
-       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-          if (rank == master) then
-             if (mod(iter, 1) == 0 .or. iter == 1) then
-                write(*,fmt='(i6, a, a, f7.3, a, f8.4, a, 10e10.3)')&
-                     iter, " - Poltype: "//trim(tqu(k)), " - A_s: ",&
-                     component_list(1)%p%amplitude(23000,k),  " - beta_s: ",&
-                     mask_avg(component_list(1)%p%indices(:,k,1),self%masks(:,1)), ' - A_d: ', &
-                     component_list(2)%p%template_amplitudes(:,k)
-                write(*,fmt='(a)') '---------------------------------------------'
-             end if
-          end if
-       end do
+       ! do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+       !    if (rank == master) then
+       !       if (mod(iter, 1) == 0 .or. iter == 1) then
+       !          write(*,fmt='(i6, a, a, f7.3, a, f8.4, a, 10e10.3)')&
+       !               iter, " - Poltype: "//trim(tqu(k)), " - A_s: ",&
+       !               component_list(1)%p%amplitude(23000,k),  " - beta_s: ",&
+       !               mask_avg(component_list(1)%p%indices(:,k,1),self%masks(:,1)), ' - A_d: ', &
+       !               component_list(2)%p%template_amplitudes(:,k)
+       !          write(*,fmt='(a)') '---------------------------------------------'
+       !       end if
+       !    end if
+       ! end do
        call compute_chisq(self,dpar)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
@@ -633,6 +633,7 @@ contains
                    map(i,:) = missval
                 end if
              end do
+             call write_result_map(trim(title), nside, ordering, header, map)
           else if (trim(c%type) == 'mbb') then
              title = trim(dpar%outdir) // trim(c%label) // '_beta_k' // trim(iter_str) // '.fits'
              map(:,:)   = c%indices(:,:,1)
@@ -641,6 +642,7 @@ contains
                    map(i,:) = missval
                 end if
              end do
+             call write_result_map(trim(title), nside, ordering, header, map)
              title = trim(dpar%outdir) // trim(c%label) // '_T_k' // trim(iter_str) // '.fits'
              map(:,:)   = c%indices(:,:,2)
              do i = 0, npix-1
@@ -648,9 +650,9 @@ contains
                    map(i,:) = missval
                 end if
              end do
+             call write_result_map(trim(title), nside, ordering, header, map)
           end if
        end do
-       call write_result_map(trim(title), nside, ordering, header, map)
        do mn = 1, nmaps
           ddata%chi_map(:,mn) = 0.d0
           do i = 0, npix-1

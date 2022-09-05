@@ -623,10 +623,15 @@ contains
 
     mask = ddata%masks(:,1)
 
-    ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
-    do i = 0, ddata%npix-1
-       if (mask(i) == missval) then
-          mask(i) = 0.d0
+    ! Find the correct component
+    do i = 1, ncomp
+       if (trim(component_list(i)%p%label) == trim(dpar%band_calib(band))) then
+          c => component_list(i)%p
+       end if
+       if (.not. associated(c)) then
+          write(*,*) "Error: cannot fit band gain to ", trim(dpar%band_calib(band))
+          write(*,*) "Component label not found!"
+          stop
        end if
     end do
 
@@ -634,8 +639,17 @@ contains
     calibratee = ddata%gain(band)*ddata%sig_map(:,1,band)
 
     ! Define N_inv
+    ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
     do i = 0, npix-1
-       N_inv(i) = 1.d0/(ddata%rms_map(i,1,band)**2)
+       if (mask(i) == missval) then
+          mask(i)       = 0.d0
+          N_inv(i)      = 0.d0
+          calibrator(i) = 0.d0
+          calibratee(i) = 0.d0
+       else 
+          N_inv(i)      = 1.d0/(ddata%rms_map(i,1,band)**2)
+          calibrator(i) = c%eval_signal(band,i,1)
+       end if
     end do
 
     ! Weighted least squares

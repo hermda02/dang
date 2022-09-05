@@ -148,7 +148,7 @@ contains
           constructor%uni_prior(i,2)   = dpar%fg_uni(component,i,2)
 
           ! Initialize spectral index maps, or don't
-          if (trim(dpar%fg_spec_file(component,i)) == 'none') then
+          if (trim(dpar%fg_spec_file(component,i)) == 'none' .or. trim(dpar%fg_spec_file(component,i)) == '') then
              constructor%indices(:,:,i)   = dpar%fg_init(component,i)
           else
              call read_bintab(trim(dpar%datadir)//trim(dpar%fg_spec_file(component,i)),&
@@ -493,6 +493,7 @@ contains
           else
              z = h / (k_B*self%indices(pix,map_n,2))
              do i = 1, bp(band)%n
+                write(*,*) bp(band)%nu0(i)
                 spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
                      (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
              end do

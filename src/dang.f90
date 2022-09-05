@@ -66,6 +66,7 @@ program dang
   nglobalpar = 0.d0
   nump       = 0
   namps      = 0
+  iter       = 0
   nlheader   = size(header)
   !----------------------------------------------------------------------------------------------------------
   !----------------------------------------------------------------------------------------------------------
@@ -116,152 +117,157 @@ contains
   !----------------------------------------------------------------|
   
   subroutine comp_sep
+    
+    !  ! Count up the degrees of freedom for chisq nromalization
+    !  do n = 1, dpar%ncomp
+    !     ! Count up foregrounds in the joint sampler
+    !     if (ANY(dpar%joint_comp == trim(dpar%fg_label(n))) .and. dpar%joint_sample) then
+    !        if (dpar%joint_pol) then
+    !           npixpar = npixpar + 2*nump
+    !           namps   = namps + 2*nump
+    !        else
+    !           npixpar = npixpar + nump
+    !           namps   = namps + nump
+    !        end if
+    !     ! Count up foregrounds not included in the joint sampler
+    !     else if (dpar%fg_samp_amp(n)) then
+    !           npixpar = npixpar + size(dpar%pol_type)*nump
+    !     end if
+    !     ! Count up spectral index parameters, either fullsky or per pixel
+    !     if (dpar%fg_samp_spec(n,1)) then
+    !        if (index(dpar%fg_ind_region(n,1),'pix') /= 0) then
+    !           ! Skip for now because the contribution is not trivial - esp with a mask
+    !           if (dpar%fg_spec_joint(n,1)) then
+    !              npixpar = npixpar + nump
+    !           end if
+    !        else if (index(dpar%fg_ind_region(n,1),'full') /= 0) then
+    !           if (dpar%fg_spec_joint(n,1)) then
+    !              ! Sampling fullsky jointly in Q and U
+    !              nglobalpar = nglobalpar + 1
+    !           else 
+    !              ! Sampling fullsky separately in Q and U
+    !              nglobalpar = nglobalpar + 2
+    !           end if
+    !        end if
+    !     end if
+    !  end do
+    !  do n = 1, dpar%ntemp
+    !     if (ANY(dpar%joint_comp == trim(dpar%temp_label(n)))) then
+    !        nglobalpar = nglobalpar + dpar%temp_nfit(n)
+    !        namps      = namps + dpar%temp_nfit(n)
+    !     else if (.not. ANY(dpar%joint_comp == trim(dpar%temp_label(n))) .or. .not. (dpar%joint_sample)) then
+    !        nglobalpar = nglobalpar + size(dpar%pol_type)*dpar%temp_nfit(n)
+    !     end if
+    ! end do
+    
+    !--------------------------------------------------------------|
+    !                   Calculation portion                        |               
+    !--------------------------------------------------------------|
+    ! write(*,*) component_list(1)%p%amplitude(:,1)
+    write(*,*) component_list(1)%p%eval_sed(1,1,1)
+    call ddata%update_sky_model
+    call write_maps(dpar,ddata)
+    stop
 
-   !  ! Count up the degrees of freedom for chisq nromalization
-   !  do n = 1, dpar%ncomp
-   !     ! Count up foregrounds in the joint sampler
-   !     if (ANY(dpar%joint_comp == trim(dpar%fg_label(n))) .and. dpar%joint_sample) then
-   !        if (dpar%joint_pol) then
-   !           npixpar = npixpar + 2*nump
-   !           namps   = namps + 2*nump
-   !        else
-   !           npixpar = npixpar + nump
-   !           namps   = namps + nump
-   !        end if
-   !     ! Count up foregrounds not included in the joint sampler
-   !     else if (dpar%fg_samp_amp(n)) then
-   !           npixpar = npixpar + size(dpar%pol_type)*nump
-   !     end if
-   !     ! Count up spectral index parameters, either fullsky or per pixel
-   !     if (dpar%fg_samp_spec(n,1)) then
-   !        if (index(dpar%fg_ind_region(n,1),'pix') /= 0) then
-   !           ! Skip for now because the contribution is not trivial - esp with a mask
-   !           if (dpar%fg_spec_joint(n,1)) then
-   !              npixpar = npixpar + nump
-   !           end if
-   !        else if (index(dpar%fg_ind_region(n,1),'full') /= 0) then
-   !           if (dpar%fg_spec_joint(n,1)) then
-   !              ! Sampling fullsky jointly in Q and U
-   !              nglobalpar = nglobalpar + 1
-   !           else 
-   !              ! Sampling fullsky separately in Q and U
-   !              nglobalpar = nglobalpar + 2
-   !           end if
-   !        end if
-   !     end if
-   !  end do
-   !  do n = 1, dpar%ntemp
-   !     if (ANY(dpar%joint_comp == trim(dpar%temp_label(n)))) then
-   !        nglobalpar = nglobalpar + dpar%temp_nfit(n)
-   !        namps      = namps + dpar%temp_nfit(n)
-   !     else if (.not. ANY(dpar%joint_comp == trim(dpar%temp_label(n))) .or. .not. (dpar%joint_sample)) then
-   !        nglobalpar = nglobalpar + size(dpar%pol_type)*dpar%temp_nfit(n)
-   !     end if
-   ! end do
-
-   !--------------------------------------------------------------|
-   !                   Calculation portion                        |               
-   !--------------------------------------------------------------|
-   
-   do iter = 1, dpar%ngibbs
-      !--------------------- BP SWAP CHUNK -----------------------|
-      ! -- Swap in a different BeyondPlanck map each iteration -- |
-      !-----------------------------------------------------------|
-      if (dpar%bp_swap) then
-         call swap_comm_maps(ddata,dpar)
-         write(*,*) ''
-         bp_iter = bp_iter + 1
-         call convert_comm_maps(ddata, dpar)
-         write(*,*) ''
-         ! Check to see if any swapped maps need to be dust corrected                               
-         do j = 1, nbands
-            if (dpar%bp_map(j)) then
-               if (dpar%dust_corr(j)) then
-                  call dust_correct_band(ddata,dpar,j,iter)
-               end if
-            end if
-         end do
-         write(*,*) ''
-      end if
-      
-      ! ------------------------------------------------------------------------------------------
-      ! Sample each CG group for amplitudes
-      ! ------------------------------------------------------------------------------------------
-      call sample_cg_groups(dpar,ddata)
-      call ddata%update_sky_model
-      call write_stats_to_term(ddata,dpar,dcomps,iter)
-      
-      ! ------------------------------------------------------------------------------------------
-      ! Sample each spectral parameter
-      ! ------------------------------------------------------------------------------------------
-      call sample_spectral_parameters(ddata)
-      call ddata%update_sky_model
-      call write_stats_to_term(ddata,dpar,dcomps,iter)
-
-      ! ------------------------------------------------------------------------------------------
-      ! Write out the data
-      ! ------------------------------------------------------------------------------------------
-      do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-         if (rank == master) then
-            call write_data(dpar,ddata,k)
-         end if
-      end do
-      if (mod(iter,dpar%iter_out) .EQ. 0) then
-         call write_maps(dpar,ddata)
-      end if
-      ! ------------------------------------------------------------------------------------------
-   end do
-   call mpi_finalize(ierr)
- end subroutine comp_sep
-
- ! ------------------------------------------------------------------------------------------
- ! Specifically for the hi_fitting mode
- ! ------------------------------------------------------------------------------------------ 
- subroutine hi_fit
-
-   do i = 1, ncomp
-      if (component_list(i)%p%type == 'hi_fit') then
-         ! component_list(i)%p%template_amplitudes(:,1) = 1d-4
-         call ddata%mask_hi(dpar,component_list(i)%p)
-      end if
-   end do
-
-   do iter = 1, dpar%ngibbs
-      
-      ! ------------------------------------------------------------------------------------------
-      ! Sample for band calibrators (gain/offset)      
-      ! ------------------------------------------------------------------------------------------
-      call sample_band_calibrators(dpar,ddata)
-      call ddata%update_sky_model
-      call write_stats_to_term(ddata,dpar,dcomps,iter)
-      
-      ! ------------------------------------------------------------------------------------------
-      ! Sample each CG group for amplitudes
-      ! ------------------------------------------------------------------------------------------
-      call sample_cg_groups(dpar,ddata)
-      call ddata%update_sky_model
-      call write_stats_to_term(ddata,dpar,dcomps,iter)
-      
-      ! ------------------------------------------------------------------------------------------
-      ! Sample each spectral parameter
-      ! ------------------------------------------------------------------------------------------
-      call sample_spectral_parameters(ddata)
-      call ddata%update_sky_model
-      call write_stats_to_term(ddata,dpar,dcomps,iter)
-
-      ! ------------------------------------------------------------------------------------------
-      ! Write out the data
-      ! ------------------------------------------------------------------------------------------
-      do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-         if (rank == master) then
-            call write_data(dpar,ddata,k)
-         end if
-      end do
-      if (mod(iter,dpar%iter_out) .EQ. 0) then
-         call write_maps(dpar,ddata)
-      end if
-      ! ------------------------------------------------------------------------------------------
-
-   end do
- end subroutine hi_fit
+    do iter = 1, dpar%ngibbs
+       !--------------------- BP SWAP CHUNK -----------------------|
+       ! -- Swap in a different BeyondPlanck map each iteration -- |
+       !-----------------------------------------------------------|
+       if (dpar%bp_swap) then
+          call swap_comm_maps(ddata,dpar)
+          write(*,*) ''
+          bp_iter = bp_iter + 1
+          call convert_comm_maps(ddata, dpar)
+          write(*,*) ''
+          ! Check to see if any swapped maps need to be dust corrected                               
+          do j = 1, nbands
+             if (dpar%bp_map(j)) then
+                if (dpar%dust_corr(j)) then
+                   call dust_correct_band(ddata,dpar,j,iter)
+                end if
+             end if
+          end do
+          write(*,*) ''
+       end if
+       
+       ! ------------------------------------------------------------------------------------------
+       ! Sample each CG group for amplitudes
+       ! ------------------------------------------------------------------------------------------
+       call sample_cg_groups(dpar,ddata)
+       call ddata%update_sky_model
+       call write_stats_to_term(ddata,dpar,dcomps,iter)
+       
+       ! ------------------------------------------------------------------------------------------
+       ! Sample each spectral parameter
+       ! ------------------------------------------------------------------------------------------
+       call sample_spectral_parameters(ddata)
+       call ddata%update_sky_model
+       call write_stats_to_term(ddata,dpar,dcomps,iter)
+       
+       ! ------------------------------------------------------------------------------------------
+       ! Write out the data
+       ! ------------------------------------------------------------------------------------------
+       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+          if (rank == master) then
+             call write_data(dpar,ddata,k)
+          end if
+       end do
+       if (mod(iter,dpar%iter_out) .EQ. 0) then
+          call write_maps(dpar,ddata)
+       end if
+       ! ------------------------------------------------------------------------------------------
+    end do
+    call mpi_finalize(ierr)
+  end subroutine comp_sep
+  
+  ! ------------------------------------------------------------------------------------------
+  ! Specifically for the hi_fitting mode
+  ! ------------------------------------------------------------------------------------------ 
+  subroutine hi_fit
+    
+    do i = 1, ncomp
+       if (component_list(i)%p%type == 'hi_fit') then
+          ! component_list(i)%p%template_amplitudes(:,1) = 1d-4
+          call ddata%mask_hi(dpar,component_list(i)%p)
+       end if
+    end do
+    
+    do iter = 1, dpar%ngibbs
+       
+       ! ------------------------------------------------------------------------------------------
+       ! Sample for band calibrators (gain/offset)      
+       ! ------------------------------------------------------------------------------------------
+       call sample_band_calibrators(dpar,ddata)
+       call ddata%update_sky_model
+       call write_stats_to_term(ddata,dpar,dcomps,iter)
+       
+       ! ------------------------------------------------------------------------------------------
+       ! Sample each CG group for amplitudes
+       ! ------------------------------------------------------------------------------------------
+       call sample_cg_groups(dpar,ddata)
+       call ddata%update_sky_model
+       call write_stats_to_term(ddata,dpar,dcomps,iter)
+       
+       ! ------------------------------------------------------------------------------------------
+       ! Sample each spectral parameter
+       ! ------------------------------------------------------------------------------------------
+       call sample_spectral_parameters(ddata)
+       call ddata%update_sky_model
+       call write_stats_to_term(ddata,dpar,dcomps,iter)
+       
+       ! ------------------------------------------------------------------------------------------
+       ! Write out the data
+       ! ------------------------------------------------------------------------------------------
+       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+          if (rank == master) then
+             call write_data(dpar,ddata,k)
+          end if
+       end do
+       if (mod(iter,dpar%iter_out) .EQ. 0) then
+          call write_maps(dpar,ddata)
+       end if
+       ! ------------------------------------------------------------------------------------------
+       
+    end do
+  end subroutine hi_fit
 end program dang
