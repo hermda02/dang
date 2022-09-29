@@ -39,6 +39,7 @@ module dang_data_mod
     procedure :: read_data_maps
     procedure :: update_sky_model
     procedure :: convert_maps
+    procedure :: mask_hi
   end type dang_data
 
   private :: i, j, k, l
@@ -180,15 +181,15 @@ contains
 
   end subroutine update_sky_model
 
-  subroutine mask_hi(self, dpar, dcomps)
+  subroutine mask_hi(self, dpar, c)
     implicit none
-    type(dang_data),             intent(inout) :: self
+    class(dang_data),            intent(inout) :: self
     type(dang_params)                          :: dpar
-    type(dang_comps)                           :: dcomps
+    type(dang_comps),   pointer, intent(in)    :: c
     integer(i4b)                               :: i, j
 
     do i = 0, npix-1
-       if (dcomps%HI(i,1) > dpar%thresh) then
+       if (c%template(i,1) > dpar%thresh) then
           self%masks(i,1) = missval
        else if (self%masks(i,1) == missval) then
           self%masks(i,1) = missval
@@ -668,7 +669,7 @@ contains
        write(iter_str, '(i0.5)') iter
        do j = 1, nbands
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_hi_amplitude_k'// trim(iter_str) // '.fits'
-          map(:,1)   = component_list(1)%p%template_amplitudes(j,1)*component_list(1)%p%template(:,1)
+          map(:,1)   = dat%sky_model(:,1,j)!component_list(1)%p%template_amplitudes(j,1)*component_list(1)%p%template(:,1)
           do i = 0, npix-1
              if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
                 map(i,1) = missval
@@ -702,7 +703,7 @@ contains
        dat%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
-             s = dat%gain(j)*component_list(1)%p%template_amplitudes(j,1)*component_list(1)%p%eval_sed(j,i-1,1)+dat%offset(j)
+             s = dat%gain(j)*dat%sky_model(i,1,j)+dat%offset(j)
              dat%chi_map(i,1) = dat%chi_map(i,1) + dat%masks(i,1)*(dat%sig_map(i,1,j) - s)**2.d0/dat%rms_map(i,1,j)**2.d0
           end do
        end do

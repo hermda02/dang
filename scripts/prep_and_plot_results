@@ -1,0 +1,132 @@
+#!/bin/bash
+
+c3pp=~/.local/bin/cosmoglobe
+me="/mn/stornext/u3/daniher/master/cmbcocopy/src/f90/map_editor/map_editor"
+param=$1
+
+maskfile=$(awk -F'[=[:blank:]#]+' '$1 == "MASKFILE" {print $2}' $param)
+maskfile="${maskfile%\'}"
+maskfile="${maskfile#\'}"
+maskfile=../$maskfile
+
+rm *minus*fits
+rm *mean*fits
+rm *std*fits
+
+echo "Make the mean maps"
+python3 make_mean_maps.py
+python3 average_chisq.py
+echo "Make the synchrotron difference maps"
+python3 plot_dang.py $param -synch_diff
+
+bands=("bp_030" "bp_044" "bp_070" "wmap_Ka" "wmap_Q" "wmap_V" "wmap_K")
+
+
+echo "Smooth all maps to 3deg"
+for ((i=0; i<${#bands[@]}; i++)); do
+    band=${bands[$i]}
+
+    name=${band}_residual_mean.fits
+
+    $me smooth g2g $name 0 200 64 60.0 180.0 ${name/.fits/_3deg.fits}
+    $me apply_mask ${name/.fits/_3deg.fits} $maskfile ${name/.fits/_3deg.fits}
+
+done
+
+$me smooth g2g BP_minus_joint_Q_60arcmin_n0064.fits 0 180 64 60.0 180.0 BP_minus_joint_Q_3deg_n0064.fits
+$me smooth g2g BP_minus_joint_U_60arcmin_n0064.fits 0 180 64 60.0 180.0 BP_minus_joint_U_3deg_n0064.fits
+
+$me smooth g2g npipe_minus_joint_Q_60arcmin_n0064.fits 0 180 64 60.0 180.0 npipe_minus_joint_Q_3deg_n0064.fits
+$me smooth g2g npipe_minus_joint_U_60arcmin_n0064.fits 0 180 64 60.0 180.0 npipe_minus_joint_U_3deg_n0064.fits
+
+echo "And the mask them"
+$me apply_mask synch_std.fits $maskfile synch_std.fits
+$me apply_mask synch_beta_std.fits $maskfile synch_beta_std.fits 
+
+$me apply_mask BP_minus_joint_Q_3deg_n0064.fits ../data/masks/mask_tau_A_chisq_gal_center_n0064_v2.fits BP_minus_joint_Q_3deg_n0064.fits
+$me apply_mask BP_minus_joint_U_3deg_n0064.fits ../data/masks/mask_tau_A_chisq_gal_center_n0064_v2.fits BP_minus_joint_U_3deg_n0064.fits
+
+$me apply_mask npipe_minus_joint_Q_3deg_n0064.fits ../data/masks/mask_tau_A_chisq_gal_center_n0064_v2.fits npipe_minus_joint_Q_3deg_n0064.fits
+$me apply_mask npipe_minus_joint_U_3deg_n0064.fits ../data/masks/mask_tau_A_chisq_gal_center_n0064_v2.fits npipe_minus_joint_U_3deg_n0064.fits
+
+echo "Plot 30 GHz"
+# 30 GHz plotting
+$c3pp plot bp_030_residual_mean.fits -nocbar -range 3 -width 2 -right_label '${\langle r_{30} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$' -sig 1 -mask $maskfile -maskfill grey
+$c3pp plot bp_030_residual_mean_3deg.fits -nocbar -range 3 -width 2 -right_label '${\langle r_{30} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1 -mask $maskfile -maskfill grey
+
+$c3pp plot bp_030_residual_mean.fits -nocbar -range 3 -width 2 -right_label '${\langle r_{30} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$' -sig 2 -mask $maskfile -maskfill grey
+$c3pp plot bp_030_residual_mean_3deg.fits -nocbar -range 3 -width 2 -right_label '${\langle r_{30} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 2 -mask $maskfile -maskfill grey
+
+echo "Plot 44 GHz"
+# 44 GHz
+$c3pp plot bp_044_residual_mean.fits -nocbar -range 3 -width 2 -right_label '${\langle r_{44} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1  -mask $maskfile -maskfill grey
+$c3pp plot bp_044_residual_mean_3deg.fits -nocbar -range 3 -width 2 -right_label '${\langle r_{44} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1  -mask $maskfile -maskfill grey
+
+$c3pp plot bp_044_residual_mean.fits -nocbar -range 3 -width 2 -right_label '${\langle r_{44} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 2  -mask $maskfile -maskfill grey
+$c3pp plot bp_044_residual_mean_3deg.fits -nocbar -range 3 -width 2 -right_label '${\langle r_{44} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 2  -mask $maskfile -maskfill grey
+
+echo "Plot 70 GHz"
+# 70 GHz
+$c3pp plot bp_070_residual_mean.fits -range 3 -width 2 -right_label '${\langle r_{70} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1  -mask $maskfile -maskfill grey
+$c3pp plot bp_070_residual_mean_3deg.fits -range 3 -width 2 -right_label '${\langle r_{70} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1  -mask $maskfile -maskfill grey
+
+$c3pp plot bp_070_residual_mean.fits -range 3 -width 2 -right_label '${\langle r_{70} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$' -sig 2 -mask $maskfile -maskfill grey
+$c3pp plot bp_070_residual_mean_3deg.fits -range 3 -width 2 -right_label '${\langle r_{70} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$' -sig 2 -mask $maskfile -maskfill grey
+
+
+echo "Plot Ka"
+# Ka 
+$c3pp plot wmap_Ka_residual_mean.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm Ka} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1 -mask $maskfile -maskfill grey
+$c3pp plot wmap_Ka_residual_mean_3deg.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm Ka} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1 -mask $maskfile -maskfill grey
+
+$c3pp plot wmap_Ka_residual_mean.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm Ka} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$' -sig 2 -mask $maskfile -maskfill grey
+$c3pp plot wmap_Ka_residual_mean_3deg.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm Ka} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$' -sig 2 -mask $maskfile -maskfill grey
+
+echo "Plot K"
+# K
+$c3pp plot wmap_K_residual_mean.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm K} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1 -mask $maskfile -maskfill grey
+$c3pp plot wmap_K_residual_mean_3deg.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm K} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1 -mask $maskfile -maskfill grey
+
+$c3pp plot wmap_K_residual_mean.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm K} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$' -sig 2 -mask $maskfile -maskfill grey
+$c3pp plot wmap_K_residual_mean_3deg.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm K} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 2 -mask $maskfile -maskfill grey
+
+echo "Plot Q"
+# Q
+$c3pp plot wmap_Q_residual_mean.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm Q} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1  -mask $maskfile -maskfill grey
+$c3pp plot wmap_Q_residual_mean_3deg.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm Q} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1 -mask $maskfile -maskfill grey
+
+$c3pp plot wmap_Q_residual_mean.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm Q} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 2 -mask $maskfile -maskfill grey
+$c3pp plot wmap_Q_residual_mean_3deg.fits -nocbar -range 10 -width 2 -right_label '${\langle r_{\rm Q} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 2 -mask $maskfile -maskfill grey
+
+echo "Plot V"
+# V
+$c3pp plot wmap_V_residual_mean.fits -range 10 -width 2 -right_label '${\langle r_{\rm V} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1 -mask $maskfile -maskfill grey
+$c3pp plot wmap_V_residual_mean_3deg.fits -range 10 -width 2 -right_label '${\langle r_{\rm V} \rangle}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1 -mask $maskfile -maskfill grey
+
+$c3pp plot wmap_V_residual_mean.fits -range 10 -width 2 -right_label '${\langle r_{\rm V} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 2 -mask $maskfile -maskfill grey
+$c3pp plot wmap_V_residual_mean_3deg.fits -range 10 -width 2 -right_label '${\langle r_{\rm V} \rangle}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 2 -mask $maskfile -maskfill grey
+
+echo "Plot synchrotron"
+$c3pp plot synch_mean.fits -width 4 -range 50 -right_label '$\langle A_s \rangle$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1 -mask $maskfile -maskfill grey
+$c3pp plot synch_mean.fits -width 4 -range 50 -right_label '$\langle A_s \rangle$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 2 -mask $maskfile -maskfill grey
+
+$c3pp plot synch_std.fits -width 4 -min 0.0 -max 7.5 -right_label '$\sigma_{A_s}$' -left_label '$Q$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 1 -mask $maskfile -maskfill black -cmap bone
+$c3pp plot synch_std.fits -width 4 -min 0.0 -max 7.5 -right_label '$\sigma_{A_s}$' -left_label '$U$' -unit '$\mu \mathrm{K_{\rm RJ}}$'  -sig 2 -mask $maskfile -maskfill black -cmap bone
+
+$c3pp plot synch_beta_mean.fits -width 4 -min -3.15 -max -3.05 -unit '$\beta_{\rm s}$'  -sig 1 -mask $maskfile -maskfill grey -cmap bone
+$c3pp plot synch_beta_std.fits -width 4 -min 0.090 -max 0.11 -unit '$\sigma_{\beta_{\rm s}}$' -sig 1 -mask $maskfile -maskfill black -cmap bone
+
+echo "Plot chisqs"
+$c3pp plot chisq_mean.fits -min 0 -max 2 -right_label '$ \chi^2$' -left_label '$Q$' -unit '$\chi^2$'  -sig 1 -mask $maskfile -maskfill black -cmap bone
+$c3pp plot chisq_mean.fits -min 0 -max 2 -right_label '$ \chi^2$' -left_label '$U$' -unit '$\chi^2$'  -sig 2 -mask $maskfile -maskfill black -cmap bone
+
+$c3pp plot chisq_mean_average.fits -width 4 -min 0 -max 2  -unit '$\chi^2/N_{\mathrm{band}}$'  -sig 0 -mask $maskfile -maskfill grey -cmap bone
+
+# Difference maps
+
+echo "Plot difference maps"
+$c3pp plot BP_minus_joint_Q_3deg_n0064.fits -nocbar -width 4 -range 3 -left_label '$Q$' -right_label '${\Delta\,A_{\rm s}^{\rm BP}}$' -unit '$\mu K_{\rm RJ}$' -mask $maskfile -maskfill grey
+$c3pp plot BP_minus_joint_U_3deg_n0064.fits -nocbar -width 4 -range 3 -left_label '$U$' -right_label '${\Delta\,A_{\rm s}^{\rm BP}}$' -unit '$\mu K_{\rm RJ}$' -mask $maskfile -maskfill grey
+
+$c3pp plot npipe_minus_joint_Q_3deg_n0064.fits -width 4 -range 3 -left_label '$Q$' -right_label '${\Delta\,A_{\rm s}^{\rm NPIPE}}$' -unit '$\mu K_{\rm RJ}$' -mask $maskfile -maskfill grey
+$c3pp plot npipe_minus_joint_U_3deg_n0064.fits -width 4 -range 3 -left_label '$U$' -right_label '${\Delta\,A_{\rm s}^{\rm NPIPE}}$' -unit '$\mu K_{\rm RJ}$' -mask $maskfile -maskfill grey

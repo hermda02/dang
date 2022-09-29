@@ -221,6 +221,12 @@ contains
  ! ------------------------------------------------------------------------------------------ 
  subroutine hi_fit
 
+   do i = 1, ncomp
+      if (component_list(i)%p%type == 'hi_fit') then
+         call ddata%mask_hi(dpar,component_list(i)%p)
+      end if
+   end do
+
    do iter = 1, dpar%ngibbs
       
       ! if (iter > 1) then
