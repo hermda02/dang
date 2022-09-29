@@ -89,6 +89,7 @@ program dang
      write(*,*) ''
      call initialize_components(dpar)
      call initialize_cg_groups(dpar)
+     call write_maps(dpar,ddata)
      write(*,*) '---------------------------'
      write(*,*) ' Starting main Gibbs Chain '
      write(*,*) '---------------------------'
@@ -103,6 +104,7 @@ program dang
      call ddata%convert_maps(dpar)
      call initialize_components(dpar)
      call initialize_cg_groups(dpar)
+     call write_maps(dpar,ddata)
      write(*,*) '---------------------------'
      write(*,*) ' Starting main Gibbs Chain '
      write(*,*) '---------------------------'

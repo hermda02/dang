@@ -196,6 +196,9 @@ contains
        
        ! Evaluate the lnL (already includes the -0.5 out front)
        lnl = evaluate_lnL(data,ddata%rms_map,model,map_n,-1,ddata%masks(:,1))
+
+       ! If we want to marginalize over amplitudes:
+       ! lnl = evaluate_marginal_lnl(c,data,ddata%rms_map,model.map_n,-1,ddata%masks(:,1))
        
        if (trim(c%prior_type(nind)) == 'gaussian') then
           lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
@@ -391,6 +394,158 @@ contains
 
   end subroutine sample_index_mh
 
+  ! subroutine sample_index_mh_marginal(ddata,c,nind,map_n)
+  !   ! ============================================== |
+  !   ! Implementation of the Metropolis-Hastings      |
+  !   ! sampling algorithm. The user is responsible    |
+  !   ! for determining the step size for the sampler. |
+  !   !                                                |
+  !   ! This routine is set up to sample fullsky, or   |
+  !   ! per-pixel, individually for each poltype, or a |
+  !   ! combination of poltypes (Q+U,T+Q+U).           |
+  !   !                                                |
+  !   ! This version marginalizes over the amplitudes  |
+  !   ! in order to 
+  !   !
+  !   !------------------------------------------------!
+  !   !                                                |
+  !   ! Inputs:                                        |
+  !   !   ddata: type(dang_data)                       |
+  !   !   c: type(dang_comps) - pointer to component   |
+  !   !   nind: integer - index to sample              |
+  !   !   map_n: integer - map to sample, or flag for  |
+  !   !                    poltype combinations        |
+  !   !                                                |
+  !   ! ============================================== |
+  !   implicit none
+    
+  !   type(dang_data),             intent(in) :: ddata
+  !   type(dang_comps),   pointer, intent(in) :: c
+  !   integer(i4b),                intent(in) :: nind
+  !   integer(i4b),                intent(in) :: map_n
+  !   type(dang_comps),   pointer             :: c2
+
+
+  ! end subroutine sample_index_mh_marginal
+
+  function evaluate_marginal_lnL(data,rms,model,map_n,pixel,mask) result(lnL)
+    !==========================================================================++|
+    !                                                                            |
+    ! For this implementation, we want to marginalize over the foreground        |
+    ! amplitude values in order to draw from a more broad distribution of        |
+    ! spectral parameters.                                                       |
+    !                                                                            |
+    ! The equation we wish to solve for in the likelihood evaluation here is:    |
+    !                                                                            |
+    ! lnL(beta) = sum_nu -0.5*(T_nu^t N_nu^-1 d_nu)^t ( T_nu^t N_nu^-1 T_nu)^-1  |
+    !                 (T_nu^t N_nu^-1 d_nu) + 0.5 ln |(T_nu^t N_nu^-1 T_nu)^-1|  |
+    !                                                                            |
+    ! This technique was used in the BeyondPlanck analysis here:                 |
+    !                  https://arxiv/org/abs/2201.08188                          |
+    !                                                                            |
+    !============================================================================|
+    ! Inputs:                                                                    |
+    !         data:  array(real(dp)) - data with which we compare the model      |
+    !         rms:   array(real(dp)) - noise associated with the data            |
+    !         model: array(real(dp)) - the model to compare to the data          |
+    !         map_n: integer         - poltype for likelihood evaluation         |
+    !         pixel: integer         - pixel number for likelihood evaluation    |
+    !                                                                            |
+    ! Output:                                                                    |
+    !         lnL: real(dp)                                                      |
+    !                                                                            |
+    ! if pixel < 0,  evaluate full sky, otherwise sample that pixel              |
+    ! if map_n > 0,  evaluate that poltype                                       |
+    ! if map_n = -1, evaluate Q+U jointly                                        |
+    ! if map_n = -2, evaluate T+Q+U jointly                                      |
+    !============================================================================|
+    implicit none
+
+    real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data, rms, model
+    real(dp), dimension(0:npix-1),              intent(in) :: mask
+    ! type(dang_comps),  pointer, intent(in) :: c
+    integer(i4b),               intent(in) :: map_n, pixel
+    integer(i4b)                           :: i,j,k
+    real(dp)                               :: lnL
+    real(dp)                               :: TNd, TNT, invTNT
+
+    real(dp), allocatable, dimension(:)    :: TN
+
+    integer(i4b), dimension(2,2)           :: inds
+
+
+    ! Initialize the result to null
+    lnL = 0.d0
+
+    ! Initialize the inds array to condense the following lines:
+    if (map_n > 0) then
+       ! For your simplest, pol type by pol type case
+       inds(1,:) = map_n
+    else if (map_n == -1) then
+       ! For Q+U joint sampling
+       inds(1,1) = 2; inds(1,2) = 3
+    else if (map_n == -2) then
+       ! For T+Q+U joint sampling
+       inds(1,1) = 1; inds(1,2) = 3
+    end if
+
+    if (pixel > -1) then
+       ! For a specific pixel
+       inds(2,:) = pixel
+    else
+       ! For all pixels
+       inds(2,1) = 0; inds(2,2) = npix-1
+    end if
+
+    ! So for the pixel-by-pixel case, this whole thing will be easy because all of 
+    ! our crafted matrices will be fully diagonal. Looking at this on paper it 
+    ! seems that unless there are cross-band template terms.
+    ! TN = model*noise^{-1}
+    ! TN = model(inds(2,1):inds(2,2),inds(
+
+    if (map_n > 0) then
+       if (pixel > -1) then
+          TN  = model(pixel,map_n,:)/rms(pixel,map_n,:)**2
+          TNd = sum(TN*data(pixel,map_n,:))
+          TNT = sum(TN*model(pixel,map_n,:))
+       else
+          do i = 0, npix-1
+             if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+             ! do j = 1, nbands
+             TN  = model(i,map_n,:)/rms(i,map_n,:)**2
+             TNd = sum(TN*data(i,map_n,:))
+             TNT = sum(TN*model(i,map_n,:))
+          end do
+       end if
+    else if (map_n == -1) then
+       if (pixel > -1) then
+          TN  = model(pixel,map_n,:)/rms(pixel,map_n,:)**2
+          TNd = sum(TN*data(pixel,map_n,:))
+          TNT = sum(TN*model(pixel,map_n,:))
+
+       else
+
+       end if
+    else if (map_n == -2) then
+       if (pixel > -1) then
+
+       else
+
+       end if
+    end if
+
+    invTNT = 1.d0/TNT
+    ! As is usually the case here, we want to walk from right to left evaluating
+    ! (T_nu^t N_nu^-1 d_nu)
+
+    lnL = -0.5d0*TNd*invTNT*TNd
+          
+
+    ! If we use the determinant
+    lnL = lnL + 0.5*log(invTNT)
+
+  end function evaluate_marginal_lnL
+
   ! Note that the other evaluation routines do NOT include the -0.5, working to make them obsolete
   function evaluate_lnL(data,rms,model,map_n,pixel,mask) result(lnL)
     !==========================================================================
@@ -415,190 +570,93 @@ contains
     real(dp), dimension(0:npix-1),              intent(in) :: mask
     integer(i4b),               intent(in) :: map_n, pixel
     integer(i4b)                           :: i,j,k
+    integer(i4b), dimension(2,2)           :: inds
     real(dp)                               :: lnL
 
     ! Initialize the result to null
     lnL = 0.d0
 
-    ! For your simplest, pol type by pol type case
+    ! Initialize the inds array to condense the following lines:
     if (map_n > 0) then
-       if (pixel > -1) then
+       ! For your simplest, pol type by pol type case
+       inds(1,:) = map_n
+    else if (map_n == -1) then
+       ! For Q+U joint sampling
+       inds(1,1) = 2; inds(1,2) = 3
+    else if (map_n == -2) then
+       ! For T+Q+U joint sampling
+       inds(1,1) = 1; inds(1,2) = 3
+    end if
+
+    if (pixel > -1) then
+       ! For a specific pixel
+       inds(2,:) = pixel
+    else
+       ! For all pixels
+       inds(2,1) = 0; inds(2,2) = npix-1
+    end if
+
+    do i = inds(2,1), inds(2,2)
+       if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+       do k = inds(1,1), inds(1,2)
           do j = 1, nbands
              lnL = lnL - 0.5d0*((data(pixel,map_n,j)-model(pixel,map_n,j))/rms(pixel,map_n,j))**2
           end do
-       else
-          do i = 0, npix-1
-             if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-             do j = 1, nbands
-                lnL = lnL - 0.5d0*((data(i,map_n,j)-model(i,map_n,j))/rms(i,map_n,j))**2
-             end do
-          end do
-       end if
-    ! For Q+U joint sampling
-    else if (map_n == -1) then
-       if (pixel > -1) then
-          do j = 1, nbands
-             do k = 2, 3
-                lnL = lnL - 0.5d0*((data(pixel,k,j)-model(pixel,k,j))/rms(pixel,k,j))**2
-             end do
-          end do
-       else
-          do i = 0, npix-1
-             if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-             do j = 1, nbands
-                do k = 2, 3
-                   lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
-                end do
-             end do
-          end do
-       end if
-    ! For T+Q+U joint sampling
-    else if (map_n == -2) then
-       if (pixel > -1) then
-          do j = 1, nbands
-             do k = 1, 3
-                lnL = lnL - 0.5d0*((data(pixel,k,j)-model(pixel,k,j))/rms(pixel,k,j))**2
-             end do
-          end do
-       else
-          do i = 0, npix-1
-             if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-             do j = 1, nbands
-                do k = 1, 3
-                   lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
-                end do
-             end do
-          end do
-       end if
-    end if
+       end do
+    end do
+
+    ! ! For your simplest, pol type by pol type case
+    ! if (map_n > 0) then
+    !    if (pixel > -1) then
+    !       do j = 1, nbands
+    !          lnL = lnL - 0.5d0*((data(pixel,map_n,j)-model(pixel,map_n,j))/rms(pixel,map_n,j))**2
+    !       end do
+    !    else
+    !       do i = 0, npix-1
+    !          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+    !          do j = 1, nbands
+    !             lnL = lnL - 0.5d0*((data(i,map_n,j)-model(i,map_n,j))/rms(i,map_n,j))**2
+    !          end do
+    !       end do
+    !    end if
+    ! ! For Q+U joint sampling
+    ! else if (map_n == -1) then
+    !    if (pixel > -1) then
+    !       do j = 1, nbands
+    !          do k = 2, 3
+    !             lnL = lnL - 0.5d0*((data(pixel,k,j)-model(pixel,k,j))/rms(pixel,k,j))**2
+    !          end do
+    !       end do
+    !    else
+    !       do i = 0, npix-1
+    !          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+    !          do j = 1, nbands
+    !             do k = 2, 3
+    !                lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
+    !             end do
+    !          end do
+    !       end do
+    !    end if
+    ! ! For T+Q+U joint sampling
+    ! else if (map_n == -2) then
+    !    if (pixel > -1) then
+    !       do j = 1, nbands
+    !          do k = 1, 3
+    !             lnL = lnL - 0.5d0*((data(pixel,k,j)-model(pixel,k,j))/rms(pixel,k,j))**2
+    !          end do
+    !       end do
+    !    else
+    !       do i = 0, npix-1
+    !          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+    !          do j = 1, nbands
+    !             do k = 1, 3
+    !                lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
+    !             end do
+    !          end do
+    !       end do
+    !    end if
+    ! end if
   end function evaluate_lnL
-
-  ! function sample_fg_amp(dpar, dat, comp, ind, map_n)
-  !   !------------------------------------------------------------------------
-  !   ! Samples spectral amplitude (per pixel), following the spectrum of foreground 'type'. Returns a full map of amplitudes.
-  !   !------------------------------------------------------------------------
-  !   implicit none
-    
-  !   class(dang_params)                   :: dpar
-  !   type(dang_comps)                     :: comp
-  !   type(dang_data)                      :: dat
-  !   integer(i4b),             intent(in) :: ind
-  !   integer(i4b),             intent(in) :: map_n
-  !   integer(i4b)                         :: f
-  !   real(dp)                             :: sum1, sum2, spec
-  !   real(dp)                             :: amp, num, t, sam
-  !   real(dp), dimension(0:npix-1,nbands) :: map2fit
-  !   real(dp), dimension(0:npix-1)        :: sample_fg_amp, norm
-    
-  !   map2fit = dat%sig_map(:,map_n,:)
-
-  !   norm = 0.d0
-
-  !   ! remove all other fg signals
-  !   do f = 1, nfgs
-  !      if (f /= ind) then
-  !         map2fit(:,:) = map2fit(:,:) - dat%fg_map(:,map_n,1:,f)
-  !      end if
-  !   end do
-    
-  !   ! sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  |
-  !   ! sum_nu ((T_nu)^T N_nu^-1 T_nu)amp = sum_nu ((T_nu)^T N_nu^-1 d_nu)  + (T_nu)^T N_nu^{-1/2} eta|
-    
-  !   do i = 0, npix-1
-  !      sum1    = 0.0d0
-  !      sum2    = 0.0d0
-  !      do j = 1, nbands
-  !         spec    = compute_spectrum(dpar,comp,bp(j),ind,i,map_n)
-  !         sum1    = sum1 + (map2fit(i,j)*spec)/dat%rms_map(i,map_n,j)**2.d0
-  !         sum2    = sum2 + (spec)**2.d0/dat%rms_map(i,map_n,j)**2.d0
-  !         norm(i) = norm(i) + spec/dat%rms_map(i,map_n,j)
-  !      end do
-  !      if (trim(dpar%ml_mode) == 'sample') then
-  !         amp        = sum1/sum2 + rand_normal(0.d0,1.d0)*norm(i)/sum2
-  !      else if (trim(dpar%ml_mode) == 'optimize') then
-  !         amp        = sum1/sum2
-  !      end if
-  !      sample_fg_amp(i) = amp
-  !   end do
-  ! end function sample_fg_amp
-
-  ! subroutine template_fit(dpar, dat, comp, map_n, temp_num)
-  !   !------------------------------------------------------------------------
-  !   ! Simple linear fit of a template to data map with a sampling term
-  !   !------------------------------------------------------------------------
-  !   implicit none
-    
-  !   type(dang_params)                       :: dpar
-  !   type(dang_comps)                        :: comp
-  !   type(dang_data)                         :: dat
-  !   real(dp), dimension(0:npix-1,nbands)    :: cov, nos, map
-  !   real(dp), allocatable, dimension(:,:,:) :: map2fit
-  !   integer(i4b),                intent(in) :: map_n
-  !   integer(i4b), optional,      intent(in) :: temp_num
-  !   real(dp)                                :: temp, sum1, sum2, norm
-  !   integer(i4b)                            :: i, j, k, n
-
-  !   nos = dat%rms_map(:,map_n,:)
-  !   cov = nos**2.d0
-  !   allocate(map2fit(0:npix-1,nmaps,nbands))
-    
-  !   map2fit = dat%sig_map
-    
-  !   if (trim(dpar%mode) == 'comp_sep') then
-  !      write(*,*) "Sampling for template "//trim(dpar%temp_label(temp_num))//", pol = "//trim(tqu(map_n))//"."
-  !      do j = 1, dpar%numinc
-  !         sum1 = 0.d0
-  !         sum2 = 0.d0
-  !         norm = 0.d0
-  !         temp = 0.d0
-  !         if (dpar%temp_corr(temp_num,j)) then
-  !            ! Remove the other foregrounds from the input data before fitting
-  !            do n = 1, dpar%ncomp
-  !               map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,n)
-  !            end do
-  !            do n = 1, dpar%ntemp
-  !               if (n == temp_num) cycle
-  !               map2fit(:,:,j) = map2fit(:,:,j) - dat%fg_map(:,:,j,dpar%ncomp+n)
-  !            end do
-  !            ! Calculate template amplitude
-  !            do i = 0, npix-1
-  !               if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-  !               sum1 = sum1 + ((map2fit(i,map_n,j)*dat%temps(i,map_n,temp_num))/cov(i,j))
-  !               sum2 = sum2 + (dat%temps(i,map_n,temp_num)**2.d0)/cov(i,j)
-  !               norm = norm + dat%temps(i,map_n,temp_num)/dat%rms_map(i,map_n,j)
-  !            end do
-  !            if (trim(dpar%ml_mode) == 'sample') then
-  !               dat%temp_amps(j,map_n,temp_num) = sum1/sum2 + rand_normal(0.d0,1.d0)/sqrt(norm)
-  !            else if (trim(dpar%ml_mode) == 'optimize') then
-  !               dat%temp_amps(j,map_n,temp_num) = sum1/sum2
-  !            end if
-  !         end if
-  !      end do
-  !   else if (trim(dpar%mode) == 'hi_fit') then
-  !      do j = 1, dpar%numinc
-  !         sum1 = 0.d0
-  !         sum2 = 0.d0
-  !         norm = 0.d0
-  !         temp = 0.d0
-  !         if (dpar%temp_corr(1,j)) then
-  !            do i = 0, npix-1
-  !               if (comp%HI(i,1) > dpar%thresh) cycle
-  !               if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-  !               temp = comp%HI(i,1)*planck(bp(j),comp%T_d(i,1))
-  !               sum1 = sum1 + (((dat%sig_map(i,map_n,j)-dat%offset(j))/dat%gain(j))*temp)/dat%rms_map(i,map_n,j)**2.d0
-  !               sum2 = sum2 + (temp)**2.d0/dat%rms_map(i,map_n,j)**2.d0
-  !               norm = norm + temp/dat%rms_map(i,map_n,j)
-  !            end do
-  !         end if
-
-  !         if (trim(dpar%ml_mode) == 'sample') then
-  !            sum1 = sum1 + norm*rand_normal(0.d0,1.d0)
-  !         end if
-  !         comp%HI_amps(j) = sum1/sum2
-  !     end do
-  !   end if
-    
-  ! end subroutine template_fit
   
   subroutine sample_band_gain(dpar, dat, comp, map_n, band, fg, sample)
     
