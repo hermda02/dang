@@ -64,6 +64,7 @@ module dang_param_mod
      integer(i4b),       allocatable, dimension(:)     :: fg_cg_group    ! Which cg group is this component in?
      real(dp),           allocatable, dimension(:,:)   :: fg_init        ! Initialized parameter value (fullsky)
      character(len=512), allocatable, dimension(:,:)   :: fg_ind_region  ! Fg spectral parameter input map
+     character(len=512), allocatable, dimension(:,:)   :: fg_ind_lnl     ! Fg spectral parameter likelihood evaluation
      real(dp),           allocatable, dimension(:,:,:) :: fg_gauss       ! Fg gaussian sampling parameters
      character(len=512), allocatable, dimension(:)     :: fg_label       ! Fg label
      integer(i4b),       allocatable, dimension(:)     :: fg_nfit        ! How many bands are fit?
@@ -535,6 +536,7 @@ contains
        allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
        allocate(par%fg_spec_file(n,2))
        allocate(par%fg_ind_region(n,2))
+       allocate(par%fg_ind_lnl(n,2))
        allocate(par%fg_prior_type(n,2))
        allocate(par%fg_init(n,2))
        allocate(par%fg_cg_group(n))
@@ -626,6 +628,8 @@ contains
          par_string=par%fg_spec_file(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_BETA_REGION'//itext, len_itext=len_itext,&
          par_string=par%fg_ind_region(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_BETA_LNL_TYPE'//itext, len_itext=len_itext,&
+         par_string=par%fg_ind_lnl(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR'//itext, len_itext=len_itext,&
          par_string=par%fg_prior_type(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_BETA_STEPSIZE'//itext,len_itext=len_itext,&
@@ -693,6 +697,8 @@ contains
          par_lgt=par%fg_samp_spec(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_BETA_REGION'//itext, len_itext=len_itext,&
          par_string=par%fg_ind_region(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_BETA_LNL_TYPE'//itext, len_itext=len_itext,&
+         par_string=par%fg_ind_lnl(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_BETA_PRIOR'//itext, len_itext=len_itext,&
          par_string=par%fg_prior_type(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_BETA_STEPSIZE'//itext,len_itext=len_itext,&
@@ -716,6 +722,8 @@ contains
          par_string=par%fg_spec_file(comp,2))
     call get_parameter_hashtable(htbl, 'COMP_T_REGION'//itext, len_itext=len_itext,&
          par_string=par%fg_ind_region(comp,2))
+    call get_parameter_hashtable(htbl, 'COMP_T_LNL_TYPE'//itext, len_itext=len_itext,&
+         par_string=par%fg_ind_lnl(comp,2))
     call get_parameter_hashtable(htbl, 'COMP_T_PRIOR'//itext, len_itext=len_itext,&
          par_string=par%fg_prior_type(comp,2))
     call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&
@@ -760,6 +768,7 @@ contains
     allocate(par%fg_spec_file(n,2))
     allocate(par%fg_spec_step(n,2))
     allocate(par%fg_ind_region(n,2))
+    allocate(par%fg_ind_lnl(n,2))
     allocate(par%fg_prior_type(n,2))
     allocate(par%fg_init(n,2))
     allocate(par%fg_cg_group(n))
@@ -812,6 +821,8 @@ contains
             par_string=par%fg_spec_file(i,1))       
        call get_parameter_hashtable(htbl, 'COMP_T_REGION'//itext, len_itext=len_itext,&
             par_string=par%fg_ind_region(i,1))
+       call get_parameter_hashtable(htbl, 'COMP_T_LNL_TYPE'//itext, len_itext=len_itext,&
+            par_string=par%fg_ind_lnl(i,1))
        call get_parameter_hashtable(htbl, 'COMP_T_PRIOR'//itext, len_itext=len_itext,&
             par_string=par%fg_prior_type(i,1))
        call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&

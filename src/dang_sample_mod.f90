@@ -72,6 +72,11 @@ contains
     ! This routine is set up to sample fullsky, or   |
     ! per-pixel, individually for each poltype, or a |
     ! combination of poltypes (Q+U,T+Q+U).           |
+    !                                                |
+    ! Modes defined as follows:                      |
+    ! if map_n > 0,  evaluate that poltype           |
+    ! if map_n = -1, evaluate Q+U jointly            |
+    ! if map_n = -2, evaluate T+Q+U jointly          |
     !------------------------------------------------!
     !                                                |
     ! Inputs:                                        |
@@ -93,18 +98,22 @@ contains
     real(dp), allocatable, dimension(:,:,:) :: data, model
     real(dp), allocatable, dimension(:,:)   :: index
     real(dp), allocatable, dimension(:)     :: sample, theta
+    integer(i4b),          dimension(2)     :: map_inds
 
     integer(i4b)                            :: i, j, k
     integer(i4b)                            :: l, m, n, mh_mode
     real(dp)                                :: lnl, lnl_old, lnl_new
     real(dp)                                :: diff, ratio, num
 
+    real(dp), dimension(1000)               :: theta_grid, lnl_grid
+
     ! Here is an object we'll call data, which we will correct to be the
     ! portion of the sky signal we wish to fit to
     allocate(data(0:npix-1,nmaps,nbands))
     allocate(model(0:npix-1,nmaps,nbands))
-    model(:,:,:) = 0.d0
-    data(:,:,:)  = ddata%sig_map
+
+    model(0:,:,:) = 0.d0
+    data(0:,:,:)  = ddata%sig_map
 
     ! Loop over components, remove all others
     do l = 1, ncomp
@@ -135,70 +144,60 @@ contains
     
     ! Little extra section here for mode determination
     !=================================================
-    ! mh_mode :
-    !    1 --- corresponds to sampling for the poltype which is input to the routine
-    !    2 --- sampling for Q+U jointly
-    !    3 --- sampling for I+Q+U jointly
+    ! if map_n > 0,  evaluate that poltype
+    ! if map_n = -1, evaluate Q+U jointly
+    ! if map_n = -2, evaluate T+Q+U jointly
     !=================================================
     if (map_n == -1) then
-       mh_mode = 2
+       map_inds(1) = 2; map_inds(2) = 3
     else if (map_n == -2) then
-       mh_mode = 3
+       map_inds(1) = 1; map_inds(2) = 3
     else
-       mh_mode = 1
+       map_inds(1) = map_n; map_inds(2) = map_n
     end if
+    !=================================================
     
     ! Now time to begin sampling
     ! Index mode 1 corresponds to full sky value for the spectral parameter
     if (c%index_mode(nind) == 1) then
        write(*,*) 'Sampling fullsky'
        lnl = 0.d0
+
        ! Ensure proper handling of poltypes
-       if (mh_mode == 1) then
-          do l = 1, c%nindices
-             sample(l)   = c%indices(0,map_n,l)
-          end do
-       else if (mh_mode == 2) then
-          do l = 1, c%nindices
-             sample(l)   = c%indices(0,2,l)
-          end do
-       else if (mh_mode == 3) then
-          do l = 1, c%nindices
-             sample(l)   = c%indices(0,1,l)
-          end do
-       end if
+       do l = 1, c%nindices
+          sample(l) = c%indices(0,map_inds(1),l)
+       end do
+
+       ! Testing Block here to grid out the likelihoods
+       open(75,file='td_grid.dat')
+       open(76,file='lnl_grid.dat')
+       do i = 1, 1000
+          theta_grid(i) = 15.d0+(i-1)*(10./999.)
+          sample(nind) = theta_grid(i)
+          call update_sample_model(model,c,map_inds,sample)
+          if (c%lnl_type(nind) == 'chisq') then
+             lnl_grid(i) = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+          else if (c%lnl_type(nind) == 'marginal') then
+             lnl_grid(i) = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+          end if
+          write(75,fmt='(f16.8)') theta_grid(i)
+          write(76,fmt='(E16.8)') lnl_grid(i)
+
+       end do
+       close(75)
+       close(76)
+
+       stop
        
        ! Define the model to toss into the likelihood evaluation
-       ! Ensure proper handling of poltypes
-       if (mh_mode == 1) then
-          do i = 0, npix-1
-             do j = 1, nbands
-                model(i,map_n,j) = c%eval_signal(j,i,map_n,sample)
-             end do
-          end do
-       else if (mh_mode == 2) then
-          do i = 0, npix-1
-             do k = 2, 3
-                do j = 1, nbands
-                   model(i,k,j) = c%eval_signal(j,i,k,sample)
-                end do
-             end do
-          end do
-       else if (mh_mode == 3) then
-          do i = 0, npix-1
-             do k = 1, 3
-                do j = 1, nbands
-                   model(i,k,j) = c%eval_signal(j,i,k,sample)
-                end do
-             end do
-          end do
-       end if
+       call update_sample_model(model,c,map_inds,sample)
        
        ! Evaluate the lnL (already includes the -0.5 out front)
-       lnl = evaluate_lnL(data,ddata%rms_map,model,map_n,-1,ddata%masks(:,1))
-
-       ! If we want to marginalize over amplitudes:
-       ! lnl = evaluate_marginal_lnl(c,data,ddata%rms_map,model.map_n,-1,ddata%masks(:,1))
+       if (c%lnl_type(nind) == 'chisq') then
+          lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+       else if (c%lnl_type(nind) == 'marginal') then
+          lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+       end if
        
        if (trim(c%prior_type(nind)) == 'gaussian') then
           lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
@@ -210,47 +209,27 @@ contains
        do l = 1, nsample
           
           ! Update theta with the new sample
-          theta(nind) = sample(nind) + rand_normal(0.d0,c%gauss_prior(nind,2))
-          
           ! Evaluate model for likelihood evaluation
-          ! Ensure proper handling of poltypes
-          if (mh_mode == 1) then
-             do i = 0, npix-1
-                do j = 1, nbands
-                   model(i,map_n,j) = c%eval_signal(j,i,map_n,theta)
-                end do
-             end do
-          else if (mh_mode == 2) then
-             do i = 0, npix-1
-                do k = 2, 3
-                   do j = 1, nbands
-                      model(i,k,j) = c%eval_signal(j,i,k,theta)
-                   end do
-                end do
-             end do
-          else if (mh_mode == 3) then
-             do i = 0, npix-1
-                do k = 1, 3
-                   do j = 1, nbands
-                      model(i,k,j) = c%eval_signal(j,i,k,theta)
-                   end do
-                end do
-             end do
-          end if
+          theta(nind) = sample(nind) + rand_normal(0.d0,c%gauss_prior(nind,2))
+          call update_sample_model(model,c,map_inds,theta)
           
           ! Evaluate the lnL (already includes the -0.5 out front)
-          lnl = evaluate_lnL(data,ddata%rms_map,model,map_n,-1,ddata%masks(:,1))
-          
-          ! Accept/reject
+          if (c%lnl_type(nind) == 'chisq') then
+             lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+          else if (c%lnl_type(nind) == 'marginal') then
+             lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+          end if
+
+          ! Ensure prior contributes
           if (trim(c%prior_type(nind)) == 'gaussian') then
              lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
           else if (trim(c%prior_type(nind)) == 'uniform') then
              lnl_new = lnl
           end if
           
+          ! Accept/reject
           diff  = lnl_new - lnl_old
           ratio = exp(diff)
-          
           if (trim(ml_mode) == 'optimize') then
              if (ratio > 1.d0) then
                 sample(nind) = theta(nind)
@@ -264,15 +243,12 @@ contains
              end if
           end if
        end do
-       ! Ensure proper handling of poltypes
-       if (mh_mode == 1) then
-          c%indices(:,map_n,nind) = sample(nind)
-       else if (mh_mode == 2) then
-          c%indices(:,2:3,nind) = sample(nind)
-       else if (mh_mode == 3) then
-          c%indices(:,1:3,nind) = sample(nind)
-       end if
 
+       ! Ensure proper handling of poltypes
+       ! Cast the final sample back to the component index map
+       c%indices(:,map_inds(1):map_inds(2),nind) = sample(nind)
+
+    ! Index mode 2 corresponds to per-pixel values for the spectral parameter
     else if (c%index_mode(nind) == 2) then
        write(*,*) 'Sampling per-pixel'
        ! Pixel-by-pixel
@@ -284,39 +260,21 @@ contains
 
           ! Initialize the MH chain
           lnl      = 0.d0
+
           ! Ensure proper handling of poltypes
-          if (mh_mode == 1) then
-             do l = 1, c%nindices
-                sample(l)   = c%indices(i,map_n,l)
-             end do
-          else
-             do l = 1, c%nindices
-                sample(l)   = c%indices(i,2,l)
-             end do
-          end if
+          do l = 1, c%nindices
+             sample(l) = c%indices(i,map_inds(1),l)
+          end do
 
           ! Define the model to toss into the likelihood evaluation
-          ! Ensure proper handling of poltypes
-          if (mh_mode == 1) then
-             do j = 1, nbands
-                model(i,map_n,j) = c%eval_signal(j,i,map_n,sample)
-             end do
-          else if (mh_mode == 2) then
-             do k = 2, 3
-                do j = 1, nbands
-                   model(i,k,j) = c%eval_signal(j,i,k,sample)
-                end do
-             end do
-          else if (mh_mode == 3) then
-             do k = 1, 3
-                do j = 1, nbands
-                   model(i,k,j) = c%eval_signal(j,i,k,sample)
-                end do
-             end do
-          end if
+          call update_sample_model(model,c,map_inds,sample)
           
           ! Evaluate the lnL (already includes the -0.5 out front)
-          lnl = evaluate_lnL(data,ddata%rms_map,model,map_n,i,ddata%masks(:,1))
+          if (c%lnl_type(nind) == 'chisq') then
+             lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
+          else if (c%lnl_type(nind) == 'marginal') then
+             lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
+          end if
           
           if (trim(c%prior_type(nind)) == 'gaussian') then
              lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
@@ -328,31 +286,17 @@ contains
           do l = 1, nsample
 
              ! Update theta with the new sample
-             theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
-
              ! Evaluate model for likelihood evaluation
-             ! Ensure proper handling of poltypes
-             if (mh_mode == 1) then
-                do j = 1, nbands
-                   model(i,map_n,j) = c%eval_signal(j,i,map_n,theta)
-                end do
-             else if (mh_mode == 2) then
-                do k = 2, 3
-                   do j = 1, nbands
-                      model(i,k,j) = c%eval_signal(j,i,k,theta)
-                   end do
-                end do
-             else if (mh_mode == 3) then
-                do k = 1, 3
-                   do j = 1, nbands
-                      model(i,k,j) = c%eval_signal(j,i,k,theta)
-                   end do
-                end do
-             end if
+             theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
+             call update_sample_model(model,c,map_inds,theta)
              
              ! Evaluate likelihood of sample
-             lnl = evaluate_lnL(data,ddata%rms_map,model,map_n,i,ddata%masks(:,1))
-             
+             if (c%lnl_type(nind) == 'chisq') then
+                lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
+             else if (c%lnl_type(nind) == 'marginal') then
+                lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
+             end if
+
              ! With the prior of course
              if (trim(c%prior_type(nind)) == 'gaussian') then
                 lnl_new = lnl + & 
@@ -378,13 +322,8 @@ contains
              end if
           end do
           ! Ensure proper handling of poltypes
-          if (mh_mode == 1) then
-             c%indices(i,map_n,nind) = sample(nind)
-          else if (mh_mode == 2) then
-             c%indices(i,2:3,nind) = sample(nind)
-          else if (mh_mode == 3) then
-             c%indices(i,1:3,nind) = sample(nind)
-          end if
+          ! Cast the final sample back to the component index map
+          c%indices(i,map_inds(1):map_inds(2),nind) = sample(nind)
        end do
        !$OMP END DO
        !$OMP END PARALLEL
@@ -394,41 +333,27 @@ contains
 
   end subroutine sample_index_mh
 
-  ! subroutine sample_index_mh_marginal(ddata,c,nind,map_n)
-  !   ! ============================================== |
-  !   ! Implementation of the Metropolis-Hastings      |
-  !   ! sampling algorithm. The user is responsible    |
-  !   ! for determining the step size for the sampler. |
-  !   !                                                |
-  !   ! This routine is set up to sample fullsky, or   |
-  !   ! per-pixel, individually for each poltype, or a |
-  !   ! combination of poltypes (Q+U,T+Q+U).           |
-  !   !                                                |
-  !   ! This version marginalizes over the amplitudes  |
-  !   ! in order to 
-  !   !
-  !   !------------------------------------------------!
-  !   !                                                |
-  !   ! Inputs:                                        |
-  !   !   ddata: type(dang_data)                       |
-  !   !   c: type(dang_comps) - pointer to component   |
-  !   !   nind: integer - index to sample              |
-  !   !   map_n: integer - map to sample, or flag for  |
-  !   !                    poltype combinations        |
-  !   !                                                |
-  !   ! ============================================== |
-  !   implicit none
-    
-  !   type(dang_data),             intent(in) :: ddata
-  !   type(dang_comps),   pointer, intent(in) :: c
-  !   integer(i4b),                intent(in) :: nind
-  !   integer(i4b),                intent(in) :: map_n
-  !   type(dang_comps),   pointer             :: c2
+  subroutine update_sample_model(model,c,map_inds,sample)
+    implicit none
 
+    real(dp),  dimension(0:npix-1,nmaps,nbands), intent(inout) :: model 
+    type(dang_comps),   pointer, intent(in)    :: c
+    integer(i4b),  dimension(2), intent(in)    :: map_inds
+    real(dp),      dimension(:), intent(in)    :: sample
 
-  ! end subroutine sample_index_mh_marginal
+    integer(i4b)                               :: i, j, k
 
-  function evaluate_marginal_lnL(data,rms,model,map_n,pixel,mask) result(lnL)
+    do i = 0, npix-1
+       do k = map_inds(1), map_inds(2)
+          do j = 1, nbands
+             model(i,k,j) = c%eval_signal(j,i,k,sample)
+          end do
+       end do
+    end do
+
+  end subroutine update_sample_model
+
+  function evaluate_marginal_lnL(data,rms,model,map_inds,pixel,mask) result(lnL)
     !==========================================================================++|
     !                                                                            |
     ! For this implementation, we want to marginalize over the foreground        |
@@ -463,31 +388,22 @@ contains
 
     real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data, rms, model
     real(dp), dimension(0:npix-1),              intent(in) :: mask
-    ! type(dang_comps),  pointer, intent(in) :: c
-    integer(i4b),               intent(in) :: map_n, pixel
-    integer(i4b)                           :: i,j,k
-    real(dp)                               :: lnL
-    real(dp)                               :: TNd, TNT, invTNT
+    integer(i4b),  dimension(2), intent(in) :: map_inds
+    integer(i4b),                intent(in) :: pixel
+    integer(i4b)                            :: i,j,k
+    real(dp)                                :: lnL
+    real(dp)                                :: TNd, TNT, invTNT
 
-    real(dp), allocatable, dimension(:)    :: TN
+    real(dp), allocatable, dimension(:)     :: TN
 
-    integer(i4b), dimension(2,2)           :: inds
+    integer(i4b), dimension(2,2)            :: inds
 
 
     ! Initialize the result to null
     lnL = 0.d0
 
     ! Initialize the inds array to condense the following lines:
-    if (map_n > 0) then
-       ! For your simplest, pol type by pol type case
-       inds(1,:) = map_n
-    else if (map_n == -1) then
-       ! For Q+U joint sampling
-       inds(1,1) = 2; inds(1,2) = 3
-    else if (map_n == -2) then
-       ! For T+Q+U joint sampling
-       inds(1,1) = 1; inds(1,2) = 3
-    end if
+    inds(1,:) = map_inds
 
     if (pixel > -1) then
        ! For a specific pixel
@@ -501,53 +417,29 @@ contains
     ! our crafted matrices will be fully diagonal. Looking at this on paper it 
     ! seems that unless there are cross-band template terms.
     ! TN = model*noise^{-1}
-    ! TN = model(inds(2,1):inds(2,2),inds(
+    ! TNd = TN*data
 
-    if (map_n > 0) then
-       if (pixel > -1) then
-          TN  = model(pixel,map_n,:)/rms(pixel,map_n,:)**2
-          TNd = sum(TN*data(pixel,map_n,:))
-          TNT = sum(TN*model(pixel,map_n,:))
-       else
-          do i = 0, npix-1
-             if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-             ! do j = 1, nbands
-             TN  = model(i,map_n,:)/rms(i,map_n,:)**2
-             TNd = sum(TN*data(i,map_n,:))
-             TNT = sum(TN*model(i,map_n,:))
-          end do
-       end if
-    else if (map_n == -1) then
-       if (pixel > -1) then
-          TN  = model(pixel,map_n,:)/rms(pixel,map_n,:)**2
-          TNd = sum(TN*data(pixel,map_n,:))
-          TNT = sum(TN*model(pixel,map_n,:))
+    do j = 1, nbands
+       do k = inds(1,1), inds(1,2)
+          TN     = model(inds(2,1):inds(2,2),k,j)/rms(inds(2,1):inds(2,2),k,j)**2
+          TNd    = sum(TN*data(inds(2,1):inds(2,2),k,j))
+          TNT    = sum(TN*model(inds(2,1):inds(2,2),k,j))
+          invTNT = 1.d0/TNT
+          write(*,*) j, k, invTNT, TNd
+          write(*,*) " ", -0.5d0*TNd*invTNT*TNd
+          write(*,*) " ", 0.5*log(invTNT)
 
-       else
+          lnL    = lnL - 0.5d0*TNd*invTNT*TNd
 
-       end if
-    else if (map_n == -2) then
-       if (pixel > -1) then
-
-       else
-
-       end if
-    end if
-
-    invTNT = 1.d0/TNT
-    ! As is usually the case here, we want to walk from right to left evaluating
-    ! (T_nu^t N_nu^-1 d_nu)
-
-    lnL = -0.5d0*TNd*invTNT*TNd
-          
-
-    ! If we use the determinant
-    lnL = lnL + 0.5*log(invTNT)
+          ! If we use the determinant
+          lnL = lnL + 0.5*log(invTNT)
+       end do
+    end do
+    stop
 
   end function evaluate_marginal_lnL
 
-  ! Note that the other evaluation routines do NOT include the -0.5, working to make them obsolete
-  function evaluate_lnL(data,rms,model,map_n,pixel,mask) result(lnL)
+  function evaluate_lnL(data,rms,model,map_inds,pixel,mask) result(lnL)
     !==========================================================================
     ! Inputs:
     !         data:  array(real(dp)) - data with which we compare the model
@@ -568,25 +460,17 @@ contains
 
     real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data, rms, model
     real(dp), dimension(0:npix-1),              intent(in) :: mask
-    integer(i4b),               intent(in) :: map_n, pixel
-    integer(i4b)                           :: i,j,k
-    integer(i4b), dimension(2,2)           :: inds
-    real(dp)                               :: lnL
+    integer(i4b),  dimension(2), intent(in) :: map_inds
+    integer(i4b),                intent(in) :: pixel
+    integer(i4b)                            :: i,j,k
+    integer(i4b), dimension(2,2)            :: inds
+    real(dp)                                :: lnL
 
     ! Initialize the result to null
     lnL = 0.d0
 
     ! Initialize the inds array to condense the following lines:
-    if (map_n > 0) then
-       ! For your simplest, pol type by pol type case
-       inds(1,:) = map_n
-    else if (map_n == -1) then
-       ! For Q+U joint sampling
-       inds(1,1) = 2; inds(1,2) = 3
-    else if (map_n == -2) then
-       ! For T+Q+U joint sampling
-       inds(1,1) = 1; inds(1,2) = 3
-    end if
+    inds(1,:) = map_inds
 
     if (pixel > -1) then
        ! For a specific pixel
@@ -600,62 +484,11 @@ contains
        if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
        do k = inds(1,1), inds(1,2)
           do j = 1, nbands
-             lnL = lnL - 0.5d0*((data(pixel,map_n,j)-model(pixel,map_n,j))/rms(pixel,map_n,j))**2
+             lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
           end do
        end do
     end do
 
-    ! ! For your simplest, pol type by pol type case
-    ! if (map_n > 0) then
-    !    if (pixel > -1) then
-    !       do j = 1, nbands
-    !          lnL = lnL - 0.5d0*((data(pixel,map_n,j)-model(pixel,map_n,j))/rms(pixel,map_n,j))**2
-    !       end do
-    !    else
-    !       do i = 0, npix-1
-    !          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-    !          do j = 1, nbands
-    !             lnL = lnL - 0.5d0*((data(i,map_n,j)-model(i,map_n,j))/rms(i,map_n,j))**2
-    !          end do
-    !       end do
-    !    end if
-    ! ! For Q+U joint sampling
-    ! else if (map_n == -1) then
-    !    if (pixel > -1) then
-    !       do j = 1, nbands
-    !          do k = 2, 3
-    !             lnL = lnL - 0.5d0*((data(pixel,k,j)-model(pixel,k,j))/rms(pixel,k,j))**2
-    !          end do
-    !       end do
-    !    else
-    !       do i = 0, npix-1
-    !          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-    !          do j = 1, nbands
-    !             do k = 2, 3
-    !                lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
-    !             end do
-    !          end do
-    !       end do
-    !    end if
-    ! ! For T+Q+U joint sampling
-    ! else if (map_n == -2) then
-    !    if (pixel > -1) then
-    !       do j = 1, nbands
-    !          do k = 1, 3
-    !             lnL = lnL - 0.5d0*((data(pixel,k,j)-model(pixel,k,j))/rms(pixel,k,j))**2
-    !          end do
-    !       end do
-    !    else
-    !       do i = 0, npix-1
-    !          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-    !          do j = 1, nbands
-    !             do k = 1, 3
-    !                lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
-    !             end do
-    !          end do
-    !       end do
-    !    end if
-    ! end if
   end function evaluate_lnL
   
   subroutine sample_band_gain(dpar, dat, comp, map_n, band, fg, sample)

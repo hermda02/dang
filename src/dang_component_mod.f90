@@ -34,6 +34,7 @@ module dang_component_mod
 
      ! Prior information
      character(len=16), allocatable, dimension(:)     :: prior_type
+     character(len=16), allocatable, dimension(:)     :: lnl_type
      real(dp),          allocatable, dimension(:,:)   :: gauss_prior
      real(dp),          allocatable, dimension(:,:)   :: uni_prior
 
@@ -92,6 +93,7 @@ contains
        allocate(constructor%uni_prior(constructor%nindices,2))
        allocate(constructor%sample_index(constructor%nindices))
        allocate(constructor%prior_type(constructor%nindices))
+       allocate(constructor%lnl_type(constructor%nindices))
        allocate(constructor%index_mode(constructor%nindices))
        allocate(constructor%step_size(constructor%nindices))
 
@@ -137,11 +139,14 @@ contains
              constructor%index_mode = 2
           end if
 
+          ! Define the lnl evaluation for each index
+          constructor%lnl_type(i)      = dpar%fg_ind_lnl(component,i)
+
           ! Define MH step siz
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
 
           ! Define prior for likelihood evaluation
-          constructor%prior_type(i)    = dpar%fg_prior_type(component,i)
+          constructor%prior_type(i)    = dpar%fg_prior_type(component,i) 
           constructor%gauss_prior(i,1) = dpar%fg_gauss(component,i,1)
           constructor%gauss_prior(i,2) = dpar%fg_gauss(component,i,2)
           constructor%uni_prior(i,1)   = dpar%fg_uni(component,i,1)
@@ -163,6 +168,7 @@ contains
        allocate(constructor%uni_prior(constructor%nindices,2))
        allocate(constructor%sample_index(constructor%nindices))
        allocate(constructor%prior_type(constructor%nindices))
+       allocate(constructor%lnl_type(constructor%nindices))
        allocate(constructor%index_mode(constructor%nindices))
        allocate(constructor%step_size(constructor%nindices))
 
@@ -207,6 +213,9 @@ contains
           else if (trim(dpar%fg_ind_region(component,i)) == 'per-pixel') then
              constructor%index_mode = 2
           end if
+
+          ! Define the lnl evaluation for each index
+          constructor%lnl_type(i)      = dpar%fg_ind_lnl(component,i)
 
           ! Define MH step siz
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
@@ -282,6 +291,7 @@ contains
        allocate(constructor%uni_prior(1,2))
        allocate(constructor%sample_index(1))
        allocate(constructor%prior_type(1))
+       allocate(constructor%lnl_type(1))
        allocate(constructor%index_mode(1))
        allocate(constructor%step_size(1))
        
@@ -318,6 +328,9 @@ contains
           do j = 1, size(flag_buffer)
              constructor%pol_flag(i,j) = flag_buffer(j)
           end do
+
+          ! Define the lnl evaluation for each index
+          constructor%lnl_type(i)      = dpar%fg_ind_lnl(component,i)
 
           ! Do we sample this index?
           constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)
