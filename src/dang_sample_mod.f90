@@ -174,6 +174,8 @@ contains
        do i = 1, 1000
           theta_grid(i) = 15.d0+(i-1)*(10./999.)
           sample(nind) = theta_grid(i)
+
+          write(*,*) 'Td = ', theta_grid(i)
           call update_sample_model(model,c,map_inds,sample)
           if (c%lnl_type(nind) == 'chisq') then
              lnl_grid(i) = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
@@ -181,7 +183,7 @@ contains
              lnl_grid(i) = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
           end if
           write(75,fmt='(f16.8)') theta_grid(i)
-          write(76,fmt='(E16.8)') lnl_grid(i)
+          write(76,fmt='(E19.12)') lnl_grid(i)
 
        end do
        close(75)
@@ -425,17 +427,19 @@ contains
           TNd    = sum(TN*data(inds(2,1):inds(2,2),k,j))
           TNT    = sum(TN*model(inds(2,1):inds(2,2),k,j))
           invTNT = 1.d0/TNT
-          write(*,*) j, k, invTNT, TNd
-          write(*,*) " ", -0.5d0*TNd*invTNT*TNd
-          write(*,*) " ", 0.5*log(invTNT)
+          ! write(*,*) j, k, invTNT, TNd
+          ! write(*,*) " ", -0.5d0*TNd*invTNT*TNd
+          ! write(*,*) " ", -0.5d0*sum(data(inds(2,1):inds(2,2),k,j)**2/rms(inds(2,1):inds(2,2),k,j)**2)
+          ! write(*,*) " ", 0.5*log(invTNT)
+          ! write(*,*) ""
 
           lnL    = lnL - 0.5d0*TNd*invTNT*TNd
 
           ! If we use the determinant
-          lnL = lnL + 0.5*log(invTNT)
+          ! lnL = lnL + 0.5*log(invTNT)
        end do
     end do
-    stop
+    ! stop
 
   end function evaluate_marginal_lnL
 
