@@ -226,6 +226,33 @@ contains
                   constructor%indices(:,:,i), npix, nmaps, nullval, anynull, header=header)
           end if
        end do
+    else if (trim(constructor%type) == 'cmb') then
+       allocate(constructor%amplitude(0:npix-1,nmaps))
+       constructor%nindices = 0
+
+       ! Allocate general pol_type flag array
+       allocate(constructor%nflag(1))
+       allocate(constructor%pol_flag(1,3)) ! The three is here because that's the max number of poltypes we can handle
+
+       ! Initialize pol_flag arrays
+       constructor%nflag = 0
+       constructor%pol_flag = 0
+
+       ! Load the poltype into the flag buffer, and store bit flags for each component
+       flag_buffer = return_poltype_flag(dpar%fg_spec_poltype(component,1))
+       constructor%nflag = size(flag_buffer)
+       do j = 1, size(flag_buffer)
+          constructor%pol_flag(1,j) = flag_buffer(j)
+       end do
+
+
+       ! Initialize an amplitude map, or don't
+       if (trim(dpar%fg_filename(component)) == 'none') then
+          constructor%amplitude = 0.d0
+       else
+          call read_bintab(trim(dpar%datadir)//trim(dpar%fg_filename(component)),&
+               constructor%amplitude, npix, nmaps, nullval, anynull, header=header)
+       end if
 
     else if (trim(constructor%type) == 'template') then
        constructor%nindices = 0
@@ -498,6 +525,8 @@ contains
              end do
           end if
        end if
+    else if (trim(self%type) == 'cmb') then
+       spectrum = 1.0/a2t(bp(band))
     else if (trim(self%type) == 'template') then
        spectrum = 1.d0
     else if (trim(self%type) == 'hi_fit') then

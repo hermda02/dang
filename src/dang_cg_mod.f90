@@ -237,6 +237,7 @@ contains
     delta_0   = delta_new
     i = 0
     do while( (i .lt. self%i_max) .and. (delta_new .gt. self%converge))
+
        t3         = mpi_wtime()
        q          = self%compute_Ax(ddata, d, nbands, flag_n)
        alpha      = delta_new/(sum(d*q))
@@ -387,6 +388,7 @@ contains
                 !!$OMP DO SCHEDULE(static)
                 do i = 1, l
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                       b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
@@ -492,6 +494,9 @@ contains
           offset = offset + c%nfit
        end if
     end do
+
+    deallocate(data)
+
   end subroutine compute_rhs
 
   function compute_Ax(self, ddata, x, nbands, flag_n) result(res)
@@ -928,7 +933,7 @@ contains
              offset = offset + npix
           else
              do i = 1, npix
-                c%amplitude(i-1,2) = self%x(offset+i)
+                c%amplitude(i-1,map_n) = self%x(offset+i)
              end do
              offset = offset + npix
           end if
