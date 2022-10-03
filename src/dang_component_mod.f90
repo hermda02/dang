@@ -17,6 +17,7 @@ module dang_component_mod
      integer(i4b)                                     :: cg_group         ! CG group number 
      integer(i4b)                                     :: nfit             ! (Template only)
      integer(i4b)                                     :: nindices         ! How many indices does the component have?
+     character(len=16), allocatable, dimension(:)     :: ind_label        ! Label of the indices
      real(dp),          allocatable, dimension(:)     :: step_size        ! M-H step size
      logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
      logical(lgt),      allocatable, dimension(:)     :: corr             ! Do we correct this band?
@@ -105,6 +106,10 @@ contains
        allocate(constructor%amplitude(0:npix-1,nmaps))
        allocate(constructor%indices(0:npix-1,nmaps,constructor%nindices))
 
+       allocate(constructor%ind_label(constructor%nindices))
+
+       constructor%ind_label = ['BETA', 'T']
+
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
 
@@ -179,6 +184,9 @@ contains
        ! Allocate maps for the components
        allocate(constructor%amplitude(0:npix-1,nmaps))
        allocate(constructor%indices(0:npix-1,nmaps,constructor%nindices))
+       allocate(constructor%ind_label(constructor%nindices))
+
+       constructor%ind_label = ['T']
        
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
@@ -327,6 +335,9 @@ contains
        allocate(constructor%template(0:npix-1,nmaps))
        allocate(constructor%amplitude(0:npix-1,nmaps))
        allocate(constructor%indices(0:npix-1,nmaps,1))
+       allocate(constructor%ind_label(constructor%nindices))
+
+       constructor%ind_label = ['T']
        
        ! Reference frequency
        constructor%nu_ref              = dpar%fg_nu_ref(component) 
@@ -515,26 +526,26 @@ contains
        if (bp(band)%id == 'delta') then
           if (present(index)) then
              z = h / (k_B*index(2))
-             spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / &
-                  & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref*1d9))**(index(1)+1.d0)
+             spectrum = (exp(z*self%nu_ref)-1.d0) / &
+                  & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref))**(index(1)+1.d0)
           else
              z = h / (k_B*self%indices(pix,map_n,2))
-             spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / &
-                  & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
+             spectrum = (exp(z*self%nu_ref)-1.d0) / &
+                  & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref))**(self%indices(pix,map_n,1)+1.d0)
           end if
        else
           spectrum = 0.d0
           if (present(index)) then
              z = h / (k_B*index(2))
              do i = 1, bp(band)%n
-                spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
-                     (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref*1d9))**(index(1)+1.d0)
+                spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref)-1.d0) / &
+                     (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref))**(index(1)+1.d0)
              end do
           else
              z = h / (k_B*self%indices(pix,map_n,2))
              do i = 1, bp(band)%n
-                spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref*1d9)-1.d0) / &
-                     (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref*1d9))**(self%indices(pix,map_n,1)+1.d0)
+                spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref)-1.d0) / &
+                     (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref))**(self%indices(pix,map_n,1)+1.d0)
              end do
           end if
        end if

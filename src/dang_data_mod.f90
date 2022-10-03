@@ -510,38 +510,18 @@ contains
        do n = 1, ncomp
           output = .true.
           c => component_list(n)%p
-          if (trim(c%type) == 'template') then
-             output = .false.
-             cycle
-          else if (trim(c%type) == 'cmb') then
-             output = .false.
-             cycle
-          else if (trim(c%type) == 'power-law') then
-             title = trim(dpar%outdir) // trim(c%label) // '_beta_k' // trim(iter_str) // '.fits'
-             map(:,:)   = c%indices(:,:,1)
+          do l = 1, c%nindices
+             title = trim(dpar%outdir) // trim(c%label) //&
+                  '_' // trim(c%ind_label(l))//'_k' // trim(iter_str) // '.fits'
              do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-                   map(i,:) = missval
-                end if
+                do k = 1, nmaps
+                   map(i,k) = c%indices(i,k,l)
+                end do
              end do
-          else if (trim(c%type) == 'mbb') then
-             title = trim(dpar%outdir) // trim(c%label) // '_beta_k' // trim(iter_str) // '.fits'
-             map(:,:)   = c%indices(:,:,1)
-             do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-                   map(i,:) = missval
-                end if
-             end do
-             title = trim(dpar%outdir) // trim(c%label) // '_T_k' // trim(iter_str) // '.fits'
-             map(:,:)   = c%indices(:,:,2)
-             do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-                   map(i,:) = missval
-                end if
-             end do
-          end if
+             call write_result_map(trim(title),nside,ordering,header,map)
+          end do
        end do
-       if (output) call write_result_map(trim(title), nside, ordering, header, map)
+       ! if (output) call write_result_map(trim(title), nside, ordering, header, map)
        do mn = 1, nmaps
           dat%chi_map(:,mn) = 0.d0
           do i = 0, npix-1

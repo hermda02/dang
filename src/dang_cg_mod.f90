@@ -236,6 +236,11 @@ contains
     delta_new = sum(r*r)
     delta_0   = delta_new
     i = 0
+
+    write(*,fmt='(a,i4,a,e12.5)') 'CG Iter: ', i, ' | delta: ', delta_new
+    if (delta_new .lt. self%converge) then
+       write(*,fmt='(a,i4,a,e12.5)') 'Final CG Iter: ', i, ' | delta: ', delta_new
+    end if
     do while( (i .lt. self%i_max) .and. (delta_new .gt. self%converge))
 
        t3         = mpi_wtime()

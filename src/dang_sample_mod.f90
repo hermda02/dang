@@ -38,7 +38,7 @@ contains
           if (c%sample_index(j)) then
              do k = 1, c%nflag(j)
                 if (iand(c%pol_flag(j,k),1) .ne. 0) then
-                   write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = I.'
+                   write(*,*) 'Sampling spectral index ', trim(c%ind_label(j)), ' for ', trim(c%label), ', poltype = I.'
                    call sample_index_mh(ddata,c,j,1)
                 else if (iand(c%pol_flag(j,k),2) .ne. 0) then
                    write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = Q.'
@@ -107,6 +107,8 @@ contains
 
     real(dp), dimension(1000)               :: theta_grid, lnl_grid
 
+    real(dp)                                :: t1, t2, t3, t4, t5, t6 ! Timing variables
+
     ! Here is an object we'll call data, which we will correct to be the
     ! portion of the sky signal we wish to fit to
     allocate(data(0:npix-1,nmaps,nbands))
@@ -168,28 +170,28 @@ contains
           sample(l) = c%indices(0,map_inds(1),l)
        end do
 
-       ! Testing Block here to grid out the likelihoods
-       open(75,file='td_grid.dat')
-       open(76,file='lnl_grid.dat')
-       do i = 1, 1000
-          theta_grid(i) = 15.d0+(i-1)*(10./999.)
-          sample(nind) = theta_grid(i)
+       ! ! Testing Block here to grid out the likelihoods
+       ! open(75,file='td_grid.dat')
+       ! open(76,file='lnl_grid.dat')
+       ! do i = 1, 1000
+       !    theta_grid(i) = 15.d0+(i-1)*(10./999.)
+       !    sample(nind) = theta_grid(i)
 
-          write(*,*) 'Td = ', theta_grid(i)
-          call update_sample_model(model,c,map_inds,sample)
-          if (c%lnl_type(nind) == 'chisq') then
-             lnl_grid(i) = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
-          else if (c%lnl_type(nind) == 'marginal') then
-             lnl_grid(i) = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
-          end if
-          write(75,fmt='(f16.8)') theta_grid(i)
-          write(76,fmt='(E19.12)') lnl_grid(i)
+       !    write(*,*) 'Td = ', theta_grid(i)
+       !    call update_sample_model(model,c,map_inds,sample)
+       !    if (c%lnl_type(nind) == 'chisq') then
+       !       lnl_grid(i) = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+       !    else if (c%lnl_type(nind) == 'marginal') then
+       !       lnl_grid(i) = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+       !    end if
+       !    write(75,fmt='(f16.8)') theta_grid(i)
+       !    write(76,fmt='(E19.12)') lnl_grid(i)
 
-       end do
-       close(75)
-       close(76)
+       ! end do
+       ! close(75)
+       ! close(76)
 
-       stop
+       ! stop
        
        ! Define the model to toss into the likelihood evaluation
        call update_sample_model(model,c,map_inds,sample)
@@ -213,6 +215,8 @@ contains
           ! Update theta with the new sample
           ! Evaluate model for likelihood evaluation
           theta(nind) = sample(nind) + rand_normal(0.d0,c%gauss_prior(nind,2))
+          if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
+
           call update_sample_model(model,c,map_inds,theta)
           
           ! Evaluate the lnL (already includes the -0.5 out front)
@@ -255,7 +259,7 @@ contains
        write(*,*) 'Sampling per-pixel'
        ! Pixel-by-pixel
 
-       !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio)
+       !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model)
        !$OMP DO SCHEDULE(static)
        do i = 0, npix-1
           if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == 0.d0) cycle
@@ -269,15 +273,15 @@ contains
           end do
 
           ! Define the model to toss into the likelihood evaluation
-          call update_sample_model(model,c,map_inds,sample)
-          
+          call update_sample_model(model,c,map_inds,sample,i)
+
           ! Evaluate the lnL (already includes the -0.5 out front)
           if (c%lnl_type(nind) == 'chisq') then
              lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
           else if (c%lnl_type(nind) == 'marginal') then
              lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
           end if
-          
+
           if (trim(c%prior_type(nind)) == 'gaussian') then
              lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
           else if (trim(c%prior_type(nind)) == 'uniform') then
@@ -290,7 +294,8 @@ contains
              ! Update theta with the new sample
              ! Evaluate model for likelihood evaluation
              theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
-             call update_sample_model(model,c,map_inds,theta)
+             if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
+             call update_sample_model(model,c,map_inds,theta,i)
              
              ! Evaluate likelihood of sample
              if (c%lnl_type(nind) == 'chisq') then
@@ -335,23 +340,32 @@ contains
 
   end subroutine sample_index_mh
 
-  subroutine update_sample_model(model,c,map_inds,sample)
+  subroutine update_sample_model(model,c,map_inds,sample,pixel)
     implicit none
 
     real(dp),  dimension(0:npix-1,nmaps,nbands), intent(inout) :: model 
     type(dang_comps),   pointer, intent(in)    :: c
     integer(i4b),  dimension(2), intent(in)    :: map_inds
     real(dp),      dimension(:), intent(in)    :: sample
+    integer(i4b),  optional,     intent(in)    :: pixel
 
     integer(i4b)                               :: i, j, k
 
-    do i = 0, npix-1
+    if (present(pixel)) then
        do k = map_inds(1), map_inds(2)
           do j = 1, nbands
-             model(i,k,j) = c%eval_signal(j,i,k,sample)
+             model(pixel,k,j) = c%eval_signal(j,pixel,k,sample)
           end do
        end do
-    end do
+    else
+       do i = 0, npix-1
+          do k = map_inds(1), map_inds(2)
+             do j = 1, nbands
+                model(i,k,j) = c%eval_signal(j,i,k,sample)
+             end do
+          end do
+       end do
+    end if
 
   end subroutine update_sample_model
 
