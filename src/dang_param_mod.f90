@@ -60,6 +60,7 @@ module dang_param_mod
      integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
      logical(lgt),       allocatable, dimension(:)     :: temp_sample    ! Storing which bands should have templates fit
      
+     character(len=512), allocatable, dimension(:,:)   :: fg_amp_file    ! Fg amplitude input map
      character(len=512), allocatable, dimension(:)     :: fg_filename    ! Init filename for diffuse components, template filename for templates
      integer(i4b),       allocatable, dimension(:)     :: fg_cg_group    ! Which cg group is this component in?
      real(dp),           allocatable, dimension(:,:)   :: fg_init        ! Initialized parameter value (fullsky)
@@ -534,6 +535,7 @@ contains
        allocate(par%fg_spec_poltype(n,2))
        allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
        allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
+       allocate(par%fg_amp_file(n,1))
        allocate(par%fg_spec_file(n,2))
        allocate(par%fg_ind_region(n,2))
        allocate(par%fg_ind_lnl(n,2))
@@ -552,9 +554,7 @@ contains
        allocate(par%cg_convergence(n2))
        allocate(par%cg_poltype(n2))
 
-       allocate(par%temp_file(1))
-
-       call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME01',par_string=par%temp_file(1))
+       allocate(par%temp_file(par%ntemp))
 
        ! Load the CG group specific parameters
        do i = 1, n2
@@ -583,9 +583,14 @@ contains
              end if
           end if
           if (trim(par%fg_type(i)) == 'power-law') then
+             ! call get_parameter_hashtable(htbl,'COMP_AMP_INPUT_MAP'//itext, len_itext=len_itext, par_string=par%fg_amp_file(i,1))
              call read_power_law(par,htbl,i)
           else if (trim(par%fg_type(i)) == 'mbb') then
+             ! call get_parameter_hashtable(htbl,'COMP_AMP_INPUT_MAP'//itext, len_itext=len_itext, par_string=par%fg_amp_file(i,1))
              call read_mbb(par,htbl,i)
+          else if (trim(par%fg_type(i)) == 'cmb') then
+             ! call get_parameter_hashtable(htbl,'COMP_AMP_INPUT_MAP'//itext, len_itext=len_itext, par_string=par%fg_amp_file(i,1))
+             ! call read_cmb(par,htbl,i)
           else if (trim(par%fg_type(i)) == 'template') then
              call read_template(par,htbl,i)
           end if
@@ -652,8 +657,12 @@ contains
     
     call int2string(comp, itext)
 
-    call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
-         par_string=par%fg_spec_poltype(comp,1))
+    do i = 1, par%ntemp
+       call int2string(i,itext)
+       call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext,par_string=par%temp_file(i))
+       call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
+            par_string=par%fg_spec_poltype(comp,1))
+    end do
     do j = 1, par%numband
        call int2string(j,jtext)
        call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
@@ -664,6 +673,25 @@ contains
     end do
 
   end subroutine read_template
+
+  ! subroutine read_cmb(par,htbl,comp)
+  !   implicit none
+  !   type(hash_tbl_sll),  intent(in)    :: htbl
+  !   type(dang_params),   intent(inout) :: par
+  !   integer(i4b),        intent(in)    :: comp
+
+  !   integer(i4b)     :: len_itext
+  !   character(len=2) :: itext
+    
+  !   len_itext = len(trim(itext))
+    
+  !   call int2string(comp, itext)
+
+  !   call get_parameter_hashtable(htbl, ''//itext, len_itext=len_itext, &
+  !        par_dp
+
+
+  ! end subroutine read_cmb
 
   subroutine read_mbb(par,htbl,comp)
     implicit none

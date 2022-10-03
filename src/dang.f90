@@ -119,48 +119,6 @@ contains
   
   subroutine comp_sep
 
-   !  ! Count up the degrees of freedom for chisq nromalization
-   !  do n = 1, dpar%ncomp
-   !     ! Count up foregrounds in the joint sampler
-   !     if (ANY(dpar%joint_comp == trim(dpar%fg_label(n))) .and. dpar%joint_sample) then
-   !        if (dpar%joint_pol) then
-   !           npixpar = npixpar + 2*nump
-   !           namps   = namps + 2*nump
-   !        else
-   !           npixpar = npixpar + nump
-   !           namps   = namps + nump
-   !        end if
-   !     ! Count up foregrounds not included in the joint sampler
-   !     else if (dpar%fg_samp_amp(n)) then
-   !           npixpar = npixpar + size(dpar%pol_type)*nump
-   !     end if
-   !     ! Count up spectral index parameters, either fullsky or per pixel
-   !     if (dpar%fg_samp_spec(n,1)) then
-   !        if (index(dpar%fg_ind_region(n,1),'pix') /= 0) then
-   !           ! Skip for now because the contribution is not trivial - esp with a mask
-   !           if (dpar%fg_spec_joint(n,1)) then
-   !              npixpar = npixpar + nump
-   !           end if
-   !        else if (index(dpar%fg_ind_region(n,1),'full') /= 0) then
-   !           if (dpar%fg_spec_joint(n,1)) then
-   !              ! Sampling fullsky jointly in Q and U
-   !              nglobalpar = nglobalpar + 1
-   !           else 
-   !              ! Sampling fullsky separately in Q and U
-   !              nglobalpar = nglobalpar + 2
-   !           end if
-   !        end if
-   !     end if
-   !  end do
-   !  do n = 1, dpar%ntemp
-   !     if (ANY(dpar%joint_comp == trim(dpar%temp_label(n)))) then
-   !        nglobalpar = nglobalpar + dpar%temp_nfit(n)
-   !        namps      = namps + dpar%temp_nfit(n)
-   !     else if (.not. ANY(dpar%joint_comp == trim(dpar%temp_label(n))) .or. .not. (dpar%joint_sample)) then
-   !        nglobalpar = nglobalpar + size(dpar%pol_type)*dpar%temp_nfit(n)
-   !     end if
-   ! end do
-
    !--------------------------------------------------------------|
    !                   Calculation portion                        |               
    !--------------------------------------------------------------|
