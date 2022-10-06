@@ -211,61 +211,61 @@ contains
     end do
   end subroutine mask_hi
   
-  subroutine dust_correct_band(self,dpar,comp,band,iter)
-    implicit none
-    type(dang_data),             intent(inout) :: self
-    type(dang_params)                          :: dpar
-    type(dang_comps)                           :: comp
-    integer(i4b),                intent(in)    :: band
-    integer(i4b), optional,      intent(in)    :: iter
-    real(dp), allocatable, dimension(:,:,:)    :: thermal_map
-    integer(i4b)                               :: i, j, k
-    character(len=256)                         :: title
+  ! subroutine dust_correct_band(self,dpar,comp,band,iter)
+  !   implicit none
+  !   type(dang_data),             intent(inout) :: self
+  !   type(dang_params)                          :: dpar
+  !   type(dang_comps)                           :: comp
+  !   integer(i4b),                intent(in)    :: band
+  !   integer(i4b), optional,      intent(in)    :: iter
+  !   real(dp), allocatable, dimension(:,:,:)    :: thermal_map
+  !   integer(i4b)                               :: i, j, k
+  !   character(len=256)                         :: title
 
-    real(dp)                                   :: T_d, beta
+  !   real(dp)                                   :: T_d, beta
 
-    allocate(thermal_map(0:npix-1,nmaps,nbands))
+  !   allocate(thermal_map(0:npix-1,nmaps,nbands))
 
-    write(*,'(a,a)') 'Dust correcting band ', trim(dpar%band_label(band))
-    if (trim(dpar%dust_corr_type) == 'uniform') then
-       T_d    = dpar%mbb_gauss(1,1)
-       beta   = dpar%mbb_gauss(2,1)
-       do i = 0, npix-1
-          do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-             thermal_map(i,k,band) = self%temps(i,k,1)*evaluate_mbb(bp(band),353.d9,T_d,beta)
-             self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
-          end do
-       end do
-    else if (trim(dpar%dust_corr_type) == 'sample') then
-       do i = 0, npix-1
-          do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-             if (dpar%mbb_gauss(1,2) .gt. 0.d0) then
-                T_d    = rand_normal(dpar%mbb_gauss(1,1),dpar%mbb_gauss(1,2))
-             else 
-                T_d    = dpar%mbb_gauss(1,1)
-             end if
-             if (dpar%mbb_gauss(2,2) .gt. 0.d0) then
-                beta = rand_normal(dpar%mbb_gauss(2,1),dpar%mbb_gauss(2,2))
-             else
-                beta = dpar%mbb_gauss(2,1)
-             end if
-             thermal_map(i,k,band) = self%temps(i,k,1)*evaluate_mbb(bp(band),353.d9,T_d,beta)
-             self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
-          end do
-       end do
-    else if (trim(dpar%dust_corr_type) == 'planck') then
-       stop
-    end if
+  !   write(*,'(a,a)') 'Dust correcting band ', trim(dpar%band_label(band))
+  !   if (trim(dpar%dust_corr_type) == 'uniform') then
+  !      T_d    = dpar%mbb_gauss(1,1)
+  !      beta   = dpar%mbb_gauss(2,1)
+  !      do i = 0, npix-1
+  !         do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+  !            thermal_map(i,k,band) = self%temps(i,k,1)*evaluate_mbb(bp(band),353.d9,T_d,beta)
+  !            self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
+  !         end do
+  !      end do
+  !   else if (trim(dpar%dust_corr_type) == 'sample') then
+  !      do i = 0, npix-1
+  !         do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+  !            if (dpar%mbb_gauss(1,2) .gt. 0.d0) then
+  !               T_d    = rand_normal(dpar%mbb_gauss(1,1),dpar%mbb_gauss(1,2))
+  !            else 
+  !               T_d    = dpar%mbb_gauss(1,1)
+  !            end if
+  !            if (dpar%mbb_gauss(2,2) .gt. 0.d0) then
+  !               beta = rand_normal(dpar%mbb_gauss(2,1),dpar%mbb_gauss(2,2))
+  !            else
+  !               beta = dpar%mbb_gauss(2,1)
+  !            end if
+  !            thermal_map(i,k,band) = self%temps(i,k,1)*evaluate_mbb(bp(band),353.d9,T_d,beta)
+  !            self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
+  !         end do
+  !      end do
+  !   else if (trim(dpar%dust_corr_type) == 'planck') then
+  !      stop
+  !   end if
 
 
-    if (present(iter)) then
-       write(iter_str, '(i0.5)') iter
-       title = trim(dpar%outdir)//trim(dpar%band_label(band))//'_thermal_map_k' // trim(iter_str) // '.fits'
-    else
-       title = trim(dpar%outdir)//trim(dpar%band_label(band))//'_thermal_map.fits'
-    end if
-    call write_result_map(trim(title), nside, ordering, header, thermal_map(:,:,band))
-  end subroutine dust_correct_band
+  !   if (present(iter)) then
+  !      write(iter_str, '(i0.5)') iter
+  !      title = trim(dpar%outdir)//trim(dpar%band_label(band))//'_thermal_map_k' // trim(iter_str) // '.fits'
+  !   else
+  !      title = trim(dpar%outdir)//trim(dpar%band_label(band))//'_thermal_map.fits'
+  !   end if
+  !   call write_result_map(trim(title), nside, ordering, header, thermal_map(:,:,band))
+  ! end subroutine dust_correct_band
 
   subroutine convert_maps(self,dpar)
     ! We want to run everything in uK_RJ (at least for compsep), yeah?
@@ -401,7 +401,7 @@ contains
        call compute_chisq(self,dpar)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
-             write(*,fmt='(i6,a,f16.5)') iter, " - Chisq: ", self%chisq
+             write(*,fmt='(i6,a,E16.5)') iter, " - Chisq: ", self%chisq
              write(*,fmt='(a)') '---------------------------------------------'
           end if
        end if
@@ -447,6 +447,7 @@ contains
     if (trim(dpar%mode) == 'comp_sep') then
        
        write(iter_str, '(i0.5)') iter
+       ! If we ask to output all components for each band:
        if (dpar%output_fg .eqv. .true.) then
           do j = 1, nbands
              do n = 1, ncomp
@@ -474,19 +475,8 @@ contains
                 call write_result_map(trim(title), nside, ordering, header, map)
              end do
           end do
-       else 
-          do n = 1, dpar%ncomp
-             title = trim(dpar%outdir) // 'reference_'// trim(dpar%fg_label(n)) //&
-                  '_amplitude_k' // trim(iter_str) // '.fits'
-             map(:,:)   = component_list(n)%p%amplitude!dat%fg_map(:,:,0,n)
-             do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
-                   map(i,:) = missval
-                end if
-             end do
-             call write_result_map(trim(title), nside, ordering, header, map)
-          end do
        end if
+       ! Write residual and sky model for each band
        do j = 1, nbands
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
           map(:,:)   = dat%res_map(:,:,j)
@@ -507,9 +497,18 @@ contains
           end do
           call write_result_map(trim(title), nside, ordering, header, map)
        end do
+       ! Write component maps
        do n = 1, ncomp
           output = .true.
           c => component_list(n)%p
+          title = trim(dpar%outdir) // trim(c%label) // '_c001_k' // trim(iter_str) // '.fits'
+          map(:,:)   = c%amplitude
+          do i = 0, npix-1
+             if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                map(i,:) = missval
+             end if
+          end do
+          call write_result_map(trim(title), nside, ordering, header, map)
           do l = 1, c%nindices
              title = trim(dpar%outdir) // trim(c%label) //&
                   '_' // trim(c%ind_label(l))//'_k' // trim(iter_str) // '.fits'
@@ -521,7 +520,7 @@ contains
              call write_result_map(trim(title),nside,ordering,header,map)
           end do
        end do
-       ! if (output) call write_result_map(trim(title), nside, ordering, header, map)
+       ! Write the chisquare map
        do mn = 1, nmaps
           dat%chi_map(:,mn) = 0.d0
           do i = 0, npix-1
@@ -638,6 +637,12 @@ contains
              endif
              write(34,'(10(E17.8))') c%template_amplitudes(:,map_n)
              close(34)
+          ! else
+          !    do i = 1, c%nindices
+          !       title = trim(dpar%outdir) // trim(c%label) // '_' // trim(c%ind_label(i)) // '.dat'
+                
+          !    end do
+
           end if
        end do
        

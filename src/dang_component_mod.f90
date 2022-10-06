@@ -88,6 +88,7 @@ contains
     constructor%cg_group         = dpar%fg_cg_group(component)
 
     if (trim(constructor%type) == 'mbb') then
+
        ! Allocate arrays to appropriate size for each component type
        constructor%nindices = 2
        allocate(constructor%gauss_prior(constructor%nindices,2))
@@ -139,9 +140,9 @@ contains
 
           ! Sample full sky or per-pixel?
           if (trim(dpar%fg_ind_region(component,i)) == 'fullsky') then
-             constructor%index_mode = 1
+             constructor%index_mode(i) = 1
           else if (trim(dpar%fg_ind_region(component,i)) == 'per-pixel') then
-             constructor%index_mode = 2
+             constructor%index_mode(i) = 2
           end if
 
           ! Define the lnl evaluation for each index
@@ -487,7 +488,6 @@ contains
 
   end function eval_signal
 
-
   function eval_sed(self, band, pix, map_n, index)
     ! always computed in RJ units
     
@@ -502,53 +502,9 @@ contains
     real(dp)                           :: eval_sed
 
     if (trim(self%type) == 'power-law') then
-       if (bp(band)%id == 'delta') then
-          ! if (ind == 1) then
-          if (present(index)) then
-             spectrum = (bp(band)%nu_c/self%nu_ref)**index(1)
-          else 
-             spectrum = (bp(band)%nu_c/self%nu_ref)**self%indices(pix,map_n,1)
-          end if
-       else
-          spectrum = 0.d0
-          ! Compute for LFI bandpass
-          if (present(index)) then
-             do i = 1, bp(band)%n
-                spectrum = spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**index(1)
-             end do
-          else 
-             do i = 1, bp(band)%n
-                spectrum = spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**self%indices(pix,map_n,1)
-             end do
-          end if
-       end if
+       spectrum = evaluate_powerlaw(self,band, pix, map_n, index)
     else if (trim(self%type) == 'mbb') then
-       if (bp(band)%id == 'delta') then
-          if (present(index)) then
-             z = h / (k_B*index(2))
-             spectrum = (exp(z*self%nu_ref)-1.d0) / &
-                  & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref))**(index(1)+1.d0)
-          else
-             z = h / (k_B*self%indices(pix,map_n,2))
-             spectrum = (exp(z*self%nu_ref)-1.d0) / &
-                  & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref))**(self%indices(pix,map_n,1)+1.d0)
-          end if
-       else
-          spectrum = 0.d0
-          if (present(index)) then
-             z = h / (k_B*index(2))
-             do i = 1, bp(band)%n
-                spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref)-1.d0) / &
-                     (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref))**(index(1)+1.d0)
-             end do
-          else
-             z = h / (k_B*self%indices(pix,map_n,2))
-             do i = 1, bp(band)%n
-                spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref)-1.d0) / &
-                     (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref))**(self%indices(pix,map_n,1)+1.d0)
-             end do
-          end if
-       end if
+       spectrum = evaluate_mbb(self,band, pix, map_n, index)
     else if (trim(self%type) == 'cmb') then
        spectrum = 1.0/a2t(bp(band))
     else if (trim(self%type) == 'template') then
@@ -565,26 +521,89 @@ contains
 
   end function eval_sed
 
-  function evaluate_mbb(bp,nu_ref,T_d,beta)
+  function evaluate_powerlaw(self, band, pix, map_n, index)
+    ! always computed in RJ units
+    
     implicit none
-    type(bandinfo)           :: bp
-    real(dp),     intent(in) :: nu_ref
-    real(dp),     intent(in) :: T_d
-    real(dp),     intent(in) :: beta
-    real(dp)                 :: evaluate_mbb, z
-    integer(i4b)             :: i
+    class(dang_comps)                  :: self
+    integer(i4b),           intent(in) :: band
+    integer(i4b),           optional   :: pix
+    integer(i4b),           optional   :: map_n
+    integer(i4b)                       :: i
+    real(dp), dimension(:), optional   :: index
+    real(dp)                           :: z, spectrum
+    real(dp)                           :: evaluate_powerlaw
 
-    evaluate_mbb = 0.d0
-    z = h / (k_B*T_d)
-    if (bp%id == 'delta') then
-       evaluate_mbb = evaluate_mbb + (exp(z*nu_ref)-1.d0) / &
-                  (exp(z*bp%nu_c)-1.d0) * (bp%nu_c/(nu_ref))**(beta+1.d0)
+    spectrum = 1.d0
+
+    if (bp(band)%id == 'delta') then
+       ! if (ind == 1) then
+       if (present(index)) then
+          spectrum = (bp(band)%nu_c/self%nu_ref)**index(1)
+       else 
+          spectrum = (bp(band)%nu_c/self%nu_ref)**self%indices(pix,map_n,1)
+       end if
     else
-       do i = 1, bp%n
-          evaluate_mbb = evaluate_mbb + bp%tau0(i)*(exp(z*nu_ref)-1.d0) / &
-               (exp(z*bp%nu0(i))-1.d0) * (bp%nu0(i)/(nu_ref))**(beta+1.d0)
-       end do
+       spectrum = 0.d0
+       ! Compute for LFI bandpass
+       if (present(index)) then
+          do i = 1, bp(band)%n
+             spectrum = spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**index(1)
+          end do
+       else 
+          do i = 1, bp(band)%n
+             spectrum = spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**self%indices(pix,map_n,1)
+          end do
+       end if
     end if
+
+    evaluate_powerlaw = spectrum
+    
+  end function evaluate_powerlaw
+
+  function evaluate_mbb(self, band, pix, map_n, index)
+    ! always computed in RJ units
+    
+    implicit none
+    class(dang_comps)                  :: self
+    integer(i4b),           intent(in) :: band
+    integer(i4b),           optional   :: pix
+    integer(i4b),           optional   :: map_n
+    integer(i4b)                       :: i
+    real(dp), dimension(:), optional   :: index
+    real(dp)                           :: z, spectrum
+    real(dp)                           :: evaluate_mbb
+
+    spectrum = 1.d0
+
+    if (bp(band)%id == 'delta') then
+       if (present(index)) then
+          z = h / (k_B*index(2))
+          spectrum = (exp(z*self%nu_ref)-1.d0) / &
+               & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref))**(index(1)+1.d0)
+       else
+          z = h / (k_B*self%indices(pix,map_n,2))
+          spectrum = (exp(z*self%nu_ref)-1.d0) / &
+               & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref))**(self%indices(pix,map_n,1)+1.d0)
+       end if
+    else
+       spectrum = 0.d0
+       if (present(index)) then
+          z = h / (k_B*index(2))
+          do i = 1, bp(band)%n
+             spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref)-1.d0) / &
+                  (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref))**(index(1)+1.d0)
+          end do
+       else
+          z = h / (k_B*self%indices(pix,map_n,2))
+          do i = 1, bp(band)%n
+             spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref)-1.d0) / &
+                  (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref))**(self%indices(pix,map_n,1)+1.d0)
+          end do
+       end if
+    end if
+
+    evaluate_mbb = spectrum
 
   end function evaluate_mbb
     

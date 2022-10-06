@@ -102,7 +102,7 @@ contains
 
     integer(i4b)                            :: i, j, k
     integer(i4b)                            :: l, m, n, mh_mode
-    real(dp)                                :: lnl, lnl_old, lnl_new
+     real(dp)                                :: lnl, lnl_old, lnl_new
     real(dp)                                :: diff, ratio, num
 
     real(dp), dimension(1000)               :: theta_grid, lnl_grid

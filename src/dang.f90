@@ -80,12 +80,12 @@ program dang
      call ddata%init_data_maps(dpar)
      call ddata%read_data_maps(dpar)
      call ddata%convert_maps(dpar)
-     do j = 1, nbands
-        ! Check to see if any maps need to be dust corrected
-        if (dpar%dust_corr(j) .and. .not. dpar%bp_map(j)) then
-           call dust_correct_band(ddata,dpar,dcomps,j)
-        end if
-     end do
+     ! do j = 1, nbands
+     !    ! Check to see if any maps need to be dust corrected
+     !    if (dpar%dust_corr(j) .and. .not. dpar%bp_map(j)) then
+     !       call dust_correct_band(ddata,dpar,dcomps,j)
+     !    end if
+     ! end do
      write(*,*) ''
      call initialize_components(dpar)
      call initialize_cg_groups(dpar)
@@ -133,14 +133,14 @@ contains
          bp_iter = bp_iter + 1
          call convert_bp_maps(ddata, dpar)
          write(*,*) ''
-         ! Check to see if any swapped maps need to be dust corrected                               
-         do j = 1, nbands
-            if (dpar%bp_map(j)) then
-               if (dpar%dust_corr(j)) then
-                  call dust_correct_band(ddata,dpar,dcomps,j,iter)
-               end if
-            end if
-         end do
+         ! ! Check to see if any swapped maps need to be dust corrected                               
+         ! do j = 1, nbands
+         !    if (dpar%bp_map(j)) then
+         !       if (dpar%dust_corr(j)) then
+         !          call dust_correct_band(ddata,dpar,dcomps,j,iter)
+         !       end if
+         !    end if
+         ! end do
          write(*,*) ''
       end if
       
