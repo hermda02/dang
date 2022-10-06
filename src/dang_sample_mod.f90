@@ -102,7 +102,7 @@ contains
 
     integer(i4b)                            :: i, j, k
     integer(i4b)                            :: l, m, n, mh_mode
-     real(dp)                                :: lnl, lnl_old, lnl_new
+    real(dp)                                :: lnl, lnl_old, lnl_new
     real(dp)                                :: diff, ratio, num
 
     real(dp), dimension(1000)               :: theta_grid, lnl_grid
@@ -170,6 +170,9 @@ contains
           sample(l) = c%indices(0,map_inds(1),l)
        end do
 
+       theta = sample
+
+       ! !=================================================
        ! ! Testing Block here to grid out the likelihoods
        ! open(75,file='td_grid.dat')
        ! open(76,file='lnl_grid.dat')
@@ -192,6 +195,7 @@ contains
        ! close(76)
 
        ! stop
+       ! !=================================================
        
        ! Define the model to toss into the likelihood evaluation
        call update_sample_model(model,c,map_inds,sample)
@@ -214,7 +218,7 @@ contains
           
           ! Update theta with the new sample
           ! Evaluate model for likelihood evaluation
-          theta(nind) = sample(nind) + rand_normal(0.d0,c%gauss_prior(nind,2))
+          theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
           if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
 
           call update_sample_model(model,c,map_inds,theta)
@@ -232,10 +236,11 @@ contains
           else if (trim(c%prior_type(nind)) == 'uniform') then
              lnl_new = lnl
           end if
-          
+
           ! Accept/reject
           diff  = lnl_new - lnl_old
           ratio = exp(diff)
+
           if (trim(ml_mode) == 'optimize') then
              if (ratio > 1.d0) then
                 sample(nind) = theta(nind)
@@ -271,6 +276,8 @@ contains
           do l = 1, c%nindices
              sample(l) = c%indices(i,map_inds(1),l)
           end do
+
+          theta = sample
 
           ! Define the model to toss into the likelihood evaluation
           call update_sample_model(model,c,map_inds,sample,i)

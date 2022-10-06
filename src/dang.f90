@@ -149,15 +149,14 @@ contains
       ! ------------------------------------------------------------------------------------------
       call sample_cg_groups(dpar,ddata)
       call ddata%update_sky_model
-      call write_stats_to_term(ddata,dpar,dcomps,iter)
+      call write_stats_to_term(ddata,dpar,iter)
       
       ! ------------------------------------------------------------------------------------------
       ! Sample each spectral parameter
       ! ------------------------------------------------------------------------------------------
       call sample_spectral_parameters(ddata)
       call ddata%update_sky_model
-      call write_stats_to_term(ddata,dpar,dcomps,iter)
-
+      call write_stats_to_term(ddata,dpar,iter)
       ! ------------------------------------------------------------------------------------------
       ! Write out the data
       ! ------------------------------------------------------------------------------------------
@@ -169,6 +168,7 @@ contains
       if (mod(iter,dpar%iter_out) .EQ. 0) then
          call write_maps(dpar,ddata)
       end if
+      write(*,*) ''
       ! ------------------------------------------------------------------------------------------
    end do
    call mpi_finalize(ierr)
@@ -203,14 +203,14 @@ contains
       ! ------------------------------------------------------------------------------------------
       call sample_cg_groups(dpar,ddata)
       call ddata%update_sky_model
-      call write_stats_to_term(ddata,dpar,dcomps,iter)
+      call write_stats_to_term(ddata,dpar,iter)
       
       ! ------------------------------------------------------------------------------------------
       ! Sample each spectral parameter
       ! ------------------------------------------------------------------------------------------
       call sample_spectral_parameters(ddata)
       call ddata%update_sky_model
-      call write_stats_to_term(ddata,dpar,dcomps,iter)
+      call write_stats_to_term(ddata,dpar,iter)
 
       ! ------------------------------------------------------------------------------------------
       ! Write out the data

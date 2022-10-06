@@ -375,14 +375,14 @@ contains
     
   end subroutine compute_chisq
 
-  subroutine write_stats_to_term(self,dpar,dcomps,iter)
+  subroutine write_stats_to_term(self,dpar,iter)
     implicit none
 
     type(dang_data)                     :: self
     type(dang_params)                   :: dpar
-    type(dang_comps)                    :: dcomps
+    type(dang_comps),        pointer    :: c
     integer(i4b),            intent(in) :: iter
-    integer(i4b)                        :: k
+    integer(i4b)                        :: i, j, k
 
     if (trim(dpar%mode) == 'comp_sep') then
        write(*,fmt='(a)') '---------------------------------------------'
@@ -402,6 +402,15 @@ contains
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
              write(*,fmt='(i6,a,E16.5)') iter, " - Chisq: ", self%chisq
+             do i = 1, ncomp
+                c => component_list(i)%p
+                do j = 1, c%nindices
+                   if (c%sample_index(j)) then
+                      write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' mean:   ',&
+                           mask_avg(c%indices(:,1,j),self%masks(:,1))
+                   end if
+                end do
+             end do
              write(*,fmt='(a)') '---------------------------------------------'
           end if
        end if
@@ -410,20 +419,26 @@ contains
        call compute_chisq(self,dpar)
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
-             if (nbands .lt. 10) then
-                write(*,fmt='(i6, a, f16.5, a, f10.3, a, 10e10.3)')&
-                     iter, " - chisq: " , self%chisq, " - T_d: ",&
-                     mask_avg(component_list(1)%p%indices(:,1,1),self%masks(:,1)),&
-                     ' - A_HI: ', component_list(1)%p%template_amplitudes(:,1)
-                write(*,fmt='(a)') '---------------------------------------------'
-             else
-                write(*,fmt='(i6, a, E10.3, a, e10.3)')&
-                     iter, " - chisq: " , self%chisq, " - T_d: ",&
-                     mask_avg(dcomps%T_d(:,1),self%masks(:,1))
-                write(*,fmt='(a)') '---------------------------------------------'
-             end if
+             write(*,fmt='(i6,a,E16.5)') iter, " - Chisq: ", self%chisq
+             write(*,fmt='(a)') '---------------------------------------------'
           end if
        end if
+       ! if (rank == master) then
+       !    if (mod(iter, 1) == 0 .or. iter == 1) then
+       !       if (nbands .lt. 10) then
+       !          write(*,fmt='(i6, a, f16.5, a, f10.3, a, 10e10.3)')&
+       !               iter, " - chisq: " , self%chisq, " - T_d: ",&
+       !               mask_avg(component_list(1)%p%indices(:,1,1),self%masks(:,1)),&
+       !               ' - A_HI: ', component_list(1)%p%template_amplitudes(:,1)
+       !          write(*,fmt='(a)') '---------------------------------------------'
+       !       else
+       !          write(*,fmt='(i6, a, E10.3, a, e10.3)')&
+       !               iter, " - chisq: " , self%chisq, " - T_d: ",&
+       !               mask_avg(dcomps%T_d(:,1),self%masks(:,1))
+       !          write(*,fmt='(a)') '---------------------------------------------'
+       !       end if
+       !    end if
+       ! end if
     end if
 
   end subroutine write_stats_to_term
