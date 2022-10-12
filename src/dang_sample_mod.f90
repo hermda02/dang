@@ -114,8 +114,11 @@ contains
     allocate(data(0:npix-1,nmaps,nbands))
     allocate(model(0:npix-1,nmaps,nbands))
 
+    ! Initialize data and model
     model(0:,:,:) = 0.d0
-    data(0:,:,:)  = ddata%sig_map
+    do j = 1, nbands
+       data(0:,:,j)  = ddata%sig_map(0:,:,j)/ddata%gain(j)
+    end do
 
     ! Loop over components, remove all others
     do l = 1, ncomp
@@ -170,32 +173,8 @@ contains
           sample(l) = c%indices(0,map_inds(1),l)
        end do
 
+       ! Init theta
        theta = sample
-
-       ! !=================================================
-       ! ! Testing Block here to grid out the likelihoods
-       ! open(75,file='td_grid.dat')
-       ! open(76,file='lnl_grid.dat')
-       ! do i = 1, 1000
-       !    theta_grid(i) = 15.d0+(i-1)*(10./999.)
-       !    sample(nind) = theta_grid(i)
-
-       !    write(*,*) 'Td = ', theta_grid(i)
-       !    call update_sample_model(model,c,map_inds,sample)
-       !    if (c%lnl_type(nind) == 'chisq') then
-       !       lnl_grid(i) = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
-       !    else if (c%lnl_type(nind) == 'marginal') then
-       !       lnl_grid(i) = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
-       !    end if
-       !    write(75,fmt='(f16.8)') theta_grid(i)
-       !    write(76,fmt='(E19.12)') lnl_grid(i)
-
-       ! end do
-       ! close(75)
-       ! close(76)
-
-       ! stop
-       ! !=================================================
        
        ! Define the model to toss into the likelihood evaluation
        call update_sample_model(model,c,map_inds,sample)
@@ -277,6 +256,7 @@ contains
              sample(l) = c%indices(i,map_inds(1),l)
           end do
 
+          ! Init theta
           theta = sample
 
           ! Define the model to toss into the likelihood evaluation
@@ -347,7 +327,46 @@ contains
 
   end subroutine sample_index_mh
 
+  subroutine sample_calibrators(ddata)
+    !=======================================================================|
+    !                                                                       |  
+    ! Loop through bands determining the calibration for each band.         |
+    ! Determines both gain and offset relative to the full sky model.       |
+    !                                                                       |
+    !=======================================================================|
+    implicit none
+    
+    type(dang_data),             intent(in) :: ddata
+    integer(i4b)                            :: j
+
+    write(*,*) "Sampling calibrators"
+    do j = 1, nbands
+       if (ddata%fit_gain(j)) then
+          call fit_band_gain(ddata, 1, j)
+       end if
+       if (ddata%fit_offset(j)) then
+          call fit_band_offset(ddata, 1, j)
+       end if
+    end do
+
+  end subroutine sample_calibrators
+
   subroutine update_sample_model(model,c,map_inds,sample,pixel)
+    !=======================================================================|
+    !                                                                       |  
+    ! This routine simply takes in an array, the component                  |
+    ! pointer, and an indices array, and creates a model.                   |
+    !                                                                       |
+    !=======================================================================|
+    ! Inputs:                                                               |
+    !    model: array(real(dp)) - the model to compare to the data          |
+    !    c: type(dang_comps) - pointer to component                         |
+    !    map_inds: array(integer) - poltype for likelihood evaluation       |
+    !    sample: array(real(dp))  - array of spectral indices for component |
+    !    pixel: integer           - pixel number for likelihood evaluation  |
+    !                                                                       |
+    !=======================================================================|
+
     implicit none
 
     real(dp),  dimension(0:npix-1,nmaps,nbands), intent(inout) :: model 
@@ -393,11 +412,11 @@ contains
     !                                                                            |
     !============================================================================|
     ! Inputs:                                                                    |
-    !         data:  array(real(dp)) - data with which we compare the model      |
-    !         rms:   array(real(dp)) - noise associated with the data            |
-    !         model: array(real(dp)) - the model to compare to the data          |
-    !         map_n: integer         - poltype for likelihood evaluation         |
-    !         pixel: integer         - pixel number for likelihood evaluation    |
+    !         data:  array(real(dp))   - data with which we compare the model    |
+    !         rms:   array(real(dp))   - noise associated with the data          |
+    !         model: array(real(dp))   - the model to compare to the data        |
+    !         map_inds: array(integer) - poltype for likelihood evaluation       |
+    !         pixel: integer           - pixel number for likelihood evaluation  |
     !                                                                            |
     ! Output:                                                                    |
     !         lnL: real(dp)                                                      |
@@ -516,145 +535,84 @@ contains
 
   end function evaluate_lnL
   
-  subroutine sample_band_gain(dpar, dat, comp, map_n, band, fg, sample)
+  subroutine fit_band_gain(ddata, map_n, band)
     
     implicit none
-    class(dang_params)                  :: dpar
-    type(dang_data)                     :: dat
-    type(dang_comps)                    :: comp
+    type(dang_data)                     :: ddata
     integer(i4b),            intent(in) :: map_n
     integer(i4b),            intent(in) :: band
-    integer(i4b),            intent(in) :: fg
-    integer(i4b), optional,  intent(in) :: sample
     real(dp), allocatable, dimension(:) :: map1, map2, mask, noise, N_inv
     real(dp)                            :: norm, gain
-
-    real(dp), allocatable, dimension(:,:) :: map3
     
-    allocate(map1(0:dat%npix-1))
-    allocate(map2(0:dat%npix-1))
-    allocate(map3(0:dat%npix-1,1))
-    allocate(mask(0:dat%npix-1))
-    allocate(noise(0:dat%npix-1))
-    allocate(N_inv(0:dat%npix-1))
+    allocate(map1(0:ddata%npix-1))
+    allocate(map2(0:ddata%npix-1))
+    allocate(mask(0:ddata%npix-1))
+    allocate(noise(0:ddata%npix-1))
+    allocate(N_inv(0:ddata%npix-1))
     
     map1 = 0.d0
     map2 = 0.d0
     mask = 0.d0
     
-    mask = dat%masks(:,1)
+    mask = ddata%masks(:,1)
 
     ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
-    do i = 0, dat%npix-1
+    do i = 0, ddata%npix-1
        if (mask(i) == missval) then
           mask(i) = 0.d0
        end if
     end do
     
-    ! map1 is the map we calibrate against here, being a component map.
-    ! Must ensure the map is calculated prior to gain fitting
-    ! for the HI fit, we use the foreground model to fit
+    ! map1 is the map we calibrate against here, being the full sky model.
+    map1 = ddata%sky_model(:,map_n,band)
     
-    if (trim(dpar%mode) == 'hi_fit') then
-       do i = 0, dat%npix-1
-          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-          map1(i) = comp%HI_amps(band)*comp%HI(i,1)*planck(bp(band),comp%T_d(i,1))
-       end do
-    else
-       map1 = dat%fg_map(:,map_n,band,fg)
-    end if
-    
-    map2  = dat%sig_map(:,map_n,band)-dat%offset(band)
-    noise = dat%rms_map(:,map_n,band)
+    map2  = ddata%sig_map(:,map_n,band)-ddata%offset(band)
+    noise = ddata%rms_map(:,map_n,band)
     N_inv = 1.d0/(noise**2)
     
     ! Super simple - find the multiplicative factor by finding the maximum likelihood
     ! solution through a linear fit to the foreground map.
+    gain = sum(mask*map1*map2)/sum(mask*map1*map1)
     
-    gain = sum(mask*map1*N_inv*map2)/sum(mask*map1*N_inv*map1)
-    norm = sqrt(sum(mask*map1*map1*N_inv))
-    
-    ! Sample variable can be any number. If it's present, we sample!
-    if (present(sample)) then
-       gain = gain + rand_normal(0.d0,1.d0)/norm
-    end if
-
     ! Save to data type variable corresponding to the band.
-    dat%gain(band) = gain
+    ddata%gain(band) = gain
     
-  end subroutine sample_band_gain
+  end subroutine fit_band_gain
   
-  subroutine sample_band_offset(dpar, dat, comp, map_n, band, fg, sample)
-    class(dang_params)                  :: dpar
-    type(dang_data)                     :: dat
-    type(dang_comps)                    :: comp
+  subroutine fit_band_offset(ddata, map_n, band)
+    type(dang_data)                     :: ddata
     integer(i4b),            intent(in) :: map_n
     integer(i4b),            intent(in) :: band
-    integer(i4b),            intent(in) :: fg
-    integer(i4b), optional,  intent(in) :: sample
-    real(dp), allocatable, dimension(:) :: map1, map2, mask
+    real(dp), allocatable, dimension(:) :: map1, map2, mask, noise, N_inv
     real(dp)                            :: norm, offset
-    real(dp)                            :: n, x, x2, y, y2, xy
     
-    n  = 0.d0
-    x  = 0.d0
-    x2 = 0.d0
-    y  = 0.d0
-    y2 = 0.d0
-    xy = 0.d0
+    allocate(map1(0:ddata%npix-1))
+    allocate(map2(0:ddata%npix-1))
+    allocate(mask(0:ddata%npix-1))
+    allocate(noise(0:ddata%npix-1))
+    allocate(N_inv(0:ddata%npix-1))
     
-    
-    allocate(map1(0:dat%npix-1))
-    allocate(map2(0:dat%npix-1))
-    allocate(mask(0:dat%npix-1))
-    
-    mask = dat%masks(:,1)
+    mask = ddata%masks(:,1)
 
-    do i = 0, dat%npix-1
+    ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
+    do i = 0, ddata%npix-1
        if (mask(i) == missval) then
           mask(i) = 0.d0
        end if
     end do
     
-    ! map1 is the map we calibrate against here, being a component map.
-    ! Must ensure the map is calculated prior to gain fitting
-    ! for the HI fit, we use the foreground model to fit (amplitude*HI*B_nu(T))
+    ! map1 is the map we calibrate against here, being the full sky model.
+    map1 = ddata%sky_model(:,map_n,band)
+    map2 = ddata%sig_map(:,map_n,band)
     
-    if (trim(dpar%mode) == 'hi_fit') then
-       do i = 0, dat%npix-1
-          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-          map1(i) = comp%HI(i,1)
-       end do
-    else
-       map1 = dat%fg_map(:,map_n,band,fg)
-    end if
+    noise = ddata%rms_map(:,map_n,band)
+    N_inv = 1.d0/(noise**2)
     
-    map2 = dat%sig_map(:,map_n,band)/dat%gain(band)
+    offset = sum(mask(:)*(map2(:) - ddata%gain(band)*map1(:)))/sum(mask(:))
+        
+    ddata%offset(band) = offset
     
-    ! offset = sum(mask(:)*(map2(:) - dat%gain(band)*map1(:)))/sum(mask(:))
-    
-    do i = 0, dat%npix-1
-       if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-       n  = n + 1.d0
-       x  = x + map1(i)
-       x2 = x2 + map1(i)*map1(i)
-       y  = y + map2(i)
-       y2 = y2 + map2(i)*map2(i)
-       xy = xy + map1(i)*map2(i)
-    end do
-    
-    offset = (y*x2 - x*xy)/(n*x2 - x**2)
-    
-    
-    norm   = sum(mask(:))*sum(mask(:)*(map1(:)**2))-(sum(mask(:)*map1(:))**2)
-    
-    if (present(sample)) then
-       offset = offset + rand_normal(0.d0,1.d0)/norm
-    end if
-    
-    dat%offset(band) = offset
-    
-  end subroutine sample_band_offset
+  end subroutine fit_band_offset
   
   subroutine calc_hi_gain_offset(dpar, dat, comp, map_n, fg, band)
     class(dang_params)                  :: dpar
@@ -691,14 +649,7 @@ contains
     ! This relationship is approximately linear below HI ~ 4e20 cm-2. In this fit we fit the gain
     ! to the full HI model presented, but the offset will be determined using the dust-HI relationship
     
-    if (trim(dpar%mode) == 'hi_fit') then
-       do i = 0, dat%npix-1
-          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
-          map1(i) = comp%HI_amps(band)*comp%HI(i,1)*planck(bp(band),comp%T_d(i,1))
-       end do
-    else
-       map1 = dat%fg_map(:,map_n,band,fg)
-    end if
+    map1 = dat%sky_model(:,map_n,band)
     
     map2 = dat%sig_map(:,map_n,band)
     
@@ -732,67 +683,68 @@ contains
     
   end subroutine calc_hi_gain_offset
 
-  function eval_jeffreys_prior(dpar, dat, comp, map_n, ind, val, pixel) result(prob)
-    implicit none
+  ! NEEDS A FULL REWRITE FOR HOW COMPONENTS WORK NOW
+  ! function eval_jeffreys_prior(dpar, dat, comp, map_n, ind, val, pixel) result(prob)
+  !   implicit none
 
-    class(dang_params)                    :: dpar
-    type(dang_comps),       intent(inout) :: comp
-    type(dang_data)                       :: dat
-    real(dp),               intent(in)    :: val
-    integer(i4b),           intent(in)    :: map_n, ind
-    integer(i4b), optional, intent(in)    :: pixel
-    real(dp)                              :: prob, sum, ss
-    integer(i4b)                          :: i, j, k
+  !   class(dang_params)                    :: dpar
+  !   type(dang_comps),       intent(inout) :: comp
+  !   type(dang_data)                       :: dat
+  !   real(dp),               intent(in)    :: val
+  !   integer(i4b),           intent(in)    :: map_n, ind
+  !   integer(i4b), optional, intent(in)    :: pixel
+  !   real(dp)                              :: prob, sum, ss
+  !   integer(i4b)                          :: i, j, k
     
-    prob = 0.d0
-    sum = 0.d0
+  !   prob = 0.d0
+  !   sum = 0.d0
 
-    if (trim(dpar%fg_label(ind)) == 'synch') then
-       ! Is this evaluated for a single pixel?
-       if (present(pixel)) then
-          ! If map_n = -1, then sum over poltypes
-          if (map_n == -1) then
-             do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                do j = 1, nbands
-                   ss  = dat%fg_map(pixel,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                   sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,0,ind))*&
-                        & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-                end do
-             end do
-          else
-             do j = 1, nbands
-                ss  = dat%fg_map(pixel,map_n,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                sum = sum + (((1.0/dat%rms_map(pixel,map_n,j))**2)*(ss/dat%fg_map(pixel,map_n,0,ind))*&
-                     & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-             end do
-          end if
-       else
-          ! If map_n = -1, then sum over poltypes
-          if (map_n == -1) then
-             do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-                do i = 0, npix-1
-                   if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-                   do j = 1, nbands
-                      ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                      sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*&
-                           & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-                   end do
-                end do
-             end do
-          else
-             do i = 0, npix-1
-                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-                do j = 1, nbands
-                   ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-                   sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*& 
-                        & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-                end do
-             end do
-          end if
-       end if
-    end if
-    prob = sqrt(sum)
+  !   if (trim(dpar%fg_label(ind)) == 'synch') then
+  !      ! Is this evaluated for a single pixel?
+  !      if (present(pixel)) then
+  !         ! If map_n = -1, then sum over poltypes
+  !         if (map_n == -1) then
+  !            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+  !               do j = 1, nbands
+  !                  ss  = dat%fg_map(pixel,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
+  !                  sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,0,ind))*&
+  !                       & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+  !               end do
+  !            end do
+  !         else
+  !            do j = 1, nbands
+  !               ss  = dat%fg_map(pixel,map_n,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
+  !               sum = sum + (((1.0/dat%rms_map(pixel,map_n,j))**2)*(ss/dat%fg_map(pixel,map_n,0,ind))*&
+  !                    & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+  !            end do
+  !         end if
+  !      else
+  !         ! If map_n = -1, then sum over poltypes
+  !         if (map_n == -1) then
+  !            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+  !               do i = 0, npix-1
+  !                  if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
+  !                  do j = 1, nbands
+  !                     ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
+  !                     sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*&
+  !                          & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+  !                  end do
+  !               end do
+  !            end do
+  !         else
+  !            do i = 0, npix-1
+  !               if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
+  !               do j = 1, nbands
+  !                  ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
+  !                  sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*& 
+  !                       & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
+  !               end do
+  !            end do
+  !         end if
+  !      end if
+  !   end if
+  !   prob = sqrt(sum)
 
-  end function eval_jeffreys_prior
+  ! end function eval_jeffreys_prior
   
 end module dang_sample_mod

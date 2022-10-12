@@ -15,7 +15,6 @@ module dang_param_mod
      integer(i4b)                                  :: num_chains       ! Number of bp chains used
      logical(lgt)                                  :: bp_swap          ! Do the BP map swapping?
      logical(lgt)                                  :: output_fg        ! Do we output the foregrounds at each frequency?
-     logical(lgt)                                  :: output_unc       ! Do we output uncertainty of template fit?
      character(len=512)                            :: outdir           ! Output directory
      character(len=512)                            :: bp_chains        ! bp chains, read as a string, moved to a 'list'
      character(len=16)                             :: ml_mode          ! 'sample' or 'optimize'
@@ -32,6 +31,7 @@ module dang_param_mod
      character(len=512)                              :: datadir        ! Directory to look for bandfiles in
      character(len=512)                              :: bp_dir         ! Directory for BP swap maps
      character(len=512)                              :: mask_file      ! Mask filename
+     character(len=512), allocatable, dimension(:)   :: band_calibrator! Band filename
      character(len=512), allocatable, dimension(:)   :: band_label     ! Band label
      character(len=512), allocatable, dimension(:)   :: band_mapfile   ! Band filename
      character(len=512), allocatable, dimension(:)   :: band_noisefile ! Band rms filename
@@ -61,6 +61,7 @@ module dang_param_mod
      logical(lgt),       allocatable, dimension(:)     :: temp_sample    ! Storing which bands should have templates fit
      
      character(len=512), allocatable, dimension(:,:)   :: fg_amp_file    ! Fg amplitude input map
+     logical(lgt),       allocatable, dimension(:)     :: fg_amp_samp    ! Logical - do we fit the amplitude for this guy?
      character(len=512), allocatable, dimension(:)     :: fg_filename    ! Init filename for diffuse components, template filename for templates
      integer(i4b),       allocatable, dimension(:)     :: fg_cg_group    ! Which cg group is this component in?
      real(dp),           allocatable, dimension(:,:)   :: fg_init        ! Initialized parameter value (fullsky)
@@ -387,7 +388,6 @@ contains
     call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
     call get_parameter_hashtable(htbl, 'CG_ITER_MAX', par_int=par%cg_iter)
     call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH', par_dp=par%cg_converge)
-    call get_parameter_hashtable(htbl, 'OUTPUT_TEMP_UNCERTAINTY', par_lgt=par%output_unc)
     call get_parameter_hashtable(htbl, 'BP_SWAP',par_lgt=par%bp_swap)
     call get_parameter_hashtable(htbl, 'BP_BURN_IN',par_int=par%bp_burnin)
     call get_parameter_hashtable(htbl, 'BP_MAX_ITER',par_int=par%bp_max)
@@ -455,6 +455,7 @@ contains
     allocate(par%band_inc(n))
     allocate(par%band_mapfile(n2),par%band_label(n2))
     allocate(par%band_noisefile(n2),par%band_nu(n2))
+    allocate(par%band_calibrator(n2))
     allocate(par%bp_id(n2),par%bp_file(n2))
     allocate(par%band_unit(n2))
     allocate(par%bp_map(n2))
@@ -484,6 +485,7 @@ contains
           ! write(*,*) par%bp_file(j)
        end if
 
+       ! call get_parameter_hashtable(htbl, 'BAND_CALIBRATOR'//itext, len_itext=len_itext, par_string=par%band_calibrator(j))
        call get_parameter_hashtable(htbl, 'BAND_LABEL'//itext, len_itext=len_itext, par_string=par%band_label(j))
        call get_parameter_hashtable(htbl, 'BAND_FILE'//itext, len_itext=len_itext, par_string=par%band_mapfile(j))
        call get_parameter_hashtable(htbl, 'BAND_RMS'//itext, len_itext=len_itext, par_string=par%band_noisefile(j))
@@ -530,24 +532,22 @@ contains
        n  = par%ncomp
        n2 = par%ncggroup
        
-       allocate(par%fg_filename(n))
-       allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n))
-       allocate(par%fg_spec_poltype(n,2))
-       allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
-       allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
        allocate(par%fg_amp_file(n,1))
-       allocate(par%fg_spec_file(n,2))
+       allocate(par%fg_amp_samp(n))
+       allocate(par%fg_cg_group(n))
+       allocate(par%fg_filename(n))
+       allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
        allocate(par%fg_ind_region(n,2))
        allocate(par%fg_ind_lnl(n,2))
-       allocate(par%fg_prior_type(n,2))
        allocate(par%fg_init(n,2))
-       allocate(par%fg_cg_group(n))
-       allocate(par%fg_temp_corr(n,par%numband))
+       allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n))
        allocate(par%fg_nfit(n))
+       allocate(par%fg_prior_type(n,2))
+       allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
+       allocate(par%fg_spec_file(n,2))
+       allocate(par%fg_spec_poltype(n,2))
        allocate(par%fg_spec_step(n,2))
-
-       par%temp_nfit = 0
-       par%fg_nfit   = 0
+       allocate(par%fg_temp_corr(n,par%numband))
        
        allocate(par%cg_group_sample(n2))
        allocate(par%cg_max_iter(n2))
@@ -555,6 +555,9 @@ contains
        allocate(par%cg_poltype(n2))
 
        allocate(par%temp_file(par%ntemp))
+
+       par%temp_nfit = 0
+       par%fg_nfit   = 0
 
        ! Load the CG group specific parameters
        do i = 1, n2
@@ -577,6 +580,7 @@ contains
           call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
           call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
           if (trim(par%fg_type(i)) /= 'template') then
+             call get_parameter_hashtable(htbl, 'COMP_AMP_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%fg_amp_samp(i))
              call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
              if (par%fg_nu_ref(i) < 1d7) then
                 par%fg_nu_ref(i) = par%fg_nu_ref(i)*1d9

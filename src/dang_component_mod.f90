@@ -12,30 +12,29 @@ module dang_component_mod
   type :: dang_comps
 
      ! General component information
-     character(len=16)                                :: label, type      ! Component label and type
-     real(dp)                                         :: nu_ref           ! Reference frequency
      integer(i4b)                                     :: cg_group         ! CG group number 
+     character(len=16)                                :: label, type      ! Component label and type
      integer(i4b)                                     :: nfit             ! (Template only)
      integer(i4b)                                     :: nindices         ! How many indices does the component have?
-     character(len=16), allocatable, dimension(:)     :: ind_label        ! Label of the indices
-     real(dp),          allocatable, dimension(:)     :: step_size        ! M-H step size
-     logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
+     real(dp)                                         :: nu_ref           ! Reference frequency
+     logical(lgt)                                     :: sample_amplitude ! Do we sample this spectral index?
+
      logical(lgt),      allocatable, dimension(:)     :: corr             ! Do we correct this band?
+     character(len=16), allocatable, dimension(:)     :: ind_label        ! Label of the indices
+     logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
+     real(dp),          allocatable, dimension(:)     :: step_size        ! M-H step size
 
      ! Sky/template information
-     real(dp),          allocatable, dimension(:,:,:) :: indices             ! Indices maps
      real(dp),          allocatable, dimension(:,:)   :: amplitude           ! Amplitude maps
      real(dp),          allocatable, dimension(:,:)   :: template            ! Template map
      real(dp),          allocatable, dimension(:,:)   :: template_amplitudes ! Template amplitudes
-     integer(i4b),      allocatable, dimension(:)     :: index_mode          ! Fullsky/per-pixel
 
-     ! Old (to be deprecated)
-     real(dp),          allocatable, dimension(:,:)   :: beta_s, beta_d, T_d, HI
-     real(dp),          allocatable, dimension(:)     :: HI_amps
+     integer(i4b),      allocatable, dimension(:)     :: index_mode          ! Fullsky/per-pixel
+     real(dp),          allocatable, dimension(:,:,:) :: indices             ! Indices maps
 
      ! Prior information
-     character(len=16), allocatable, dimension(:)     :: prior_type
      character(len=16), allocatable, dimension(:)     :: lnl_type
+     character(len=16), allocatable, dimension(:)     :: prior_type
      real(dp),          allocatable, dimension(:,:)   :: gauss_prior
      real(dp),          allocatable, dimension(:,:)   :: uni_prior
 
@@ -86,6 +85,11 @@ contains
     constructor%label            = trim(dpar%fg_label(component))
     constructor%type             = dpar%fg_type(component)
     constructor%cg_group         = dpar%fg_cg_group(component)
+
+    if (trim(constructor%type) /= 'template') then
+       constructor%sample_amplitude = dpar%fg_amp_samp(component)
+    end if
+
 
     if (trim(constructor%type) == 'mbb') then
 
@@ -429,28 +433,6 @@ contains
 
   end subroutine initialize_components
 
-  subroutine init_hi_fit(self, dpar, npix)
-    implicit none
-    type(dang_comps)         :: self
-    type(dang_params)        :: dpar
-    integer(i4b), intent(in) :: npix
-    character(len=80), dimension(180) :: head
-
-    allocate(self%HI(0:npix-1,1))
-    allocate(self%T_d(0:npix-1,nmaps))
-    allocate(self%HI_amps(dpar%numinc))
-    write(*,*) 'Allocated HI fitting maps!'
-    write(*,*) ''
-    call read_bintab(trim(dpar%datadir)//trim(dpar%HI_file),self%HI,npix,1,nullval,anynull,header=head)
-
-    if (trim(dpar%HI_Td_init) == 'none') then
-       self%T_d = dpar%HI_Td_mean
-    else
-       call read_bintab(trim(dpar%datadir)//trim(dpar%HI_Td_init),self%T_d,npix,1,nullval,anynull,header=head)
-    end if
-
-  end subroutine init_hi_fit
-  
   function planck(bp,T)
     implicit none
     type(bandinfo), intent(in) :: bp

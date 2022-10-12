@@ -89,6 +89,7 @@ program dang
      write(*,*) ''
      call initialize_components(dpar)
      call initialize_cg_groups(dpar)
+     call ddata%update_sky_model
      call write_maps(dpar,ddata)
      write(*,*) '---------------------------'
      write(*,*) ' Starting main Gibbs Chain '
@@ -143,13 +144,32 @@ contains
          ! end do
          write(*,*) ''
       end if
-      
+
       ! ------------------------------------------------------------------------------------------
       ! Sample each CG group for amplitudes
       ! ------------------------------------------------------------------------------------------
       call sample_cg_groups(dpar,ddata)
       call ddata%update_sky_model
       call write_stats_to_term(ddata,dpar,iter)
+
+      ! write(*,*) component_list(1)%p%label
+      ! write(*,*) component_list(1)%p%amplitude(1,1)
+      ! write(*,*) component_list(1)%p%eval_sed(1,1,1)
+      ! write(*,*) component_list(2)%p%label
+      ! write(*,*) component_list(2)%p%amplitude(1,1)
+      ! write(*,*) component_list(2)%p%eval_sed(1,1,1)
+      ! write(*,*) component_list(1)%p%amplitude(1,1)*component_list(1)%p%eval_sed(1,1,1)+component_list(2)%p%amplitude(1,1)*component_list(2)%p%eval_sed(1,1,1)
+      ! write(*,*) '-----------------'
+      ! write(*,*) ddata%sky_model(1,1,1)
+      ! write(*,*) '-----------------'
+      ! ! write(*,*) component_list(1)%p%label
+      ! ! write(*,*) component_list(1)%p%amplitude(1,1)
+      ! ! write(*,*) component_list(1)%p%eval_sed(2,1,1)
+      ! ! write(*,*) component_list(2)%p%label
+      ! ! write(*,*) component_list(2)%p%amplitude(1,1)
+      ! ! write(*,*) component_list(2)%p%eval_sed(2,1,1)
+      ! ! write(*,*) ddata%sky_model(1,1,2)
+      ! stop
       
       ! ------------------------------------------------------------------------------------------
       ! Sample each spectral parameter
@@ -157,6 +177,15 @@ contains
       call sample_spectral_parameters(ddata)
       call ddata%update_sky_model
       call write_stats_to_term(ddata,dpar,iter)
+      
+      ! ------------------------------------------------------------------------------------------
+      ! Sample band calibrators
+      ! ------------------------------------------------------------------------------------------
+      if (iter > 1) then
+         call sample_calibrators(ddata)
+         call ddata%update_sky_model
+      end if
+
       ! ------------------------------------------------------------------------------------------
       ! Write out the data
       ! ------------------------------------------------------------------------------------------

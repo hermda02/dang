@@ -20,7 +20,6 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:,:)   :: rms_map    ! noise maps
     real(dp), allocatable, dimension(:,:,:)   :: res_map    ! Residual maps
     real(dp), allocatable, dimension(:,:)     :: chi_map    ! Chisq map (for outputs)
-    real(dp), allocatable, dimension(:,:,:,:) :: fg_map     ! Component maps (npix, nmaps, nbands, nfgs)
     real(dp), allocatable, dimension(:,:,:)   :: sky_model  ! Total sky model
 
     real(dp), allocatable, dimension(:)       :: gain       ! Where band gains are stored
@@ -33,6 +32,10 @@ module dang_data_mod
     real(dp), allocatable, dimension(:,:)     :: temp_norm  ! Where we store template normalizations
 
     real(dp), allocatable, dimension(:)       :: band_chisq ! A variable to store the chisq of each band
+    integer(i4b), allocatable, dimension(:)   :: band_calib
+
+    logical(lgt), allocatable, dimension(:)   :: fit_gain
+    logical(lgt), allocatable, dimension(:)   :: fit_offset
 
   contains
     procedure :: init_data_maps
@@ -52,11 +55,10 @@ contains
     class(dang_data),       intent(inout) :: self
     type(dang_params),      intent(in)    :: dpar
 
+    integer(i4b)                          :: i
+
     write(*,*) "Initializing data maps"
     
-    allocate(self%fg_map(0:npix-1,nmaps,0:nbands,nfgs))    
-    self%fg_map(:,:,:,:) = 0.d0
-
     allocate(self%masks(0:npix-1,nmaps))
 
     allocate(self%sig_map(0:npix-1,nmaps,nbands))
@@ -74,12 +76,33 @@ contains
 
     allocate(self%gain(nbands))
     allocate(self%offset(nbands))
+    allocate(self%fit_gain(nbands))
+    allocate(self%fit_offset(nbands))
     allocate(self%band_chisq(nbands))
     
     self%gain   = 1.d0
     self%offset = 0.d0
 
+    self%fit_gain = dpar%fit_gain
+    self%fit_offset = dpar%fit_offs
+
   end subroutine init_data_maps
+
+  ! subroutine init_band_calibration(self)
+  !   !==================================================|
+  !   ! Write a routine that tells ddata which component | 
+  !   ! we want to calibrate that band to.               |
+  !   !==================================================|
+  !   ! Right now we leave this out and calibrate via    |
+  !   ! broadband (i.e. full sky model).
+  !   implicit none
+  !   class(dang_data),       intent(inout) :: self
+
+  !   type(dang_comps),   pointer             :: c2
+        
+
+
+  ! end subroutine init_band_calibration
 
   subroutine read_data_maps(self, dpar)
     implicit none
@@ -142,42 +165,55 @@ contains
 
   subroutine update_sky_model(self)
     implicit none
-    class(dang_data)                 :: self
+    class(dang_data),  intent(inout) :: self
     type(dang_comps),  pointer       :: c
     integer(i4b)                     :: i, j, k, l
 
     self%sky_model(:,:,:) = 0.d0
     do l = 1, ncomp
        c => component_list(l)%p
-       if (c%type == 'hi_fit') then
-          do i = 0, npix-1
+       ! if (c%type == 'hi_fit') then
+       !    do i = 0, npix-1
+       !       do j = 1, nbands
+       !          self%sky_model(i,1,j) = self%sky_model(i,1,j) + &
+       !                  & c%eval_sed(j,i,1)*c%template_amplitudes(j,1)
+       !       end do
+       !    end do
+       ! else if (c%type /= 'template') then
+       do i = 0, npix-1
+          do k = 1, nmaps
              do j = 1, nbands
-                self%sky_model(i,1,j) = self%sky_model(i,1,j) + &
-                        & c%eval_sed(j,i,1)*c%template_amplitudes(j,1)
+                self%sky_model(i,k,j) = self%sky_model(i,k,j) + c%eval_signal(j,i,k) !&
+                ! & c%amplitude(i,k)*c%eval_sed(j,i,k)
              end do
           end do
-       else if (c%type /= 'template') then
-          do i = 0, npix-1
-             do k = 1, nmaps
-                do j = 1, nbands
-                   self%sky_model(i,k,j) = self%sky_model(i,k,j) + &
-                        & c%amplitude(i,k)*c%eval_sed(j,i,k)
-                end do
-             end do
-          end do
-       else
-          do i = 0, npix-1
-             do k = 1, nmaps
-                do j = 1, nbands
-                   self%sky_model(i,k,j) = self%sky_model(i,k,j) + &
-                        & c%template(i,k)*c%template_amplitudes(j,k)
-                end do
-             end do
-          end do
-       end if
+       end do
+       ! else
+       !    do i = 0, npix-1
+       !       do k = 1, nmaps
+       !          do j = 1, nbands
+       !             self%sky_model(i,k,j) = self%sky_model(i,k,j) + &
+       !                  & c%template(i,k)*c%template_amplitudes(j,k)
+       !          end do
+       !       end do
+       !    end do
+       ! end if
     end do
 
-    self%res_map = self%sig_map - self%sky_model
+    ! Calculate the residual
+    do i = 0, npix-1
+       do k = 1, nmaps
+          do j = 1, nbands
+             if (k == 1) then
+                ! For intensity
+                self%res_map(i,1,j) = (self%sig_map(i,1,j)-self%offset(j))/self%gain(j)-self%sky_model(i,1,j)
+             else
+                ! and polarization
+                self%res_map(i,2:3,j) = self%sig_map(i,2:3,j)-self%sky_model(i,2:3,j)
+             end if
+          end do
+       end do
+    end do
 
   end subroutine update_sky_model
 
@@ -365,10 +401,17 @@ contains
     do i = 0, npix-1
        if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
        do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-          do j = 1, nbands
-             self%chisq = self%chisq + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
-                  & (self%rms_map(i,k,j)**2.d0)
-          end do
+          if (k == 1) then
+             do j = 1, nbands
+                self%chisq = self%chisq + ((self%sig_map(i,k,j)/self%gain(j)-self%offset(j)) - & 
+                     self%sky_model(i,k,j))**2.d0/(self%rms_map(i,k,j)**2.d0)
+             end do
+          else
+             do j = 1, nbands
+                self%chisq = self%chisq + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
+                     & (self%rms_map(i,k,j)**2.d0)
+             end do
+          end if
        end do
     end do
     self%chisq = self%chisq
@@ -420,6 +463,15 @@ contains
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
              write(*,fmt='(i6,a,E16.5)') iter, " - Chisq: ", self%chisq
+             do i = 1, ncomp
+                c => component_list(i)%p
+                do j = 1, c%nindices
+                   if (c%sample_index(j)) then
+                      write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' mean:   ',&
+                           mask_avg(c%indices(:,1,j),self%masks(:,1))
+                   end if
+                end do
+             end do
              write(*,fmt='(a)') '---------------------------------------------'
           end if
        end if
@@ -538,13 +590,22 @@ contains
        ! Write the chisquare map
        do mn = 1, nmaps
           dat%chi_map(:,mn) = 0.d0
-          do i = 0, npix-1
-             do j = 1, nbands
-                s      = 0.d0
-                dat%chi_map(i,mn) = dat%chi_map(i,mn) + dat%masks(i,1)*(dat%sig_map(i,mn,j) - dat%sky_model(i,mn,j))**2.d0&
-                     & /dat%rms_map(i,mn,j)**2.d0
+          ! For intensity
+          if (mn == 1) then
+             do i = 0, npix-1
+                do j = 1, nbands
+                   dat%chi_map(i,mn) = dat%chi_map(i,mn) + dat%masks(i,1)*(dat%res_map(i,mn,j)**2)/dat%rms_map(i,mn,j)**2.d0
+                end do
              end do
-          end do
+
+          else
+             do i = 0, npix-1
+                do j = 1, nbands
+                   dat%chi_map(i,mn) = dat%chi_map(i,mn) + dat%masks(i,1)*(dat%sig_map(i,mn,j) - dat%sky_model(i,mn,j))**2.d0&
+                        & /dat%rms_map(i,mn,j)**2.d0
+                end do
+             end do
+          end if
        end do
        dat%chi_map(:,:) = dat%chi_map(:,:)/(nbands)
        title = trim(dpar%outdir) // 'chisq_k'// trim(iter_str) // '.fits'
@@ -660,6 +721,32 @@ contains
 
           end if
        end do
+
+       write(nband_str, '(i4)') nbands
+
+       fmt = '('//trim(nband_str)//'(E17.8))'
+
+       title = trim(dpar%outdir)//'band_gains.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(37,file=title,status="old",position="append",action="write") 
+       else
+          open(37,file=title,status="new",action="write")
+       end if
+       write(37,fmt=fmt) dat%gain
+       close(37)
+
+       title = trim(dpar%outdir)//'band_offsets.dat'
+       inquire(file=title,exist=exist)
+       if (exist) then
+          open(38,file=title,status="old",position="append",action="write") 
+       else
+          open(38,file=title,status="new",action="write")
+       end if
+       write(38,fmt=fmt) dat%offset
+       close(38)
+
+
        
     else if (trim(dpar%mode) == 'hi_fit') then
 
