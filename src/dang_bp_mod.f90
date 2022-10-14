@@ -36,9 +36,9 @@ contains
        if (bp(i)%nu_c < 1d9) then
           bp(i)%nu_c = bp(i)%nu_c*1d9
        end if
-       bp(i)%id   = dpar%bp_id(i)
+       bp(i)%id   = trim(dpar%bp_id(i))
        if (trim(dpar%bp_id(i)) == 'delta') then
-          dpar%bp_file(j) = ''
+          dpar%bp_file(i) = ''
        else if (trim(dpar%bp_id(i)) == 'LFI') then
           threshold = 0.d0
        else if (trim(dpar%bp_id(i)) == 'WMAP') then
@@ -54,6 +54,7 @@ contains
           allocate(bp(i)%nu(bp(i)%n), bp(i)%tau(bp(i)%n))
        end if
     end do
+
 
   end subroutine init_bp_mod
 
@@ -155,5 +156,110 @@ contains
     
     
   end subroutine read_bandpass
+
+  function compute_bnu_prime_RJ(nu)
+    ! Assume that nu is in GHz
+    implicit none
+    real(dp), intent(in) :: nu
+    real(dp)             :: compute_bnu_prime_RJ
+
+    compute_bnu_prime_RJ = 2.d0*k_B*nu**2.d0/c**2.d0
+
+  end function compute_bnu_prime_RJ
+
+  function compute_bnu_prime(nu)
+    ! Assume that nu is in GHz
+    implicit none
+    real(dp), intent(in) :: nu
+    real(dp)             :: compute_bnu_prime, y
+
+    y = h*nu/(k_B*T_CMB)
+    compute_bnu_prime = (2.d0*h*nu**3)/(c**2.d0*(exp(y)-1))*(exp(y)/(exp(y)-1))*h*nu/(k_B*T_CMB**2)
+
+  end function compute_bnu_prime
+
+  function a2f(bp)
+    ! [MJy/sr / uK_RJ]
+    ! Assume that nu is in GHz
+    implicit none
+    type(bandinfo), intent(in) :: bp
+    real(dp)                   :: a2f, y, sum
+    integer(i4b)               :: i
+
+    sum = 0.d0
+
+    if (bp%id == 'delta') then
+       sum = compute_bnu_prime_RJ(bp%nu_c*1d9)
+    else
+       do i = 1, bp%n
+          sum = sum + bp%tau0(i)*compute_bnu_prime_RJ(bp%nu0(i)*1d9)
+       end do
+    end if
+    a2f = sum
+
+  end function a2f
+
+  function a2t(bp)
+    ! [uK_cmb/uK_RJ]
+    ! Assume that nu is in GHz
+    implicit none
+    type(bandinfo), intent(in) :: bp
+    real(dp)                   :: a2t, y, sum 
+    integer(i4b)               :: i
+    
+    sum = 0.d0
+
+    if (bp%id == 'delta') then
+       if (bp%nu_c > 1e7) then
+          y = (h*bp%nu_c)/(k_B*T_CMB)
+       else
+          y = (h*bp%nu_c*1d9)/(k_B*T_CMB)
+       end if
+       sum = (exp(y)-1.d0)**2/(y**2*exp(y))
+    else
+       do i = 1, bp%n
+          if (bp%nu0(i) > 1e7) then
+             y = (h*bp%nu0(i))/(k_B*T_CMB)
+             sum = sum + bp%tau0(i)*(exp(y)-1.d0)**2/(y**2*exp(y))
+          else
+             y = (h*bp%nu0(i)*1d9)/(k_B*T_CMB)
+             sum = sum + bp%tau0(i)*(exp(y)-1.d0)**2/(y**2*exp(y))
+          end if
+       end do
+    end if
+
+    a2t = sum
+
+  end function a2t
+
+  function f2t(bp)
+    ! [uK_cmb/MJysr-1]
+    ! Assume that nu is in GHz
+    implicit none
+    type(bandinfo), intent(in) :: bp
+    real(dp)                   :: f2t, sum
+    integer(i4b)               :: i
+
+    sum = 0.d0
+
+    if (bp%id == 'delta') then
+       if (bp%nu_c > 1e7) then
+          sum = 1.d0/(compute_bnu_prime(bp%nu_c))*1.0d-14
+       else
+          sum = 1.d0/(compute_bnu_prime(bp%nu_c*1d9))*1.0d-14
+       end if
+    else
+       do i = 1, bp%n 
+          if (bp%nu0(i) > 1e7) then
+             sum = sum + bp%tau0(i)/(compute_bnu_prime(bp%nu0(i)))*1.0d-14
+          else
+             sum = sum + bp%tau0(i)/(compute_bnu_prime(bp%nu0(i)*1d9))*1.0d-14
+          end if
+       end do
+    end if
+
+    f2t = sum
+
+  end function f2t
   
 end module dang_bp_mod

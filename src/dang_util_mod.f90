@@ -18,6 +18,7 @@ module dang_util_mod
   integer(i4b)       :: ierr, rank, numprocs
   integer(i4b)       :: nbands, npix, nmaps, nside, nfgs, npar
   integer(i4b)       :: npixpar, nglobalpar
+  integer(i4b)       :: ncomp, ncg_groups, nsample
   integer(i4b)       :: iter, niter, ordering, nlheader
   integer(i4b)       :: proc_per_band
   integer(i4b)       :: master      = 0 
@@ -30,18 +31,19 @@ module dang_util_mod
   character(len=80), dimension(180) :: header
   character(len=80), dimension(3)   :: tqu 
   character(len=128)                :: title
+  character(len=10)                 :: ml_mode
   
-  real(dp), allocatable, dimension(:) :: amp_vec
-
   public    :: npix, nbands, nmaps, ordering, header, h, c, k_B, T_CMB
+  public    :: ncomp, ncg_groups, nsample
   public    :: npixpar, nglobalpar, title
   public    :: iter, iter_str, exist, tqu
-  public    ::  amp_vec
+  public    :: ml_mode
 
 contains 
   
   subroutine init_mpi()
     implicit none
+
     call mpi_init(ierr)
     call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)
     call mpi_comm_size(MPI_COMM_WORLD, numprocs, ierr)
@@ -198,5 +200,137 @@ contains
     mask_avg = sum/mask_sum
     
   end function mask_avg
+
+  function mask_sum(array,mask)
+    real(dp), dimension(:), intent(in) :: array
+    real(dp), dimension(:), intent(in) :: mask
+    real(dp)                           :: sum, mask_sum
+    integer(i4b)                       :: i
+    
+    sum = 0.d0
+    
+    do i = 1, npix
+       if (mask(i) == missval .or. mask(i) == 0.d0) then
+          cycle
+       else
+          sum      = sum + array(i)
+       end if
+    end do
+    
+    mask_sum = sum
+    
+  end function mask_sum
+
+  function return_poltype_flag(string) result(flag)
+    ! ====================================================================
+    ! Here is how our bitwise poltype flagging works:
+    !
+    !               P  U  Q  T
+    !
+    ! T             0  0  0  1   = 1
+    !
+    !     Q + U     1  0  0  0   = 8
+    !
+    ! T,  Q,  U     0  1  1  1   = 7
+    !
+    ! T,  Q + U     1  0  0  1   = 9
+    !
+    ! T + Q + U     1  1  1  1   = 15
+    !
+    ! ====================================================================
+    implicit none
+
+    character(len=10),               intent(in) :: string
+    integer(i4b)                                :: count, local_flag, nflag
+    integer(i4b)                                :: i, j
+    integer(i4b),     allocatable, dimension(:) :: flag
+    character(len=5), allocatable, dimension(:) :: pol_list
+
+
+    count = count_delimits(string,',')
+
+    nflag = 0
+    local_flag = 0
+    allocate(pol_list(count+1))
+    call delimit_string(string,',',pol_list)
+
+    do i = 1, count+1
+       if (pol_list(i) == 'T') then
+          local_flag = local_flag + 2**0
+          nflag = nflag + 1
+       else if (pol_list(i) == 'Q') then
+          local_flag = local_flag + 2**1
+          nflag = nflag + 1
+       else if (pol_list(i) == 'U') then
+          local_flag = local_flag + 2**2
+          nflag = nflag + 1
+       else if (pol_list(i) == 'Q+U') then
+          local_flag = local_flag + 2**3
+          nflag = nflag + 1
+       else if (pol_list(i) == 'T+Q+U') then
+          local_flag = 0
+          nflag = nflag + 1
+       end if
+    end do
+
+    allocate(flag(nflag))
+    i = 1
+    do j = 0, 3
+       if (iand(local_flag,2**j) .ne. 0) then
+          flag(i) = 2**j
+          i = i + 1
+       end if
+    end do
+    if (iand(local_flag,0) .ne. 0) then
+       flag(i) = 0
+    end if
+
+  end function return_poltype_flag
+
+  function count_delimits(string, delimiter) result(ndel)
+    implicit none
+    character(len=*), intent(in) :: string, delimiter
+    integer(i4b)                 :: i, j, k, ndel
+
+    ndel = 0
+    do i = 1,len_trim(string)
+       if (string(i:i) == trim(delimiter)) then
+          ndel = ndel + 1
+       end if
+    end do
+
+  end function count_delimits
+
+  subroutine delimit_string(string, delimiter, list)
+    implicit none
+    character(len=*), intent(in)                :: string, delimiter
+    character(len=*), dimension(:), intent(out) :: list
+    integer(i4b)                                :: i, j, k
+    
+    j = 1
+    k = 1
+    do i=1,len_trim(string)
+       if (string(i:i) == trim(delimiter)) then
+          list(k) = trim(string(j:i-1))
+          j = i+1
+          k = k + 1
+       end if
+    end do
+    
+    if (k < len(list)+1) then
+       list(k) = trim(string(j:))
+    end if
+    
+  end subroutine delimit_string
+
+  subroutine read_map(filename,map_array)
+    implicit none
+    character(len=512),       intent(in)    :: filename
+    real(dp), dimension(:,:), intent(inout) :: map_array
+
+    call read_bintab(trim(filename), map_array, npix, nmaps, nullval, anynull, header=header)
+
+  end subroutine read_map
+
   
 end module dang_util_mod
