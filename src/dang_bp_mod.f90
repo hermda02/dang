@@ -153,12 +153,11 @@ contains
     tau = y(first:last)
     
     deallocate(x, y)
-    
-    
+        
   end subroutine read_bandpass
 
   function compute_bnu_prime_RJ(nu)
-    ! Assume that nu is in GHz
+    ! Assume that nu is in Hz
     implicit none
     real(dp), intent(in) :: nu
     real(dp)             :: compute_bnu_prime_RJ
@@ -168,7 +167,7 @@ contains
   end function compute_bnu_prime_RJ
 
   function compute_bnu_prime(nu)
-    ! Assume that nu is in GHz
+    ! Assume that nu is in Hz
     implicit none
     real(dp), intent(in) :: nu
     real(dp)             :: compute_bnu_prime, y
@@ -189,19 +188,27 @@ contains
     sum = 0.d0
 
     if (bp%id == 'delta') then
-       sum = compute_bnu_prime_RJ(bp%nu_c*1d9)
+       if (bp%nu_c > 1e7) then
+          sum = compute_bnu_prime_RJ(bp%nu_c)
+       else
+          sum = compute_bnu_prime_RJ(bp%nu_c*1d9)
+       end if
     else
        do i = 1, bp%n
-          sum = sum + bp%tau0(i)*compute_bnu_prime_RJ(bp%nu0(i)*1d9)
+          if (bp%nu0(i) > 1e7) then
+             sum = sum + bp%tau0(i)*compute_bnu_prime_RJ(bp%nu0(i))
+          else
+             sum = sum + bp%tau0(i)*compute_bnu_prime_RJ(bp%nu0(i)*1d9)
+          end if
        end do
     end if
-    a2f = sum
+    a2f = sum*1e14
 
   end function a2f
 
   function a2t(bp)
     ! [uK_cmb/uK_RJ]
-    ! Assume that nu is in GHz
+    ! Assume that nu is in Hz
     implicit none
     type(bandinfo), intent(in) :: bp
     real(dp)                   :: a2t, y, sum 
@@ -234,7 +241,7 @@ contains
 
   function f2t(bp)
     ! [uK_cmb/MJysr-1]
-    ! Assume that nu is in GHz
+    ! Assume that nu is in Hz
     implicit none
     type(bandinfo), intent(in) :: bp
     real(dp)                   :: f2t, sum
