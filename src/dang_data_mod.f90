@@ -172,32 +172,13 @@ contains
     self%sky_model(:,:,:) = 0.d0
     do l = 1, ncomp
        c => component_list(l)%p
-       ! if (c%type == 'hi_fit') then
-       !    do i = 0, npix-1
-       !       do j = 1, nbands
-       !          self%sky_model(i,1,j) = self%sky_model(i,1,j) + &
-       !                  & c%eval_sed(j,i,1)*c%template_amplitudes(j,1)
-       !       end do
-       !    end do
-       ! else if (c%type /= 'template') then
        do i = 0, npix-1
           do k = 1, nmaps
              do j = 1, nbands
-                self%sky_model(i,k,j) = self%sky_model(i,k,j) + c%eval_signal(j,i,k) !&
-                ! & c%amplitude(i,k)*c%eval_sed(j,i,k)
+                self%sky_model(i,k,j) = self%sky_model(i,k,j) + c%eval_signal(j,i,k)
              end do
           end do
        end do
-       ! else
-       !    do i = 0, npix-1
-       !       do k = 1, nmaps
-       !          do j = 1, nbands
-       !             self%sky_model(i,k,j) = self%sky_model(i,k,j) + &
-       !                  & c%template(i,k)*c%template_amplitudes(j,k)
-       !          end do
-       !       end do
-       !    end do
-       ! end if
     end do
 
     ! Calculate the residual
