@@ -152,25 +152,6 @@ contains
       call ddata%update_sky_model
       call write_stats_to_term(ddata,dpar,iter)
 
-      ! write(*,*) component_list(1)%p%label
-      ! write(*,*) component_list(1)%p%amplitude(1,1)
-      ! write(*,*) component_list(1)%p%eval_sed(1,1,1)
-      ! write(*,*) component_list(2)%p%label
-      ! write(*,*) component_list(2)%p%amplitude(1,1)
-      ! write(*,*) component_list(2)%p%eval_sed(1,1,1)
-      ! write(*,*) component_list(1)%p%amplitude(1,1)*component_list(1)%p%eval_sed(1,1,1)+component_list(2)%p%amplitude(1,1)*component_list(2)%p%eval_sed(1,1,1)
-      ! write(*,*) '-----------------'
-      ! write(*,*) ddata%sky_model(1,1,1)
-      ! write(*,*) '-----------------'
-      ! ! write(*,*) component_list(1)%p%label
-      ! ! write(*,*) component_list(1)%p%amplitude(1,1)
-      ! ! write(*,*) component_list(1)%p%eval_sed(2,1,1)
-      ! ! write(*,*) component_list(2)%p%label
-      ! ! write(*,*) component_list(2)%p%amplitude(1,1)
-      ! ! write(*,*) component_list(2)%p%eval_sed(2,1,1)
-      ! ! write(*,*) ddata%sky_model(1,1,2)
-      ! stop
-      
       ! ------------------------------------------------------------------------------------------
       ! Sample each spectral parameter
       ! ------------------------------------------------------------------------------------------
@@ -190,7 +171,8 @@ contains
       ! Write out the data
       ! ------------------------------------------------------------------------------------------
       do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-         if (rank == master) then
+         ! if (rank == master) then
+         if (mod(iter,dpar%iter_out) .EQ. 0) then
             call write_data(dpar,ddata,k)
          end if
       end do
@@ -215,18 +197,7 @@ contains
    end do
 
    do iter = 1, dpar%ngibbs
-      
-      ! if (iter > 1) then
-      !    do j = 1, nbands
-      !       if (dpar%fit_gain(j)) then
-      !          call sample_band_gain(dpar, ddata, dcomps, 1, j, 1, 1)
-      !       end if
-      !       if (dpar%fit_offs(j)) then
-      !          call sample_band_offset(dpar, ddata, dcomps, 1, j, 1, 1)
-      !       end if
-      !    end do
-      ! end if
-      
+            
       ! ------------------------------------------------------------------------------------------
       ! Sample each CG group for amplitudes
       ! ------------------------------------------------------------------------------------------

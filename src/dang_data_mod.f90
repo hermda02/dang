@@ -668,6 +668,8 @@ contains
     character(len=128)                  :: title, fmt
     character(len=4)                    :: nband_str
 
+    write(*,*) 'Output data files'
+
     if (trim(dpar%mode) == 'comp_sep') then
        
        title = trim(dpar%outdir) // 'total_chisq_' // trim(tqu(map_n)) // '.dat'
@@ -683,7 +685,7 @@ contains
        
        do n = 1, ncomp
           c => component_list(n)%p
-          if (c%type == 'template') then
+          if (trim(c%type) == 'template' .or. trim(c%type) == 'hi_fit') then
              title = trim(dpar%outdir) //  trim(c%label) // '_' //trim(tqu(map_n)) // '_amplitudes.dat'
              inquire(file=title,exist=exist)
              if (exist) then

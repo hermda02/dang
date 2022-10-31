@@ -86,8 +86,10 @@ contains
     constructor%type             = dpar%fg_type(component)
     constructor%cg_group         = dpar%fg_cg_group(component)
 
-    if (trim(constructor%type) /= 'template') then
+    if (trim(constructor%type) /= 'template' .and. trim(constructor%type) /= 'hi_fit') then
        constructor%sample_amplitude = dpar%fg_amp_samp(component)
+    else
+       constructor%sample_amplitude = .true.
     end if
 
 
@@ -396,6 +398,8 @@ contains
           if (trim(dpar%fg_spec_file(component,i)) == 'none') then
              constructor%indices(:,:,i)   = dpar%fg_init(component,i)
           else
+             write(*,*) component, i
+             write(*,*) trim(dpar%fg_spec_file(component,i))
              call read_bintab(trim(dpar%datadir)//trim(dpar%fg_spec_file(component,i)),&
                   constructor%indices(:,:,i), npix, nmaps, nullval, anynull, header=header)
           end if
