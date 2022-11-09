@@ -88,22 +88,6 @@ contains
 
   end subroutine init_data_maps
 
-  ! subroutine init_band_calibration(self)
-  !   !==================================================|
-  !   ! Write a routine that tells ddata which component | 
-  !   ! we want to calibrate that band to.               |
-  !   !==================================================|
-  !   ! Right now we leave this out and calibrate via    |
-  !   ! broadband (i.e. full sky model).
-  !   implicit none
-  !   class(dang_data),       intent(inout) :: self
-
-  !   type(dang_comps),   pointer             :: c2
-        
-
-
-  ! end subroutine init_band_calibration
-
   subroutine read_data_maps(self, dpar)
     implicit none
     class(dang_data),       intent(inout) :: self

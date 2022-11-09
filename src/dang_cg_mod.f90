@@ -215,9 +215,7 @@ contains
        do k = 1, self%ncg_components
           c => self%cg_component(k)%p
           if (.not. c%sample_amplitude) cycle
-          if (c%type == 'hi_fit') then
-             !Throw an error for now
-          else if (c%type /= 'template') then
+          if (c%type /= 'template') then
              do i = 0, npix-1
                 self%x(i+offset+1) = c%amplitude(i,1)
              end do
@@ -230,28 +228,6 @@ contains
     allocate(b2(m))
     allocate(x_internal(m))
     allocate(r(m))
-
-    ! ! Testing block
-    ! ! ========================================================= |
-    ! x_internal(:) = 1.d0
-
-    ! b2 = self%compute_Ax(ddata, x_internal, nbands, flag_n)
-    
-    ! write(*,*) 'First component'
-    ! write(*,*) b(1), b(100), b(npix)
-    ! write(*,*) b2(1), b2(100), b2(npix)
-
-    ! write(*,*) 'Second component'
-    ! write(*,*) b(npix+1), b(npix+101), b(npix+npix)
-    ! write(*,*) b2(npix+1), b2(npix+101), b2(2*npix)
-    
-    ! x_map(0:npix-1,1) = b2(1:npix)
-    ! call write_result_map('x_map_test1.fits', nside, ordering, header, x_map)
-    ! x_map(npix:2*npix-1,1) = b2(npix+1:2*npix)
-    ! call write_result_map('x_map_test1.fits', nside, ordering, header, x_map)
-    ! stop
-
-    ! ! ========================================================= |
 
     ! Check mode
     if (trim(dpar%ml_mode) == 'sample') then

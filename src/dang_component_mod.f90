@@ -454,6 +454,15 @@ contains
     end if
   end function planck
 
+  function B_nu(nu,T)
+    implicit none
+    real(dp),       intent(in) :: nu, T
+    real(dp)                   :: B_nu
+    integer(i4b)               :: i
+    ! Output in units of [W sr^-1 m^-2 Hz^-1]
+    B_nu  = ((2.d0*h*(nu)**3.d0)/(c**2.d0))*(1.d0/(exp((h*nu)/(k_B*T))-1))
+  end function B_nu
+
   function eval_signal(self, band, pix, map_n, index)
     implicit none
     class(dang_comps)                  :: self
@@ -488,24 +497,66 @@ contains
     real(dp)                           :: eval_sed
 
     if (trim(self%type) == 'power-law') then
-       spectrum = evaluate_powerlaw(self,band, pix, map_n, index)
+       spectrum = evaluate_powerlaw(self, band, pix, map_n, index)
     else if (trim(self%type) == 'mbb') then
-       spectrum = evaluate_mbb(self,band, pix, map_n, index)
+       spectrum = evaluate_mbb(self, band, pix, map_n, index)
     else if (trim(self%type) == 'cmb') then
        spectrum = 1.0/a2t(bp(band))
     else if (trim(self%type) == 'template') then
        spectrum = 1.d0
     else if (trim(self%type) == 'hi_fit') then
-       if (present(index)) then
-          spectrum = self%template(pix,map_n)*planck(bp(band),index(1))
-       else
-          spectrum = self%template(pix,map_n)*planck(bp(band),self%indices(pix,map_n,1))
-       end if
+       ! This isn't even in the right units!
+       ! if (present(index)) then
+       !    spectrum = self%template(pix,map_n)*planck(bp(band),index(1))
+       ! else
+       !    spectrum = self%template(pix,map_n)*planck(bp(band),self%indices(pix,map_n,1))
+       ! end if
+       spectrum = self%template(pix,map_n)*evaluate_hi_fit(self, band, pix, map_n, index)
     end if
     
     eval_sed = spectrum
 
   end function eval_sed
+
+  function evaluate_hi_fit(self, band, pix, map_n, index)
+    ! always computed in RJ units
+    
+    implicit none
+    class(dang_comps)                  :: self
+    integer(i4b),           intent(in) :: band
+    integer(i4b),           optional   :: pix
+    integer(i4b),           optional   :: map_n
+    integer(i4b)                       :: i
+    real(dp), dimension(:), optional   :: index
+    real(dp)                           :: z, spectrum
+    real(dp)                           :: evaluate_hi_fit
+
+    spectrum = 0.d0
+
+    if (bp(band)%id == 'delta') then
+       if (present(index)) then
+          spectrum = B_nu(bp(band)%nu_c,index(1))/compute_bnu_prime_RJ(bp(band)%nu_c)
+       else
+          spectrum = B_nu(bp(band)%nu_c,self%indices(pix,map_n,1))/compute_bnu_prime_RJ(bp(band)%nu_c)
+       end if
+    else
+       if (present(index)) then
+          do i = 1, bp(band)%n
+             spectrum = spectrum + bp(band)%tau0(i)*B_nu(bp(band)%nu0(i),index(1))/&
+                  & compute_bnu_prime_RJ(bp(band)%nu0(i))
+          end do
+       else
+          do i = 1, bp(band)%n
+             spectrum = spectrum + bp(band)%tau0(i)*B_nu(bp(band)%nu0(i),&
+                  & self%indices(pix,map_n,1))/compute_bnu_prime_RJ(bp(band)%nu0(i))
+          end do
+       end if
+    end if
+
+    ! Make sure we move it to uK_RJ
+    evaluate_hi_fit = spectrum*1e6
+
+  end function evaluate_hi_fit
 
   function evaluate_powerlaw(self, band, pix, map_n, index)
     ! always computed in RJ units
@@ -520,17 +571,15 @@ contains
     real(dp)                           :: z, spectrum
     real(dp)                           :: evaluate_powerlaw
 
-    spectrum = 1.d0
+    spectrum = 0.d0
 
     if (bp(band)%id == 'delta') then
-       ! if (ind == 1) then
        if (present(index)) then
           spectrum = (bp(band)%nu_c/self%nu_ref)**index(1)
        else 
           spectrum = (bp(band)%nu_c/self%nu_ref)**self%indices(pix,map_n,1)
        end if
     else
-       spectrum = 0.d0
        ! Compute for LFI bandpass
        if (present(index)) then
           do i = 1, bp(band)%n
@@ -560,7 +609,7 @@ contains
     real(dp)                           :: z, spectrum
     real(dp)                           :: evaluate_mbb
 
-    spectrum = 1.d0
+    spectrum = 0.d0
 
     if (bp(band)%id == 'delta') then
        if (present(index)) then
@@ -573,7 +622,6 @@ contains
                & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref))**(self%indices(pix,map_n,1)+1.d0)
        end if
     else
-       spectrum = 0.d0
        if (present(index)) then
           z = h / (k_B*index(2))
           do i = 1, bp(band)%n

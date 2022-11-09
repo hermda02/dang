@@ -94,6 +94,18 @@ program dang
      write(*,*) '---------------------------'
      write(*,*) ' Starting main Gibbs Chain '
      write(*,*) '---------------------------'
+
+     ! do l = 1, ncomp
+     !    do j = 1, nbands
+     !       write(*,*) bp(j)%nu_c, B_nu(bp(j)%nu_c,19.d0),component_list(l)%p%eval_sed(j,0,1),&
+     !            & component_list(l)%p%eval_sed(j,0,1)*a2f(bp(j))
+     !       write(*,*) ddata%sig_map(0,1,j), component_list(l)%p%template(0,1)
+     !       write(*,*) ddata%sig_map(0,1,j)/(component_list(l)%p%eval_sed(j,0,1)*&
+     !            & component_list(l)%p%template(0,1))
+     !       write(*,*) ''
+     !    end do
+     ! end do
+     ! stop
      call comp_sep
   
   !------------------------------------------------------------------------------------------------

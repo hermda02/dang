@@ -339,8 +339,8 @@ contains
     type(dang_data),             intent(in) :: ddata
     integer(i4b)                            :: j
 
-    write(*,*) "Sampling calibrators"
     do j = 1, nbands
+       if (any(ddata%fit_gain(:)) .or. any(ddata%fit_offset(:))) write(*,*) "Sampling band gains"
        if (ddata%fit_gain(j)) then
           call fit_band_gain(ddata, 1, j)
        end if
