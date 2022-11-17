@@ -42,7 +42,7 @@ module dang_data_mod
     procedure :: read_data_maps
     procedure :: update_sky_model
     procedure :: convert_maps
-    procedure :: mask_hi
+    procedure :: mask_hi_threshold
   end type dang_data
 
   private :: i, j, k, l
@@ -182,35 +182,41 @@ contains
 
   end subroutine update_sky_model
 
-  subroutine mask_hi(self, dpar, c)
+  subroutine mask_hi_threshold(self, dpar)
     implicit none
     class(dang_data),            intent(inout) :: self
     type(dang_params)                          :: dpar
-    type(dang_comps),   pointer, intent(in)    :: c
+    type(dang_comps),   pointer                :: c
     integer(i4b)                               :: i, j
 
+    do i = 1, ncomp
+       if (component_list(i)%p%type == 'hi_fit') then
+          c => component_list(i)%p
+          ! call ddata%mask_hi_threshold(dpar,component_list(i)%p)
+       end if
+    end do
     do i = 0, npix-1
        if (c%template(i,1) > dpar%thresh) then
-          self%masks(i,1) = missval
+          self%masks(i,1) = 0.d0
        else if (self%masks(i,1) == missval) then
-          self%masks(i,1) = missval
+          self%masks(i,1) = 0.d0
        else if (self%rms_map(i,1,1) == 0.d0) then
-          self%masks(i,1) = missval
+          self%masks(i,1) = 0.d0
        else
           self%masks(i,1) = 1.d0
        end if
     end do
-    nump = 0
-    do i = 0, npix-1
-       do j = 1, nmaps
-          if (self%masks(i,j) == 0.d0 .or. self%masks(i,j) == missval) then
-             self%masks(i,j) = missval
-          else 
-             nump = nump + 1
-          end if
-       end do
-    end do
-  end subroutine mask_hi
+    ! nump = 0
+    ! do i = 0, npix-1
+    !    do j = 1, nmaps
+    !       if (self%masks(i,j) == 0.d0 .or. self%masks(i,j) == missval) then
+    !          self%masks(i,j) = 0.d0
+    !       else 
+    !          nump = nump + 1
+    !       end if
+    !    end do
+    ! end do
+  end subroutine mask_hi_threshold
   
   ! subroutine dust_correct_band(self,dpar,comp,band,iter)
   !   implicit none
@@ -545,6 +551,10 @@ contains
              title = trim(dpar%outdir) // trim(c%label) //&
                   '_' // trim(c%ind_label(l))//'_k' // trim(iter_str) // '.fits'
              do i = 0, npix-1
+                if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) then
+                   map(i,:) = missval
+                   cycle
+                end if
                 do k = 1, nmaps
                    map(i,k) = c%indices(i,k,l)
                 end do
@@ -667,6 +677,7 @@ contains
        write(33,*) dat%chisq
        close(33)
        
+       fmt = '('//trim(nband_str)//'(E17.8))'
        do n = 1, ncomp
           c => component_list(n)%p
           if (trim(c%type) == 'template' .or. trim(c%type) == 'hi_fit') then
@@ -677,8 +688,9 @@ contains
                      position="append", action="write")
              else
                 open(34,file=title, status="new", action="write")
+                write(34,fmt='('//trim(nband_str)//'(A17)') dpar%band_label
              endif
-             write(34,'(10(E17.8))') c%template_amplitudes(:,map_n)
+             write(34,fmt=fmt) c%template_amplitudes(:,map_n)
              close(34)
           ! else
           !    do i = 1, c%nindices
@@ -699,6 +711,7 @@ contains
           open(37,file=title,status="old",position="append",action="write") 
        else
           open(37,file=title,status="new",action="write")
+          write(37,fmt='('//trim(nband_str)//'(A17)') dpar%band_label
        end if
        write(37,fmt=fmt) dat%gain
        close(37)
@@ -709,6 +722,7 @@ contains
           open(38,file=title,status="old",position="append",action="write") 
        else
           open(38,file=title,status="new",action="write")
+          write(38,fmt='('//trim(nband_str)//'(A17)') dpar%band_label
        end if
        write(38,fmt=fmt) dat%offset
        close(38)

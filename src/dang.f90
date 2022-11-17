@@ -80,21 +80,15 @@ program dang
      call ddata%init_data_maps(dpar)
      call ddata%read_data_maps(dpar)
      call ddata%convert_maps(dpar)
-     ! do j = 1, nbands
-     !    ! Check to see if any maps need to be dust corrected
-     !    if (dpar%dust_corr(j) .and. .not. dpar%bp_map(j)) then
-     !       call dust_correct_band(ddata,dpar,dcomps,j)
-     !    end if
-     ! end do
      write(*,*) ''
      call initialize_components(dpar)
      call initialize_cg_groups(dpar)
      call ddata%update_sky_model
      call write_maps(dpar,ddata)
+     if (mask_hi) call ddata%mask_hi_threshold(dpar)
      write(*,*) '---------------------------'
      write(*,*) ' Starting main Gibbs Chain '
      write(*,*) '---------------------------'
-
      ! do l = 1, ncomp
      !    do j = 1, nbands
      !       write(*,*) bp(j)%nu_c, B_nu(bp(j)%nu_c,19.d0),component_list(l)%p%eval_sed(j,0,1),&
@@ -202,11 +196,11 @@ contains
  ! ------------------------------------------------------------------------------------------ 
  subroutine hi_fit
 
-   do i = 1, ncomp
-      if (component_list(i)%p%type == 'hi_fit') then
-         call ddata%mask_hi(dpar,component_list(i)%p)
-      end if
-   end do
+   ! do i = 1, ncomp
+   !    if (component_list(i)%p%type == 'hi_fit') then
+   !       call ddata%mask_hi_threshold(dpar,component_list(i)%p)
+   !    end if
+   ! end do
 
    do iter = 1, dpar%ngibbs
             

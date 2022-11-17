@@ -26,6 +26,7 @@ module dang_util_mod
   integer(i4b)       :: from_worker = 2
   integer(i4b)       :: nump ! Number of unmasked pixels
   logical(lgt)       :: anynull, exist
+  logical(lgt)       :: mask_hi = .false.
   integer(i4b) status(mpi_status_size)
   character(len=5)                  :: iter_str
   character(len=80), dimension(180) :: header
@@ -37,7 +38,7 @@ module dang_util_mod
   public    :: ncomp, ncg_groups, nsample
   public    :: npixpar, nglobalpar, title
   public    :: iter, iter_str, exist, tqu
-  public    :: ml_mode
+  public    :: ml_mode, mask_hi
 
 contains 
   

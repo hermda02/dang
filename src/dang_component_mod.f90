@@ -326,6 +326,7 @@ contains
        ! So we have two things that we need to sample         |
        ! a template amplitude, and a spectral index per pixel |
        !------------------------------------------------------|
+       mask_hi = .true.
        constructor%nindices = 1
        
        allocate(constructor%corr(nbands))

@@ -162,7 +162,7 @@ contains
              call cg_groups(i)%p%compute_rhs(ddata,b,f)
              call cg_groups(i)%p%cg_search(dpar,ddata,b,f)
              call cg_groups(i)%p%unpack_amplitudes(dpar,ddata,f)
-             deallocate(b)
+             if (allocated(b)) deallocate(b)
           end do
        end if
     end do
@@ -191,7 +191,7 @@ contains
     type(dang_comps),        pointer       :: c
 
     integer(i4b),            intent(in)    :: flag_n
-    real(dp), dimension(:),  intent(in)    :: b
+    real(dp), allocatable, dimension(:),  intent(inout)    :: b
 
     real(dp), allocatable, dimension(:)    :: r, q, d, b2, eta
     real(dp), allocatable, dimension(:)    :: x_internal
@@ -203,19 +203,29 @@ contains
     real(dp)                               :: t3, t4, t5, t6
 
     ! How big is the input RHS vector?
-    m = size(b)
-    
-    ! Temporarily hard coded - size of N
-    n = npix
+    m = 0
+    n = size(b)
+    offset = 0
+
+    ! Size of noise covariance matrix is entirely determined by the polarization flags
+    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+       m      = m + 2*npix
+    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+       m      = m + 3*npix
+    else
+       m      = m + npix
+    end if
 
     ! To ensure that we only allocate the CG group amplitude vector once
     if (iter == 1) then
-       allocate(self%x(m))
+       allocate(self%x(n))
+
        ! Initialize on foreground amplitude maps
+       self%x(:) = 0.d0
        do k = 1, self%ncg_components
           c => self%cg_component(k)%p
           if (.not. c%sample_amplitude) cycle
-          if (c%type /= 'template') then
+          if (c%type /= 'template' .and. c%type /= 'hi_fit') then
              do i = 0, npix-1
                 self%x(i+offset+1) = c%amplitude(i,1)
              end do
@@ -224,21 +234,23 @@ contains
        end do
     end if
 
-    allocate(eta(n))
-    allocate(b2(m))
-    allocate(x_internal(m))
-    allocate(r(m))
+    allocate(eta(m))
+    allocate(b2(n))
+    allocate(x_internal(n))
+    allocate(r(n))
 
     ! Check mode
     if (trim(dpar%ml_mode) == 'sample') then
        ! First draw a univariate for sampling if in sampling mode
-       do i = 1, n
+       do i = 1, m
           eta(i) = rand_normal(0.d0,1.d0)
        end do
        b2 = b + self%compute_sample_vector(ddata,eta,nbands,b,flag_n)
     else if (trim(dpar%ml_mode) == 'optimize') then
        b2 = b
     end if
+
+    deallocate(b)
 
     ! Initial condition parameters
     !-----------------------------
@@ -250,7 +262,7 @@ contains
     d  = r
     delta_new = sum(r*r)
     delta_0   = delta_new
-    i = 0
+    i = 1
 
     write(*,fmt='(a,i4,a,e12.5)') 'CG Iter: ', i, ' | delta: ', delta_new
     if (delta_new .lt. self%converge) then
@@ -263,8 +275,11 @@ contains
        alpha      = delta_new/(sum(d*q))
        x_internal = x_internal + alpha*d
 
-       if (mod(i,50) == 0) then
+       if (mod(i+1,50) == 0) then
+          ! write(*,*) r - alpha*q
           r = b2 - self%compute_Ax(ddata, x_internal, nbands, flag_n)
+          ! write(*,*) r
+          ! stop
        else
           r = r - alpha*q
        end if
@@ -315,10 +330,9 @@ contains
     real(dp), allocatable, dimension(:,:,:)            :: data
     integer(i4b),                        intent(in)    :: flag_n
 
-    integer(i4b)                            :: i, j, k, y
-    integer(i4b)                            :: l, m, n
-    integer(i4b)                            :: offset, z
-    integer(i4b)                            :: map_n
+    integer(i4b)                            :: i, j, k, l, m
+    integer(i4b)                            :: offset
+    integer(i4b)                            :: map_n, comp
 
     if (iand(self%pol_flag(flag_n),1) .ne. 0) then
        map_n = 1
@@ -335,14 +349,12 @@ contains
        data(0:,:,j) = (ddata%sig_map(0:,:,j)-ddata%offset(j))/ddata%gain(j)
     end do
 
-    l = ddata%npix  ! the number of pixels in our sky maps 
     m = 0           ! length of the array b
-    n = nbands      ! number of bands included
 
     ! Iterate through CG group components to construct arrays
     ! Counting through the components to figure out array sizes 
-    do i = 1, self%ncg_components
-       c => self%cg_component(i)%p
+    do comp = 1, self%ncg_components
+       c => self%cg_component(comp)%p
 
        ! Cycle if we don't want to fit a components amplitudes
        if (.not. c%sample_amplitude) cycle
@@ -357,11 +369,11 @@ contains
           end if
        else
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-             m = m + 2*l
+             m = m + 2*npix
           else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-             m = m + 3*l
+             m = m + 3*npix
           else
-             m = m + l
+             m = m + npix
           end if
        end if
     end do
@@ -371,11 +383,11 @@ contains
     b = 0.d0
 
     ! Remove other foregrounds from the data which we are fitting to
-    do y = 1, ncomp
-       c => component_list(y)%p
+    do comp = 1, ncomp
+       c => component_list(comp)%p
        ! Remove foregrounds that are not in the CG group or aren't having amplitudes sampled
        if ((c%cg_group /= self%cg_group) .or. (.not. c%sample_amplitude)) then
-          if (c%type /= 'template') then
+          if (c%type /= 'template' .and. c%type /= 'hi_fit') then
              do i = 0, npix-1
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 do k = 1, nmaps
@@ -391,7 +403,7 @@ contains
                    data(i,1,j) = data(i,1,j) - c%eval_sed(j,i,1)*c%template_amplitudes(j,1)
                 end do
              end do
-          else
+          else if (c%type == 'template') then
              do i = 0, npix-1
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 do k = 1, nmaps
@@ -406,56 +418,23 @@ contains
 
     ! Compute the RHS of the matrix equation Ax=b
     offset = 0
-    do k = 1, self%ncg_components
-       c => self%cg_component(k)%p
+    do comp = 1, self%ncg_components
+       c => self%cg_component(comp)%p
        ! Cycle if we don't want to fit a components amplitudes
        if (.not. c%sample_amplitude) cycle
-       if (c%type == 'hi_fit') then
-          z = 1
-          do j = 1, n
-             if (c%corr(j)) then
-                !!$OMP PARALLEL PRIVATE(i)
-                !!$OMP DO SCHEDULE(static)
-                do i = 1, l
-                   if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-
-                   ! Bit flag selection for matrix building
-                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
-                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
-                           & data(i-1,1,j)*c%eval_sed(j,i-1,1)
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
-                   else
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
-                           & data(i-1,map_n,j)*c%eval_sed(j,i-1,map_n)
-                   end if
-                end do
-                !!$OMP END DO
-                !!$OMP END PARALLEL
-                z = z + 1
-             end if
-          end do
-          offset = offset + c%nfit
-       else if (c%type /= 'template') then
-          !$OMP PARALLEL PRIVATE(i,j)
-          !$OMP DO SCHEDULE(static)
-          do i = 1, l
-             do j = 1, n
+       if (c%type /= 'template' .and. c%type /= 'hi_fit') then
+          !!$OMP PARALLEL PRIVATE(i,j)
+          !!$OMP DO SCHEDULE(static)
+          do i = 1, npix
+             do j = 1, nbands
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) then
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                       b(i)     = 0.d0
-                      b(l+i)   = 0.d0
+                      b(npix+i)   = 0.d0
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
                       b(i)     = 0.d0
-                      b(l+i)   = 0.d0
-                      b(2*l+i) = 0.d0
+                      b(npix+i)   = 0.d0
+                      b(2*npix+i) = 0.d0
                    else 
                       b(i)     = 0.d0
                    end if
@@ -466,17 +445,17 @@ contains
                       b(offset+i) = b(offset+i) + (data(i-1,2,j)*&
                            & c%eval_sed(j,i-1,2))/&
                            & (ddata%rms_map(i-1,2,j)**2.d0)
-                      b(l+offset+i) = b(l+offset+i) + (data(i-1,3,j)*&
+                      b(npix+offset+i) = b(npix+offset+i) + (data(i-1,3,j)*&
                            & c%eval_sed(j,i-1,3))/&
                            & (ddata%rms_map(i-1,3,j)**2.d0)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
                       b(offset+i) = b(offset+i) + (data(i-1,1,j)*&
                            & c%eval_sed(j,i-1,1))/&
                            & (ddata%rms_map(i-1,1,j)**2.d0)
-                      b(l+offset+i) = b(l+offset+i) + (data(i-1,2,j)*&
+                      b(npix+offset+i) = b(npix+offset+i) + (data(i-1,2,j)*&
                            & c%eval_sed(j,i-1,2))/&
                            & (ddata%rms_map(i-1,2,j)**2.d0)
-                      b(l+offset+i) = b(2*l+offset+i) + (data(i-1,3,j)*&
+                      b(2*npix+offset+i) = b(2*npix+offset+i) + (data(i-1,3,j)*&
                            & c%eval_sed(j,i-1,3))/&
                            & (ddata%rms_map(i-1,3,j)**2.d0)
                    else
@@ -487,47 +466,83 @@ contains
                 end if
              end do
           end do
-          !$OMP END DO
-          !$OMP END PARALLEL
+          !!$OMP END DO
+          !!$OMP END PARALLEL
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-             offset = offset + 2*l
+             offset = offset + 2*npix
           else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-             offset = offset + 3*l
+             offset = offset + 3*npix
           else
-             offset = offset + l
+             offset = offset + npix
           end if
-       else
-          z = 1
-          do j = 1, n
+       else if (c%type == 'hi_fit') then
+          l = 1
+          do j = 1, nbands
              if (c%corr(j)) then
                 !!$OMP PARALLEL PRIVATE(i)
                 !!$OMP DO SCHEDULE(static)
-                do i = 1, l
+                do i = 1, npix
+                   if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+
+                   ! Bit flag selection for matrix building
+                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
+                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
+                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
+                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
+                           & data(i-1,1,j)*c%eval_sed(j,i-1,1)
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
+                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
+                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
+                   else
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
+                           & data(i-1,map_n,j)*c%eval_sed(j,i-1,map_n)
+                   end if
+                end do
+                !!$OMP END DO
+                !!$OMP END PARALLEL
+                l = l + 1
+             end if
+          end do
+          offset = offset + c%nfit
+       else if (c%type == 'template') then
+          l = 1
+          do j = 1, nbands
+             if (c%corr(j)) then
+                !!$OMP PARALLEL PRIVATE(i)
+                !!$OMP DO SCHEDULE(static)
+                do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
                            & data(i-1,2,j)*c%template(i-1,2)
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
                            & data(i-1,3,j)*c%template(i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
                            & data(i-1,1,j)*c%template(i-1,1)
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
                            & data(i-1,2,j)*c%template(i-1,2)
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
                            & data(i-1,3,j)*c%template(i-1,3)
                    else
-                      b(offset+z) = b(offset+z) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
+                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
                            & data(i-1,map_n,j)*c%template(i-1,map_n)
                    end if
                 end do
                 !!$OMP END DO
                 !!$OMP END PARALLEL
-                z = z + 1
+                l = l + 1
              end if
           end do
           offset = offset + c%nfit
+       else
+          write(*,*) 'Error in compute RHS - unrecognized components type'
+          stop
        end if
     end do
 
@@ -570,7 +585,7 @@ contains
     real(dp), allocatable,  dimension(:)  :: temp1, temp2, temp3, res
     type(dang_comps),       pointer       :: c
 
-    integer(i4b)                          :: i, j, k, map_n
+    integer(i4b)                          :: i, j, k, map_n, comp
     integer(i4b)                          :: l, m, n, offset
 
     ! Initialize CG group stuff based off of pol_flags
@@ -586,30 +601,15 @@ contains
     m      = 0 ! Size of the number of pixels in the noise covariance matrix
     l      = 1 ! Used for template fit counting
     offset = 0 ! Usage below
-    
-    ! Count up the offset for the template handling at the end of the 
-    do i = 1, self%ncg_components                                                     
-       c => self%cg_component(i)%p
 
-       ! Cycle if we don't want to fit a components amplitudes
-       if (.not. c%sample_amplitude) cycle
-
-       if (c%type == 'hi_fit') then
-          offset = 0
-          m      = m + npix
-       else if (c%type /= 'template') then                           
-          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-             offset = offset + 2*npix
-             m      = m + 2*npix
-          else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-             offset = offset + 3*npix
-             m      = m + 3*npix
-          else
-             offset = offset + npix
-             m      = m + npix
-          end if
-       end if
-    end do
+    ! Size of noise covariance matrix is entirely determined by the polarization flags
+    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+       m      = m + 2*npix
+    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+       m      = m + 3*npix
+    else
+       m      = m + npix
+    end if
 
     allocate(temp1(m))
     allocate(temp2(m))
@@ -618,22 +618,32 @@ contains
 
     res = 0.d0
 
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    !!! BIG WARNING !!!!!!!!!!!!
+    !!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    ! I think that because we loop over bands
+    ! followed by looping over components within that loop
+    ! will cause multi-template computations to 
+    ! be very wrong
+
     do j = 1, nbands
        temp1 = 0.d0
        temp2 = 0.d0
        temp3 = 0.d0
        ! Reset the offset for each band
        offset = 0
+
        ! Solving temp1 = (T_nu)x
-       do k = 1, self%ncg_components
-          c => self%cg_component(k)%p
+       do comp = 1, self%ncg_components
+          c => self%cg_component(comp)%p
 
           ! Cycle if we don't want to fit a components amplitudes
           if (.not. c%sample_amplitude) cycle
 
           if (c%type /= 'template' .and. c%type /= 'hi_fit') then
-             !$OMP PARALLEL PRIVATE(i)
-             !$OMP DO SCHEDULE(static)
+             !!$OMP PARALLEL PRIVATE(i)
+             !!$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -647,8 +657,8 @@ contains
                    temp1(i)        = temp1(i) + x(offset+i)       *c%eval_sed(j,i-1,map_n)
                 end if
              end do
-             !$OMP END DO
-             !$OMP END PARALLEL
+             !!$OMP END DO
+             !!$OMP END PARALLEL
              if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                 offset = offset + 2*npix
              else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
@@ -660,13 +670,13 @@ contains
              if (c%corr(j)) then
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp1(i) = temp1(i) + x(j)*c%eval_sed(j,i-1,map_n)
+                   temp1(i) = temp1(i) + x(offset+l)*c%eval_sed(j,i-1,map_n)
                 end do
              end if
           else if (c%type == 'template') then
              if (c%corr(j)) then
-                !$OMP PARALLEL PRIVATE(i)
-                !$OMP DO SCHEDULE(static)
+                !!$OMP PARALLEL PRIVATE(i)
+                !!$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -680,15 +690,15 @@ contains
                       temp1(i)      = temp1(i) + x(offset+l)*c%template(i-1,map_n)
                    end if
                 end do
-                !$OMP END DO
-                !$OMP END PARALLEL
+                !!$OMP END DO
+                !!$OMP END PARALLEL
              end if
           end if
        end do
 
        ! Solving temp2 = (N^-1)temp1
-       !$OMP PARALLEL PRIVATE(i)
-       !$OMP DO SCHEDULE(static)
+       !!$OMP PARALLEL PRIVATE(i)
+       !!$OMP DO SCHEDULE(static)
        do i = 1, npix
           if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -702,22 +712,22 @@ contains
              temp2(i)        = temp1(i)/(ddata%rms_map(i-1,map_n,j)**2.d0)
           end if
        end do
-       !$OMP END DO
-       !$OMP END PARALLEL
+       !!$OMP END DO
+       !!$OMP END PARALLEL
 
        ! Reset the offset for each multiplication
        offset = 0
 
        ! Solving (T_nu^t)temp2
-       do k = 1, self%ncg_components
-          c => self%cg_component(k)%p
+       do comp = 1, self%ncg_components
+          c => self%cg_component(comp)%p
 
           ! Cycle if we don't want to fit a components amplitudes
           if (.not. c%sample_amplitude) cycle
 
           if (c%type /= 'template' .and. c%type /= 'hi_fit') then
-             !$OMP PARALLEL PRIVATE(i)
-             !$OMP DO SCHEDULE(static)
+             !!$OMP PARALLEL PRIVATE(i)
+             !!$OMP DO SCHEDULE(static)
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -731,8 +741,8 @@ contains
                    temp3(offset+i)        = temp2(i)*c%eval_sed(j,i-1,map_n)
                 end if
              end do
-             !$OMP END DO
-             !$OMP END PARALLEL
+             !!$OMP END DO
+             !!$OMP END PARALLEL
              if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                 offset = offset + 2*npix
              else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
@@ -744,8 +754,9 @@ contains
              if (c%corr(j)) then
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp3(j) = temp3(j) + temp2(i)*c%eval_sed(j,i-1,1)
+                   temp3(offset+l) = temp3(offset+l) + temp2(i)*c%eval_sed(j,i-1,1)
                 end do
+                l = l + 1
              end if
           else if (c%type == 'template') then
              if (c%corr(j)) then
@@ -817,7 +828,7 @@ contains
     real(dp), allocatable, dimension(:)   :: temp1, temp2, res
     type(dang_comps),       pointer       :: c
 
-    integer(i4b)                          :: i, j, k, map_n
+    integer(i4b)                          :: i, j, k, map_n, comp
     integer(i4b)                          :: offset, l, m, n
 
 
@@ -836,13 +847,13 @@ contains
     l      = 1
     
     ! Count up the offset for the template handling at the end of the 
-    do i = 1, self%ncg_components                                                     
-       c => self%cg_component(i)%p
+    do comp = 1, self%ncg_components                                                     
+       c => self%cg_component(comp)%p
 
        ! Cycle if we don't want to fit a components amplitudes
        if (.not. c%sample_amplitude) cycle
 
-       if (c%type /= 'template') then                           
+       if (c%type /= 'template' .and. c%type /= 'hi_fit') then 
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
              offset = offset + 2*npix
           else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
@@ -852,8 +863,6 @@ contains
           end if
        end if
     end do
-
-    ! offset = offset + 2*npix
 
     allocate(temp1(n))
     allocate(temp2(m))
@@ -885,8 +894,8 @@ contains
        !!$OMP END PARALLEL
 
        ! Solving temp2 = T^t temp1
-       do k = 1, self%ncg_components
-          c => self%cg_component(k)%p
+       do comp = 1, self%ncg_components
+          c => self%cg_component(comp)%p
 
           ! Cycle if we don't want to fit a components amplitudes
           if (.not. c%sample_amplitude) cycle
@@ -913,8 +922,9 @@ contains
              if (c%corr(j)) then
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp2(j) = temp2(j) + temp1(i)*c%eval_sed(j,i-1,map_n)
+                   temp2(offset+l) = temp2(offset+l) + temp1(i)*c%eval_sed(j,i-1,map_n)
                 end do
+                l = l + 1
              end if
           else if (c%type == 'template') then
              if (c%corr(j)) then
@@ -965,8 +975,7 @@ contains
     type(dang_comps),    pointer       :: c
     
     integer(i4b)                       :: offset, i, j, k, l
-    integer(i4b)                       :: map_n 
-
+    integer(i4b)                       :: map_n, comp
 
     ! Initialize CG group stuff based off of pol_flags
     if (iand(self%pol_flag(flag_n),1) .ne. 0) then
@@ -981,8 +990,8 @@ contains
 
     ! Let's unravel self%x such that the foreground amplitudes
     ! are properly stored
-    do k = 1, self%ncg_components
-       c => self%cg_component(k)%p
+    do comp = 1, self%ncg_components
+       c => self%cg_component(comp)%p
 
        ! Cycle if we don't want to fit a components amplitudes
        if (.not. c%sample_amplitude) cycle
