@@ -161,7 +161,7 @@ contains
           do f = 1, cg_groups(i)%p%nflag
              call cg_groups(i)%p%compute_rhs(ddata,b,f)
              call cg_groups(i)%p%cg_search(dpar,ddata,b,f)
-             call cg_groups(i)%p%unpack_amplitudes(dpar,ddata,f)
+             call cg_groups(i)%p%unpack_amplitudes(f)
              if (allocated(b)) deallocate(b)
           end do
        end if
@@ -297,6 +297,9 @@ contains
        end if
 
     end do
+
+    ! write(*,*) x_internal
+    ! stop
 
     self%x = x_internal
 
@@ -953,7 +956,7 @@ contains
     end do
  end function compute_sample_vector
 
- subroutine unpack_amplitudes(self, dpar, ddata, flag_n)
+ subroutine unpack_amplitudes(self, flag_n)
     ! =========================================================== |
     !  This routine walks through the resulting amplitude vector, |                                
     !  storing the amplitude results in the correct foregrounds.  | 
@@ -969,9 +972,7 @@ contains
     ! =========================================================== |
     implicit none
     class(dang_cg_group)               :: self
-    type(dang_data),     intent(in)    :: ddata
     integer(i4b),        intent(in)    :: flag_n
-    type(dang_params)                  :: dpar
     type(dang_comps),    pointer       :: c
     
     integer(i4b)                       :: offset, i, j, k, l
@@ -1032,6 +1033,8 @@ contains
              do j = 1, nbands
                 if (c%corr(j)) then
                    c%template_amplitudes(j,map_n) = self%x(offset+l)
+                   ! write(*,*) c%template_amplitudes(j,map_n)
+                   ! write(*,*) component_list(1)%p%template_amplitudes(j,map_n)
                    l = l + 1
                 end if
              end do

@@ -31,6 +31,7 @@ module dang_param_mod
      character(len=512)                              :: datadir        ! Directory to look for bandfiles in
      character(len=512)                              :: bp_dir         ! Directory for BP swap maps
      character(len=512)                              :: mask_file      ! Mask filename
+     character(len=512)                              :: offset_file    ! Offset init     
      character(len=512), allocatable, dimension(:)   :: band_calibrator! Band filename
      character(len=512), allocatable, dimension(:)   :: band_label     ! Band label
      character(len=512), allocatable, dimension(:)   :: band_mapfile   ! Band filename
@@ -383,7 +384,6 @@ contains
     call get_parameter_hashtable(htbl, 'OUTPUT_ITER', par_int=par%iter_out)
     call get_parameter_hashtable(htbl, 'OUTPUT_COMPS', par_lgt=par%output_fg)
     call get_parameter_hashtable(htbl, 'SOLVER_TYPE', par_string=par%solver)
-    call get_parameter_hashtable(htbl, 'SOLVER_MODE', par_string=par%mode)
     call get_parameter_hashtable(htbl, 'ML_MODE', par_string=par%ml_mode)
     call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
     call get_parameter_hashtable(htbl, 'CG_ITER_MAX', par_int=par%cg_iter)
@@ -448,6 +448,8 @@ contains
     call get_parameter_hashtable(htbl, 'NUMINCLUDE',    par_int=par%numinc)
     call get_parameter_hashtable(htbl, 'DATA_DIRECTORY', par_string=par%datadir)
     call get_parameter_hashtable(htbl, 'MASKFILE', par_string=par%mask_file)
+
+    call get_parameter_hashtable(htbl, 'BAND_OFFSET_FILE', par_string=par%offset_file)
     
     n  = par%numband
     n2 = par%numinc
@@ -516,94 +518,90 @@ contains
     len_itext = len(trim(itext))
     len_jtext = len(trim(jtext))
 
-    if (trim(par%mode) == 'comp_sep') then
-       call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
-       call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
-       call get_parameter_hashtable(htbl, 'NUM_CG_GROUPS', par_int=par%ncggroup)
-       call get_parameter_hashtable(htbl, 'DUST_CORR_TYPE', par_string=par%dust_corr_type)
+    call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
+    call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
+    call get_parameter_hashtable(htbl, 'NUM_CG_GROUPS', par_int=par%ncggroup)
+    call get_parameter_hashtable(htbl, 'DUST_CORR_TYPE', par_string=par%dust_corr_type)
        
-       allocate(par%mbb_gauss(2,2))
-       
-       call get_parameter_hashtable(htbl, 'MBB_TD_MEAN',par_dp=par%mbb_gauss(1,1))
-       call get_parameter_hashtable(htbl, 'MBB_TD_STD',par_dp=par%mbb_gauss(1,2))
-       call get_parameter_hashtable(htbl, 'MBB_BETA_MEAN',par_dp=par%mbb_gauss(2,1))
-       call get_parameter_hashtable(htbl, 'MBB_BETA_STD',par_dp=par%mbb_gauss(2,2))
-       
-       n  = par%ncomp
-       n2 = par%ncggroup
-       
-       allocate(par%fg_amp_file(n,1))
-       allocate(par%fg_amp_samp(n))
-       allocate(par%fg_cg_group(n))
-       allocate(par%fg_filename(n))
-       allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
-       allocate(par%fg_ind_region(n,2))
-       allocate(par%fg_ind_lnl(n,2))
-       allocate(par%fg_init(n,2))
-       allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n))
-       allocate(par%fg_nfit(n))
-       allocate(par%fg_prior_type(n,2))
-       allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
-       allocate(par%fg_spec_file(n,2))
-       allocate(par%fg_spec_poltype(n,2))
-       allocate(par%fg_spec_step(n,2))
-       allocate(par%fg_temp_corr(n,par%numband))
-       
-       allocate(par%cg_group_sample(n2))
-       allocate(par%cg_max_iter(n2))
-       allocate(par%cg_convergence(n2))
-       allocate(par%cg_poltype(n2))
-
-       allocate(par%temp_file(par%ntemp))
-
-       par%temp_nfit = 0
-       par%fg_nfit   = 0
-
-       ! Load the CG group specific parameters
-       do i = 1, n2
-          call int2string(i, itext)
-          call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, &
-               par_lgt=par%cg_group_sample(i))
-          call get_parameter_hashtable(htbl, 'CG_GROUP_MAX_ITER'//itext, len_itext=len_itext, &
-               par_int=par%cg_max_iter(i))
-          call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, &
-               par_dp=par%cg_convergence(i))
-          call get_parameter_hashtable(htbl, 'CG_POLTYPE'//itext, len_itext=len_itext, &
-               par_string=par%cg_poltype(i))
-       end do
-                     
-       ! Loop over and load all component information
-       do i = 1, n
-          call int2string(i, itext)
-          call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
-          call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i)) 
-          call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
-          call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
-          if (trim(par%fg_type(i)) /= 'template' .and. trim(par%fg_type(i)) /= 'hi_fit') then
-             call get_parameter_hashtable(htbl, 'COMP_AMP_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%fg_amp_samp(i))
-             call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
-             if (par%fg_nu_ref(i) < 1d7) then
-                par%fg_nu_ref(i) = par%fg_nu_ref(i)*1d9
-             end if
+    allocate(par%mbb_gauss(2,2))
+    
+    call get_parameter_hashtable(htbl, 'MBB_TD_MEAN',par_dp=par%mbb_gauss(1,1))
+    call get_parameter_hashtable(htbl, 'MBB_TD_STD',par_dp=par%mbb_gauss(1,2))
+    call get_parameter_hashtable(htbl, 'MBB_BETA_MEAN',par_dp=par%mbb_gauss(2,1))
+    call get_parameter_hashtable(htbl, 'MBB_BETA_STD',par_dp=par%mbb_gauss(2,2))
+    
+    n  = par%ncomp
+    n2 = par%ncggroup
+    
+    allocate(par%fg_amp_file(n,1))
+    allocate(par%fg_amp_samp(n))
+    allocate(par%fg_cg_group(n))
+    allocate(par%fg_filename(n))
+    allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
+    allocate(par%fg_ind_region(n,2))
+    allocate(par%fg_ind_lnl(n,2))
+    allocate(par%fg_init(n,2))
+    allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n))
+    allocate(par%fg_nfit(n))
+    allocate(par%fg_prior_type(n,2))
+    allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
+    allocate(par%fg_spec_file(n,2))
+    allocate(par%fg_spec_poltype(n,2))
+    allocate(par%fg_spec_step(n,2))
+    allocate(par%fg_temp_corr(n,par%numband))
+    
+    allocate(par%cg_group_sample(n2))
+    allocate(par%cg_max_iter(n2))
+    allocate(par%cg_convergence(n2))
+    allocate(par%cg_poltype(n2))
+    
+    allocate(par%temp_file(par%ntemp))
+    
+    par%temp_nfit = 0
+    par%fg_nfit   = 0
+    
+    ! Load the CG group specific parameters
+    do i = 1, n2
+       call int2string(i, itext)
+       call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, &
+            par_lgt=par%cg_group_sample(i))
+       call get_parameter_hashtable(htbl, 'CG_GROUP_MAX_ITER'//itext, len_itext=len_itext, &
+            par_int=par%cg_max_iter(i))
+       call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, &
+            par_dp=par%cg_convergence(i))
+       call get_parameter_hashtable(htbl, 'CG_POLTYPE'//itext, len_itext=len_itext, &
+            par_string=par%cg_poltype(i))
+    end do
+    
+    ! Loop over and load all component information
+    do i = 1, n
+       call int2string(i, itext)
+       call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
+       call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i)) 
+       call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
+       call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
+       if (trim(par%fg_type(i)) /= 'template' .and. trim(par%fg_type(i)) /= 'hi_fit') then
+          call get_parameter_hashtable(htbl, 'COMP_AMP_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%fg_amp_samp(i))
+          call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
+          if (par%fg_nu_ref(i) < 1d7) then
+             par%fg_nu_ref(i) = par%fg_nu_ref(i)*1d9
           end if
-          if (trim(par%fg_type(i)) == 'power-law') then
-             ! call get_parameter_hashtable(htbl,'COMP_AMP_INPUT_MAP'//itext, len_itext=len_itext, par_string=par%fg_amp_file(i,1))
-             call read_power_law(par,htbl,i)
-          else if (trim(par%fg_type(i)) == 'mbb') then
-             ! call get_parameter_hashtable(htbl,'COMP_AMP_INPUT_MAP'//itext, len_itext=len_itext, par_string=par%fg_amp_file(i,1))
-             call read_mbb(par,htbl,i)
-          else if (trim(par%fg_type(i)) == 'cmb') then
-             ! call get_parameter_hashtable(htbl,'COMP_AMP_INPUT_MAP'//itext, len_itext=len_itext, par_string=par%fg_amp_file(i,1))
-             ! call read_cmb(par,htbl,i)
-          else if (trim(par%fg_type(i)) == 'template') then
-             call read_template(par,htbl,i)
-          else if (trim(par%fg_type(i)) == 'hi_fit') then
-             call read_hi_fit_test(par,htbl,i)
-          end if
-       end do
-    else if (trim(par%mode) == 'hi_fit') then
-       call read_hi_fit(par,htbl)
-    end if
+       end if
+       if (trim(par%fg_type(i)) == 'power-law') then
+          ! call get_parameter_hashtable(htbl,'COMP_AMP_INPUT_MAP'//itext, len_itext=len_itext, par_string=par%fg_amp_file(i,1))
+          call read_power_law(par,htbl,i)
+       else if (trim(par%fg_type(i)) == 'mbb') then
+          ! call get_parameter_hashtable(htbl,'COMP_AMP_INPUT_MAP'//itext, len_itext=len_itext, par_string=par%fg_amp_file(i,1))
+          call read_mbb(par,htbl,i)
+       else if (trim(par%fg_type(i)) == 'cmb') then
+          ! call get_parameter_hashtable(htbl,'COMP_AMP_INPUT_MAP'//itext, len_itext=len_itext, par_string=par%fg_amp_file(i,1))
+          ! call read_cmb(par,htbl,i)
+       else if (trim(par%fg_type(i)) == 'template') then
+          call read_template(par,htbl,i)
+       else if (trim(par%fg_type(i)) == 'hi_fit') then
+          call read_hi_fit_test(par,htbl,i)
+       end if
+    end do
     
   end subroutine read_comp_params
 

@@ -48,7 +48,7 @@ contains
     call mpi_init(ierr)
     call mpi_comm_rank(MPI_COMM_WORLD, rank, ierr)
     call mpi_comm_size(MPI_COMM_WORLD, numprocs, ierr)
-    tqu(1)            = 'T'
+    tqu(1)            = 'I'
     tqu(2)            = 'Q'
     tqu(3)            = 'U'
   end subroutine init_mpi
