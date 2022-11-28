@@ -132,10 +132,7 @@ program dang
      ! Write out the data
      ! ------------------------------------------------------------------------------------------
      do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-        ! if (rank == master) then
-        if (mod(iter,dpar%iter_out) .EQ. 0) then
-           call write_data(dpar,ddata,k)
-        end if
+        call write_data(dpar,ddata,k)
      end do
      if (mod(iter,dpar%iter_out) .EQ. 0) then
         call write_maps(dpar,ddata)
