@@ -436,7 +436,7 @@ contains
     write(*,*) 'Output data maps'
     
     write(iter_str, '(i0.5)') iter
-    ! If we ask to output all components for each band:
+    ! If we ask to output all components for each band (in band units):
     if (dpar%output_fg .eqv. .true.) then
        do j = 1, nbands
           do n = 1, ncomp
@@ -445,23 +445,9 @@ contains
                   '_k' // trim(iter_str) // '.fits'
              do i = 0, npix-1
                 do k = 1, nmaps
-                   map(i,k) = c%eval_signal(j,i,k)
+                   map(i,k) = c%eval_signal(j,i,k)/ddata%conversion(j)
                 end do
              end do
-             ! if (c%type /= 'template') then
-             !    do i = 0, npix-1
-             !       do k = 1, nmaps
-             !          map(i,k) = c%amplitude(i,k)*c%eval_sed(j,i,k)
-             !          map(i,k) = c%eval_signal(j,i,k)
-             !       end do
-             !    end do
-             ! else
-             !    do i = 0, npix-1
-             !       do k = 1, nmaps
-             !          map(i,k) = c%template(i,k)*c%template_amplitudes(j,k)
-             !       end do
-             !    end do
-             ! end if
              ! Mask it!
              do i = 0, npix-1
                 if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
@@ -472,7 +458,8 @@ contains
           end do
        end do
     end if
-    ! Write residual and sky model for each band
+
+    ! Write residual and sky model for each band (output in native band units)
     do j = 1, nbands
        title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
        map(:,:)   = ddata%res_map(:,:,j)/ddata%conversion(j)
@@ -485,7 +472,7 @@ contains
        
        
        title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
-       map(:,:)   = ddata%sky_model(:,:,j)
+       map(:,:)   = ddata%sky_model(:,:,j)/ddata%conversion(j)
        do i = 0, npix-1
           if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
              map(i,:) = missval
@@ -493,7 +480,8 @@ contains
        end do
        call write_result_map(trim(title), nside, ordering, header, map)
     end do
-    ! Write component maps
+
+    ! Write component maps (all output in uK_RJ)
     do n = 1, ncomp
        output = .true.
        c => component_list(n)%p
@@ -566,8 +554,10 @@ contains
 
     write(*,*) 'Output data files'
 
+    ! Select output formatting
     write(nband_str, '(i4)') nbands
     
+    ! Output total chisquare
     title = trim(dpar%outdir) // 'total_chisq_' // trim(tqu(map_n)) // '.dat'
     inquire(file=title,exist=exist)
     if (exist) then
@@ -575,10 +565,11 @@ contains
     else
        open(33,file=title, status="new", action="write")
     endif
-    call compute_chisq(ddata,dpar)!,dcomps,map_n)
+    call compute_chisq(ddata,dpar)
     write(33,*) ddata%chisq
     close(33)
     
+    ! Output template amplitudes - if applicable
     fmt = '('//trim(nband_str)//'(E17.8))'
     do n = 1, ncomp
        c => component_list(n)%p
@@ -594,16 +585,11 @@ contains
           endif
           write(34,fmt=fmt) c%template_amplitudes(:,map_n)
           close(34)
-          ! else
-          !    do i = 1, c%nindices
-          !       title = trim(dpar%outdir) // trim(c%label) // '_' // trim(c%ind_label(i)) // '.dat'
-          
-          !    end do
-          
        end if
     end do
     
-    write(nband_str, '(i4)') nbands
+
+    ! And finally band calibration values
     
     str_fmt = '('//trim(nband_str)//'(A17))'
     fmt = '('//trim(nband_str)//'(E17.8))'

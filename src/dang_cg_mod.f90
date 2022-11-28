@@ -275,14 +275,11 @@ contains
        alpha      = delta_new/(sum(d*q))
        x_internal = x_internal + alpha*d
 
-       if (mod(i+1,50) == 0) then
-          ! write(*,*) r - alpha*q
-          r = b2 - self%compute_Ax(ddata, x_internal, nbands, flag_n)
-          ! write(*,*) r
-          ! stop
-       else
-          r = r - alpha*q
-       end if
+       ! if (mod(i+1,50) == 0) then
+       !    r = b2 - self%compute_Ax(ddata, x_internal, nbands, flag_n)
+       ! else
+       r = r - alpha*q
+       ! end if
 
        delta_old = delta_new
        delta_new = sum(r*r)
@@ -1033,8 +1030,6 @@ contains
              do j = 1, nbands
                 if (c%corr(j)) then
                    c%template_amplitudes(j,map_n) = self%x(offset+l)
-                   ! write(*,*) c%template_amplitudes(j,map_n)
-                   ! write(*,*) component_list(1)%p%template_amplitudes(j,map_n)
                    l = l + 1
                 end if
              end do
