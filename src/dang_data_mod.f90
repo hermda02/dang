@@ -45,6 +45,7 @@ module dang_data_mod
     procedure :: update_sky_model
     procedure :: convert_maps
     procedure :: mask_hi_threshold
+    procedure :: read_band_offsets
   end type dang_data
 
   private :: i, j, k, l
@@ -140,28 +141,53 @@ contains
     end do
   end subroutine read_data_maps
 
-  ! subroutine read_band_offsets(self,dpar)
-  !   implicit none
-  !   class(dang_data),       intent(inout) :: self
-  !   type(dang_params),      intent(in)    :: dpar
-  !   character(len=512)                    :: file
+  subroutine read_band_offsets(self,dpar)
+    implicit none
+    class(dang_data),       intent(inout) :: self
+    type(dang_params),      intent(in)    :: dpar
+    character(len=512)                    :: file
+    character(len=128)                    :: fmt, nband_str, band
 
-  !   integer(i4b)                          :: i, j, k
-  !   integer(i4b)                          :: unit
+    real(dp)                              :: offset
 
-  !   file = dpar%offset_file
+    logical(lgt)                          :: exist
+    logical(lgt), allocatable, dimension(:) :: loaded
 
-  !   unit = getlun()
+    integer(i4b)                          :: i, j, k
+    integer(i4b)                          :: unit, ios, ierror
 
-  !   if (trim(file) == '') then
-  !      write(*,*) 'No BAND_OFFSET_FILE -- setting all offsets to 0'
-  !   else
-  !      open(unit,trim(dpar%datadir) //file)
-  !   end if
+    allocate(loaded(nbands))
+
+    write(nband_str, '(i4)') nbands
+
+    file = trim(dpar%offset_file)
+
+    unit = getlun()
+    ierror  = 0
+    fmt  = '('//trim(nband_str)//'(E17.8))'
+
+    if (trim(file) == '') then
+       write(*,*) 'No BAND_OFFSET_FILE -- setting all offsets to 0'
+       self%offset(:) = 0.d0
+    else
+       open(unit,file=trim(dpar%datadir)//file)
+       do while (ierror .eq. 0) 
+          read(unit=unit,fmt=*,iostat=ierror) band, offset
+          do j = 1, nbands
+             if (trim(band) == trim(dpar%band_label(j))) then
+                self%offset(j) = offset
+                loaded(j) = .true.
+             end if
+          end do
+       end do
+    end if
+    do j = 1, nbands
+       if (.not. loaded(j)) then
+          write(*,*) trim(dpar%band_label(j))//' offset not loaded -- set to 0'
+       end if
+    end do
     
-
-
-  ! end subroutine read_band_offsets
+  end subroutine read_band_offsets
 
   subroutine update_sky_model(self)
     implicit none
@@ -456,6 +482,14 @@ contains
              end do
              call write_result_map(trim(title), nside, ordering, header, map)
           end do
+          title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
+          map(:,:)   = ddata%sky_model(:,:,j)/ddata%conversion(j)
+          do i = 0, npix-1
+             if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
+                map(i,:) = missval
+             end if
+          end do
+          call write_result_map(trim(title), nside, ordering, header, map)
        end do
     end if
 
@@ -463,16 +497,6 @@ contains
     do j = 1, nbands
        title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
        map(:,:)   = ddata%res_map(:,:,j)/ddata%conversion(j)
-       do i = 0, npix-1
-          if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
-             map(i,:) = missval
-          end if
-       end do
-       call write_result_map(trim(title), nside, ordering, header, map)
-       
-       
-       title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
-       map(:,:)   = ddata%sky_model(:,:,j)/ddata%conversion(j)
        do i = 0, npix-1
           if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
              map(i,:) = missval
@@ -551,11 +575,13 @@ contains
     character(len=2)                    :: temp_n
     character(len=128)                  :: title, fmt, str_fmt
     character(len=4)                    :: nband_str
+    character(len=5)                    :: iter_str
 
     write(*,*) 'Output data files'
 
     ! Select output formatting
     write(nband_str, '(i4)') nbands
+    write(iter_str, '(i0.5)') iter
     
     ! Output total chisquare
     title = trim(dpar%outdir) // 'total_chisq_' // trim(tqu(map_n)) // '.dat'
@@ -590,30 +616,30 @@ contains
     
 
     ! And finally band calibration values
+    fmt = '(a12,f12.8)'
     
-    str_fmt = '('//trim(nband_str)//'(A17))'
-    fmt = '('//trim(nband_str)//'(E17.8))'
-    
-    title = trim(dpar%outdir)//'band_gains.dat'
+    title = trim(dpar%outdir)//'band_gains_k'//iter_str//'.dat'
     inquire(file=title,exist=exist)
     if (exist) then
        open(37,file=title,status="old",position="append",action="write") 
     else
        open(37,file=title,status="new",action="write")
-       write(37,fmt=str_fmt) dpar%band_label
     end if
-    write(37,fmt=fmt) ddata%gain
+    do j = 1, nbands
+       write(37,fmt=fmt) trim(dpar%band_label(j)), ddata%gain(j)
+    end do
     close(37)
     
-    title = trim(dpar%outdir)//'band_offsets.dat'
+    title = trim(dpar%outdir)//'band_offsets_k'//iter_str//'.dat'
     inquire(file=title,exist=exist)
     if (exist) then
        open(38,file=title,status="old",position="append",action="write") 
     else
        open(38,file=title,status="new",action="write")
-       write(38,fmt=str_fmt) dpar%band_label
     end if
-    write(38,fmt=fmt) ddata%offset
+    do j = 1, nbands
+       write(38,fmt=fmt) trim(dpar%band_label(j)), ddata%offset(j)
+    end do
     close(38)
     
   end subroutine write_data

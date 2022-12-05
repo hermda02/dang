@@ -70,6 +70,7 @@ program dang
   !----------------------------------------------------------------------------------------------------------
   call ddata%init_data_maps(dpar)
   call ddata%read_data_maps(dpar)
+  call ddata%read_band_offsets(dpar)
   call ddata%convert_maps(dpar)
   write(*,*) ''
   call initialize_components(dpar)
