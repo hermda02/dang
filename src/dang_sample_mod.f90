@@ -384,6 +384,8 @@ contains
           end do
        end do
     else
+       !$OMP PARALLEL PRIVATE(i,j,k)
+       !$OMP DO SCHEDULE(static)
        do i = 0, npix-1
           do k = map_inds(1), map_inds(2)
              do j = 1, nbands
@@ -391,6 +393,8 @@ contains
              end do
           end do
        end do
+       !$OMP END DO
+       !$OMP END PARALLEL
     end if
 
   end subroutine update_sample_model
