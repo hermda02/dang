@@ -387,32 +387,14 @@ contains
        c => component_list(comp)%p
        ! Remove foregrounds that are not in the CG group or aren't having amplitudes sampled
        if ((c%cg_group /= self%cg_group) .or. (.not. c%sample_amplitude)) then
-          if (c%type /= 'template' .and. c%type /= 'hi_fit') then
-             do i = 0, npix-1
-                if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                do k = 1, nmaps
-                   do j = 1, nbands
-                      data(i,k,j) = data(i,k,j) - c%amplitude(i,k)*c%eval_sed(j,i-1,k)
-                   end do
-                end do
-             end do
-          else if (c%type == 'hi_fit') then
-             do i = 0, npix-1
-                if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+          do i = 0, npix-1
+             if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+             do k = 1, nmaps
                 do j = 1, nbands
-                   data(i,1,j) = data(i,1,j) - c%eval_sed(j,i,1)*c%template_amplitudes(j,1)
+                   data(i,k,j) = data(i,k,j) - c%eval_signal(j,i-1,k)
                 end do
              end do
-          else if (c%type == 'template') then
-             do i = 0, npix-1
-                if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                do k = 1, nmaps
-                   do j = 1, nbands
-                      data(i,k,j) = data(i,k,j) - c%template(i,k)*c%template_amplitudes(j,k)
-                   end do
-                end do
-             end do
-          end if
+          end do
        end if
     end do
 
@@ -479,7 +461,7 @@ contains
           l = 1
           do j = 1, nbands
              if (c%corr(j)) then
-                !!$OMP PARALLEL PRIVATE(i)
+                !!$OMP PARALLEL PRIVATE(i,j,l)
                 !!$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
@@ -668,10 +650,14 @@ contains
              end if
           else if (c%type == 'hi_fit') then
              if (c%corr(j)) then
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    temp1(i) = temp1(i) + x(offset+l)*c%eval_sed(j,i-1,map_n)
                 end do
+                !$OMP END DO
+                !$OMP END PARALLEL
              end if
           else if (c%type == 'template') then
              if (c%corr(j)) then
@@ -697,7 +683,7 @@ contains
        end do
 
        ! Solving temp2 = (N^-1)temp1
-       !!$OMP PARALLEL PRIVATE(i)
+       !!$OMP PARALLEL PRIVATE(i,temp2)
        !!$OMP DO SCHEDULE(static)
        do i = 1, npix
           if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
@@ -752,10 +738,14 @@ contains
              end if
           else if (c%type == 'hi_fit') then
              if (c%corr(j)) then
+                !!$OMP PARALLEL PRIVATE(i)
+                !!$OMP DO SCHEDULE(static)
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    temp3(offset+l) = temp3(offset+l) + temp2(i)*c%eval_sed(j,i-1,1)
                 end do
+                !!$OMP END DO
+                !!$OMP END PARALLEL
                 l = l + 1
              end if
           else if (c%type == 'template') then
