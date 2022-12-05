@@ -243,8 +243,8 @@ contains
        write(*,*) 'Sampling per-pixel'
        ! Pixel-by-pixel
 
-       !!$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num)
-       !!$OMP DO SCHEDULE(static)
+       !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num)
+       !$OMP DO SCHEDULE(static)
        do i = 0, npix-1
           if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == 0.d0) cycle
 
@@ -319,8 +319,8 @@ contains
           ! Cast the final sample back to the component index map
           c%indices(i,map_inds(1):map_inds(2),nind) = sample(nind)
        end do
-       !!$OMP END DO
-       !!$OMP END PARALLEL
+       !$OMP END DO
+       !$OMP END PARALLEL
     end if
 
     deallocate(data,model)
