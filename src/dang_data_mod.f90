@@ -129,16 +129,6 @@ contains
     end do
     
     deallocate(map,rms)
-  
-    ! Read templates
-    do i = 1, dpar%ntemp
-       call read_bintab(dpar%temp_file(i), self%temps(:,:,i), npix,nmaps,nullval,anynull,header=header)
-       ! Normalize templates
-       do k = 1, nmaps
-          self%temp_norm(k,i) = 1.d0!maxval(self%temps(:,k,i))
-          self%temps(:,k,i)   = self%temps(:,k,i)/self%temp_norm(k,i)
-       end do
-    end do
   end subroutine read_data_maps
 
   subroutine read_band_offsets(self,dpar)
@@ -186,6 +176,7 @@ contains
           write(*,*) trim(dpar%band_label(j))//' offset not loaded -- set to 0'
        end if
     end do
+    write(*,*) ''
     
   end subroutine read_band_offsets
 
@@ -216,7 +207,7 @@ contains
                 self%res_map(i,1,j) = (self%sig_map(i,1,j)-self%offset(j))/self%gain(j)-self%sky_model(i,1,j)
              else
                 ! and polarization
-                self%res_map(i,2:3,j) = self%sig_map(i,2:3,j)-self%sky_model(i,2:3,j)
+                self%res_map(i,k,j) = self%sig_map(i,k,j)-self%sky_model(i,k,j)
              end if
           end do
        end do
@@ -234,7 +225,6 @@ contains
     do i = 1, ncomp
        if (component_list(i)%p%type == 'hi_fit') then
           c => component_list(i)%p
-          ! call ddata%mask_hi_threshold(dpar,component_list(i)%p)
        end if
     end do
     do i = 0, npix-1
@@ -259,62 +249,6 @@ contains
     !    end do
     ! end do
   end subroutine mask_hi_threshold
-  
-  ! subroutine dust_correct_band(self,dpar,comp,band,iter)
-  !   implicit none
-  !   type(dang_data),             intent(inout) :: self
-  !   type(dang_params)                          :: dpar
-  !   type(dang_comps)                           :: comp
-  !   integer(i4b),                intent(in)    :: band
-  !   integer(i4b), optional,      intent(in)    :: iter
-  !   real(dp), allocatable, dimension(:,:,:)    :: thermal_map
-  !   integer(i4b)                               :: i, j, k
-  !   character(len=256)                         :: title
-
-  !   real(dp)                                   :: T_d, beta
-
-  !   allocate(thermal_map(0:npix-1,nmaps,nbands))
-
-  !   write(*,'(a,a)') 'Dust correcting band ', trim(dpar%band_label(band))
-  !   if (trim(dpar%dust_corr_type) == 'uniform') then
-  !      T_d    = dpar%mbb_gauss(1,1)
-  !      beta   = dpar%mbb_gauss(2,1)
-  !      do i = 0, npix-1
-  !         do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-  !            thermal_map(i,k,band) = self%temps(i,k,1)*evaluate_mbb(bp(band),353.d9,T_d,beta)
-  !            self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
-  !         end do
-  !      end do
-  !   else if (trim(dpar%dust_corr_type) == 'sample') then
-  !      do i = 0, npix-1
-  !         do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-  !            if (dpar%mbb_gauss(1,2) .gt. 0.d0) then
-  !               T_d    = rand_normal(dpar%mbb_gauss(1,1),dpar%mbb_gauss(1,2))
-  !            else 
-  !               T_d    = dpar%mbb_gauss(1,1)
-  !            end if
-  !            if (dpar%mbb_gauss(2,2) .gt. 0.d0) then
-  !               beta = rand_normal(dpar%mbb_gauss(2,1),dpar%mbb_gauss(2,2))
-  !            else
-  !               beta = dpar%mbb_gauss(2,1)
-  !            end if
-  !            thermal_map(i,k,band) = self%temps(i,k,1)*evaluate_mbb(bp(band),353.d9,T_d,beta)
-  !            self%sig_map(i,k,band) = self%sig_map(i,k,band) - thermal_map(i,k,band)
-  !         end do
-  !      end do
-  !   else if (trim(dpar%dust_corr_type) == 'planck') then
-  !      stop
-  !   end if
-
-
-  !   if (present(iter)) then
-  !      write(iter_str, '(i0.5)') iter
-  !      title = trim(dpar%outdir)//trim(dpar%band_label(band))//'_thermal_map_k' // trim(iter_str) // '.fits'
-  !   else
-  !      title = trim(dpar%outdir)//trim(dpar%band_label(band))//'_thermal_map.fits'
-  !   end if
-  !   call write_result_map(trim(title), nside, ordering, header, thermal_map(:,:,band))
-  ! end subroutine dust_correct_band
 
   subroutine convert_maps(self,dpar)
     ! We want to run everything in uK_RJ (at least for compsep), yeah?
@@ -414,18 +348,6 @@ contains
     integer(i4b)                        :: i, j, k
 
     write(*,fmt='(a)') '---------------------------------------------'
-    ! do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-    !    if (rank == master) then
-    !       if (mod(iter, 1) == 0 .or. iter == 1) then
-    !          write(*,fmt='(i6, a, a, f7.3, a, f8.4, a, 10e10.3)')&
-    !               iter, " - Poltype: "//trim(tqu(k)), " - A_s: ",&
-    !               component_list(1)%p%amplitude(23000,k),  " - beta_s: ",&
-    !               mask_avg(component_list(1)%p%indices(:,k,1),self%masks(:,1)), ' - A_d: ', &
-    !               component_list(2)%p%template_amplitudes(:,k)
-    !          write(*,fmt='(a)') '---------------------------------------------'
-    !       end if
-    !    end if
-    ! end do
     call compute_chisq(self,dpar)
     if (rank == master) then
        if (mod(iter, 1) == 0 .or. iter == 1) then
@@ -533,24 +455,13 @@ contains
        end do
     end do
     ! Write the chisquare map
-    do mn = 1, nmaps
-       ddata%chi_map(:,mn) = 0.d0
-       ! For intensity
-       if (mn == 1) then
-          do i = 0, npix-1
-             do j = 1, nbands
-                ddata%chi_map(i,mn) = ddata%chi_map(i,mn) + ddata%masks(i,1)*(ddata%res_map(i,mn,j)**2)/ddata%rms_map(i,mn,j)**2.d0
-             end do
+    do k = 1, nmaps
+       ddata%chi_map(:,k) = 0.d0
+       do i = 0, npix-1
+          do j = 1, nbands
+             ddata%chi_map(i,k) = ddata%chi_map(i,k) + ddata%masks(i,1)*(ddata%res_map(i,k,j)**2)/ddata%rms_map(i,k,j)**2.d0
           end do
-          
-       else
-          do i = 0, npix-1
-             do j = 1, nbands
-                ddata%chi_map(i,mn) = ddata%chi_map(i,mn) + ddata%masks(i,1)*(ddata%sig_map(i,mn,j) - ddata%sky_model(i,mn,j))**2.d0&
-                     & /ddata%rms_map(i,mn,j)**2.d0
-             end do
-          end do
-       end if
+       end do
     end do
     ddata%chi_map(:,:) = ddata%chi_map(:,:)/(nbands)
     title = trim(dpar%outdir) // 'chisq_k'// trim(iter_str) // '.fits'

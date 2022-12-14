@@ -223,22 +223,22 @@ contains
   end function mask_sum
 
   function return_poltype_flag(string) result(flag)
-    ! ====================================================================
-    ! Here is how our bitwise poltype flagging works:
-    !
-    !               P  U  Q  T
-    !
-    ! T             0  0  0  1   = 1
-    !
-    !     Q + U     1  0  0  0   = 8
-    !
-    ! T,  Q,  U     0  1  1  1   = 7
-    !
-    ! T,  Q + U     1  0  0  1   = 9
-    !
-    ! T + Q + U     1  1  1  1   = 15
-    !
-    ! ====================================================================
+    ! =====================================================================|
+    ! Here is how our bitwise poltype flagging works (not exhaustive list):|
+    !                                                                      |
+    !               P  U  Q  T                                             |
+    !                                                                      |
+    ! T             0  0  0  1   = 1                                       |
+    !                                                                      |
+    !     Q + U     1  0  0  0   = 8                                       |
+    !                                                                      |
+    ! T,  Q,  U     0  1  1  1   = 7                                       |
+    !                                                                      |
+    ! T,  Q + U     1  0  0  1   = 9                                       |
+    !                                                                      |
+    ! T + Q + U     1  1  1  1   = 15                                      |
+    !                                                                      |
+    ! =====================================================================|
     implicit none
 
     character(len=10),               intent(in) :: string

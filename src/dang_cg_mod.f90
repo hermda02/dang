@@ -388,10 +388,10 @@ contains
        ! Remove foregrounds that are not in the CG group or aren't having amplitudes sampled
        if ((c%cg_group /= self%cg_group) .or. (.not. c%sample_amplitude)) then
           do i = 0, npix-1
-             if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
+             if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) cycle
              do k = 1, nmaps
                 do j = 1, nbands
-                   data(i,k,j) = data(i,k,j) - c%eval_signal(j,i-1,k)
+                   data(i,k,j) = data(i,k,j) - c%eval_signal(j,i,k)
                 end do
              end do
           end do
@@ -491,19 +491,19 @@ contains
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                       b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*c%template(i-1,2)
+                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
                       b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*c%template(i-1,3)
+                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
                       b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
-                           & data(i-1,1,j)*c%template(i-1,1)
+                           & data(i-1,1,j)*c%eval_sed(j,i-1,1)
                       b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*c%template(i-1,2)
+                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
                       b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*c%template(i-1,3)
+                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
                    else
                       b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
-                           & data(i-1,map_n,j)*c%template(i-1,map_n)
+                           & data(i-1,map_n,j)*c%eval_sed(j,i-1,map_n)
                    end if
                 end do
                 l = l + 1
@@ -610,6 +610,8 @@ contains
           if (.not. c%sample_amplitude) cycle
 
           if (c%type /= 'template' .and. c%type /= 'hi_fit') then
+             !$OMP PARALLEL PRIVATE(i)
+             !$OMP DO SCHEDULE(static) 
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -623,6 +625,9 @@ contains
                    temp1(i)        = temp1(i) + x(offset+i)       *c%eval_sed(j,i-1,map_n)
                 end if
              end do
+             !$OMP END DO
+             !$OMP END PARALLEL
+             !$OMP BARRIER
              if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                 offset = offset + 2*npix
              else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
@@ -640,9 +645,12 @@ contains
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
+                !$OMP BARRIER
              end if
           else if (c%type == 'template') then
              if (c%corr(j)) then
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -651,15 +659,17 @@ contains
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
                       temp1(i)      = temp1(i)      + x(offset+l)*c%template(i-1,1)
                       temp1(npix+i) = temp1(npix+i) + x(offset+l)*c%template(i-1,2)
-                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*c%template(i-1,3)
+                      temp1(2*npix+i) = temp1(npix+i) + x(offset+l)*c%template(i-1,3)
                    else
                       temp1(i)      = temp1(i) + x(offset+l)*c%template(i-1,map_n)
                    end if
                 end do
+                !$OMP END DO
+                !$OMP END PARALLEL
+                !$OMP BARRIER
              end if
           end if
        end do
-       !$OMP BARRIER
 
        !$OMP PARALLEL PRIVATE(i)
        !$OMP DO SCHEDULE(static) 
@@ -679,7 +689,6 @@ contains
        end do
        !$OMP END DO
        !$OMP END PARALLEL
-
        !$OMP BARRIER
        ! Reset the offset for each multiplication
        offset = 0
@@ -692,6 +701,8 @@ contains
           if (.not. c%sample_amplitude) cycle
 
           if (c%type /= 'template' .and. c%type /= 'hi_fit') then
+             !$OMP PARALLEL PRIVATE(i)
+             !$OMP DO SCHEDULE(static) 
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -705,6 +716,9 @@ contains
                    temp3(offset+i)        = temp1(i)*c%eval_sed(j,i-1,map_n)
                 end if
              end do
+             !$OMP END DO
+             !$OMP END PARALLEL
+             !$OMP BARRIER
              if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                 offset = offset + 2*npix
              else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
@@ -714,19 +728,21 @@ contains
              end if
           else if (c%type == 'hi_fit') then
              if (c%corr(j)) then
-                !$OMP PARALLEL PRIVATE(i)
-                !$OMP DO SCHEDULE(static) 
+                !!$OMP PARALLEL PRIVATE(i)
+                !!$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    temp3(offset+l) = temp3(offset+l) + temp1(i)*c%eval_sed(j,i-1,1)
                 end do
-                !$OMP END DO
-                !$OMP END PARALLEL
-                !$OMP BARRIER
+                !!$OMP END DO
+                !!$OMP END PARALLEL
+                !!$OMP BARRIER
                 l = l + 1 
              end if
           else if (c%type == 'template') then
              if (c%corr(j)) then
+                !!$OMP PARALLEL PRIVATE(i)
+                !!$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -737,12 +753,15 @@ contains
                       temp3(offset+l) = temp3(offset+l) + temp1(i)*c%template(i-1,1)
                       temp3(offset+l) = temp3(offset+l) + temp1(npix+i)*&
                            & c%template(i-1,2)
-                      temp3(offset+l) = temp3(offset+l) + temp1(npix+i)*&
+                      temp3(offset+l) = temp3(offset+l) + temp1(2*npix+i)*&
                            & c%template(i-1,3)
                    else
                       temp3(offset+l) = temp3(offset+l) + temp1(i)*c%template(i-1,map_n)
                    end if
                 end do
+                !!$OMP END DO
+                !!$OMP END PARALLEL
+                !!$OMP BARRIER
                 l = l + 1
              end if
           end if

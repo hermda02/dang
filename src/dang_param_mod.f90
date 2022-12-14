@@ -660,8 +660,7 @@ contains
     call int2string(comp, itext)
 
     do i = 1, par%ntemp
-       call int2string(i,itext)
-       call get_parameter_hashtable(htbl, 'TEMPLATE_FILENAME'//itext,par_string=par%temp_file(i))
+       call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext,par_string=par%temp_file(i))
        call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
             par_string=par%fg_spec_poltype(comp,1))
     end do

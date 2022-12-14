@@ -93,17 +93,7 @@ program dang
      if (dpar%bp_swap) then
         call swap_bp_maps(ddata,dpar)
         write(*,*) ''
-        bp_iter = bp_iter + 1
         call convert_bp_maps(ddata, dpar)
-        write(*,*) ''
-        ! ! Check to see if any swapped maps need to be dust corrected                               
-        ! do j = 1, nbands
-        !    if (dpar%bp_map(j)) then
-        !       if (dpar%dust_corr(j)) then
-        !          call dust_correct_band(ddata,dpar,dcomps,j,iter)
-        !       end if
-        !    end if
-        ! end do
         write(*,*) ''
      end if
      

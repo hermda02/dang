@@ -193,7 +193,7 @@ contains
        allocate(constructor%indices(0:npix-1,nmaps,constructor%nindices))
        allocate(constructor%ind_label(constructor%nindices))
 
-       constructor%ind_label = ['T']
+       constructor%ind_label = ['BETA']
        
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
