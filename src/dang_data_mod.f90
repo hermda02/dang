@@ -357,7 +357,7 @@ contains
              do j = 1, c%nindices
                 if (c%sample_index(j)) then
                    write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' mean:   ',&
-                        mask_avg(c%indices(:,1,j),self%masks(:,1))
+                        mask_avg(c%indices(:,2,j),self%masks(:,1))
                 end if
              end do
           end do

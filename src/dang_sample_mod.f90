@@ -49,7 +49,7 @@ contains
                 else if (iand(c%pol_flag(j,k),8) .ne. 0) then
                    write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = Q+U.'
                    call sample_index_mh(ddata,c,j,-1)
-                else if (iand(c%pol_flag(j,k),15) .ne. 0) then
+                else if (iand(c%pol_flag(j,k),0) .ne. 0) then
                    write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = I+Q+U.'
                    call sample_index_mh(ddata,c,j,-2)
                 else
@@ -96,7 +96,7 @@ contains
     type(dang_comps),   pointer             :: c2
     
     real(dp), allocatable, dimension(:,:,:) :: data, model
-    real(dp), allocatable, dimension(:,:)   :: index
+    real(dp), allocatable, dimension(:,:)   :: index_map
     real(dp), allocatable, dimension(:)     :: sample, theta
     integer(i4b),          dimension(2)     :: map_inds
 
@@ -109,10 +109,18 @@ contains
 
     real(dp)                                :: t1, t2, t3, t4, t5, t6 ! Timing variables
 
+    logical(lgt)                            :: sample_it
+
     ! Here is an object we'll call data, which we will correct to be the
     ! portion of the sky signal we wish to fit to
     allocate(data(0:npix-1,nmaps,nbands))
     allocate(model(0:npix-1,nmaps,nbands))
+
+    allocate(index_map(0:npix-1,nmaps))
+
+    ! This parameter is set in case we want to sample from the prior
+    ! If we do, we turn this to false so we don't get into the sampling loop
+    sample_it = .true.
 
     ! Initialize data and model
     model(0:,:,:) = 0.d0
@@ -184,6 +192,9 @@ contains
           lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
        else if (c%lnl_type(nind) == 'marginal') then
           lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+       else if (c%lnl_type(nind) == 'prior') then
+          sample_it = .false.
+          sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
        end if
        
        if (trim(c%prior_type(nind)) == 'gaussian') then
@@ -193,46 +204,48 @@ contains
        end if
 
        ! Now we do the real sampling
-       do l = 1, nsample
-          
-          ! Update theta with the new sample
-          ! Evaluate model for likelihood evaluation
-          theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
-          if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
-
-          call update_sample_model(model,c,map_inds,theta)
-          
-          ! Evaluate the lnL (already includes the -0.5 out front)
-          if (c%lnl_type(nind) == 'chisq') then
-             lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
-          else if (c%lnl_type(nind) == 'marginal') then
-             lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
-          end if
-
-          ! Ensure prior contributes
-          if (trim(c%prior_type(nind)) == 'gaussian') then
-             lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
-          else if (trim(c%prior_type(nind)) == 'uniform') then
-             lnl_new = lnl
-          end if
-
-          ! Accept/reject
-          diff  = lnl_new - lnl_old
-          ratio = exp(diff)
-
-          if (trim(ml_mode) == 'optimize') then
-             if (ratio > 1.d0) then
-                sample(nind) = theta(nind)
-                lnl_old      = lnl_new
+       if (sample_it) then
+          do l = 1, nsample
+             
+             ! Update theta with the new sample
+             ! Evaluate model for likelihood evaluation
+             theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
+             if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
+             
+             call update_sample_model(model,c,map_inds,theta)
+             
+             ! Evaluate the lnL (already includes the -0.5 out front)
+             if (c%lnl_type(nind) == 'chisq') then
+                lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+             else if (c%lnl_type(nind) == 'marginal') then
+                lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
              end if
-          else if (trim(ml_mode) == 'sample') then
-             call RANDOM_NUMBER(num)
-             if (ratio > num) then
-                sample(nind) = theta(nind)
-                lnl_old      = lnl_new
+             
+             ! Ensure prior contributes
+             if (trim(c%prior_type(nind)) == 'gaussian') then
+                lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+             else if (trim(c%prior_type(nind)) == 'uniform') then
+                lnl_new = lnl
              end if
-          end if
-       end do
+             
+             ! Accept/reject
+             diff  = lnl_new - lnl_old
+             ratio = exp(diff)
+             
+             if (trim(ml_mode) == 'optimize') then
+                if (ratio > 1.d0) then
+                   sample(nind) = theta(nind)
+                   lnl_old      = lnl_new
+                end if
+             else if (trim(ml_mode) == 'sample') then
+                call RANDOM_NUMBER(num)
+                if (ratio > num) then
+                   sample(nind) = theta(nind)
+                   lnl_old      = lnl_new
+                end if
+             end if
+          end do
+       end if
 
        ! Ensure proper handling of poltypes
        ! Cast the final sample back to the component index map
@@ -243,8 +256,8 @@ contains
        write(*,*) 'Sampling per-pixel'
        ! Pixel-by-pixel
 
-       !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num)
-       !$OMP DO SCHEDULE(static)
+       !!$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
+       !!$OMP DO SCHEDULE(static)
        do i = 0, npix-1
           if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == 0.d0) cycle
 
@@ -267,6 +280,9 @@ contains
              lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
           else if (c%lnl_type(nind) == 'marginal') then
              lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
+          else if (c%lnl_type(nind) == 'prior') then
+             sample_it = .false.
+             sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
           end if
 
           if (trim(c%prior_type(nind)) == 'gaussian') then
@@ -276,51 +292,56 @@ contains
           end if
 
           ! Now we do the real sampling
-          do l = 1, nsample
-
-             ! Update theta with the new sample
-             ! Evaluate model for likelihood evaluation
-             theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
-             if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
-             call update_sample_model(model,c,map_inds,theta,i)
-             
-             ! Evaluate likelihood of sample
-             if (c%lnl_type(nind) == 'chisq') then
-                lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
-             else if (c%lnl_type(nind) == 'marginal') then
-                lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
-             end if
-
-             ! With the prior of course
-             if (trim(c%prior_type(nind)) == 'gaussian') then
-                lnl_new = lnl + & 
-                     & log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
-             else if (trim(c%prior_type(nind)) == 'uniform') then
-                lnl_new = lnl
-             end if
-             
-             ! Accept/reject
-             diff  = lnl_new - lnl_old
-             ratio = exp(diff)
-             if (trim(ml_mode) == 'optimize') then
-                if (ratio > 1.d0) then
-                   sample(nind) = theta(nind)
-                   lnl_old      = lnl_new
+          if (sample_it) then
+             do l = 1, nsample
+                
+                ! Update theta with the new sample
+                ! Evaluate model for likelihood evaluation
+                theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
+                if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
+                call update_sample_model(model,c,map_inds,theta,i)
+                
+                ! Evaluate likelihood of sample
+                if (c%lnl_type(nind) == 'chisq') then
+                   lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
+                else if (c%lnl_type(nind) == 'marginal') then
+                   lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
                 end if
-             else if (trim(ml_mode) == 'sample') then
-                call RANDOM_NUMBER(num)
-                if (ratio > num) then
-                   sample(nind) = theta(nind)
-                   lnl_old      = lnl_new
+                
+                ! With the prior of course
+                if (trim(c%prior_type(nind)) == 'gaussian') then
+                   lnl_new = lnl + & 
+                        & log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+                else if (trim(c%prior_type(nind)) == 'uniform') then
+                   lnl_new = lnl
                 end if
-             end if
-          end do
+                
+                ! Accept/reject
+                diff  = lnl_new - lnl_old
+                ratio = exp(diff)
+                if (trim(ml_mode) == 'optimize') then
+                   if (ratio > 1.d0) then
+                      sample(nind) = theta(nind)
+                      lnl_old      = lnl_new
+                   end if
+                else if (trim(ml_mode) == 'sample') then
+                   call RANDOM_NUMBER(num)
+                   if (ratio > num) then
+                      sample(nind) = theta(nind)
+                      lnl_old      = lnl_new
+                   end if
+                end if
+             end do
+          end if
           ! Ensure proper handling of poltypes
           ! Cast the final sample back to the component index map
           c%indices(i,map_inds(1):map_inds(2),nind) = sample(nind)
+          ! index_map(i,map_inds(1):map_inds(2)) = sample(nind)
        end do
-       !$OMP END DO
-       !$OMP END PARALLEL
+       !!$OMP END DO
+       !!$OMP END PARALLEL
+       !!$OMP BARRIER
+       ! c%indices(:,map_inds(1):map_inds(2),nind) = index_map(:,map_inds(1):map_inds(2))
     end if
 
     deallocate(data,model)

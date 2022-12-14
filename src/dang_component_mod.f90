@@ -76,7 +76,7 @@ contains
     class(dang_comps), pointer    :: constructor
     integer(i4b),      intent(in) :: component
 
-    integer(i4b)                  :: i, j, count
+    integer(i4b)                  :: i, j, k, count
 
     integer(i4b), allocatable, dimension(:) :: flag_buffer
 
@@ -504,7 +504,7 @@ contains
     else if (trim(self%type) == 'cmb') then
        spectrum = 1.0/a2t(bp(band))
     else if (trim(self%type) == 'template') then
-       spectrum = 1.d0
+       spectrum = self%template(pix,map_n)
     else if (trim(self%type) == 'hi_fit') then
        ! This isn't even in the right units!
        ! if (present(index)) then

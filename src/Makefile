@@ -3,7 +3,7 @@
 F90       = ifort
 MPF90     = mpiifort
 #DEBUG
-# F90FLAGS  = -g -C -traceback #-O2
+# F90FLAGS  = -g -C -traceback
 F90FLAGS  = -g -traceback -O3
 
 

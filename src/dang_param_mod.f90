@@ -9,7 +9,6 @@ module dang_param_mod
      integer(i4b)                                  :: ngibbs           ! Number of Gibbs iterations
      integer(i4b)                                  :: nsample          ! For internal samplers (MH)
      integer(i4b)                                  :: iter_out         ! Out put maps every <- iterations
-     integer(i4b)                                  :: cg_iter          ! Maximum cg iterations
      integer(i4b)                                  :: bp_burnin        ! Number of burn in samples for BP chains
      integer(i4b)                                  :: bp_max           ! Maximum number of maps from BP chains
      integer(i4b)                                  :: num_chains       ! Number of bp chains used
@@ -51,9 +50,6 @@ module dang_param_mod
      integer(i4b)                                      :: ncomp          ! # of foregrounds
      integer(i4b)                                      :: ntemp          ! # of templates 
      
-     character(len=64)                                 :: dust_corr_type ! Dust correction type (uniform/planck)
-     logical(lgt),       allocatable, dimension(:)     :: dust_corr      ! Storing which bands should be dust corrected
-     
      character(len=512), allocatable, dimension(:)     :: temp_file      ! Template Filename
      character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
      character(len=10),  allocatable, dimension(:)     :: temp_polfit    ! Which poltypes are fit jointly for the template? ex. 'T', 'QU'
@@ -85,8 +81,6 @@ module dang_param_mod
      logical(lgt)                                      :: joint_sample   ! Logical - jointly sample fg amplitudes
      logical(lgt)                                      :: joint_pol      ! Points to which Stokes are jointly sampled
      character(len=512), allocatable, dimension(:)     :: joint_comp     ! Joint sampler components
-     
-     real(dp),           allocatable, dimension(:,:)   :: mbb_gauss      ! MBB Gaussian sampling params for thermal dust subtraction
      
      real(dp)                                          :: thresh         ! Threshold for the HI fitting (sample pixels under thresh)
      character(len=512)                                :: HI_file        ! HI map filename
@@ -386,8 +380,7 @@ contains
     call get_parameter_hashtable(htbl, 'SOLVER_TYPE', par_string=par%solver)
     call get_parameter_hashtable(htbl, 'ML_MODE', par_string=par%ml_mode)
     call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
-    call get_parameter_hashtable(htbl, 'CG_ITER_MAX', par_int=par%cg_iter)
-    call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH', par_dp=par%cg_converge)
+    ! call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH', par_dp=par%cg_converge)
     call get_parameter_hashtable(htbl, 'BP_SWAP',par_lgt=par%bp_swap)
     call get_parameter_hashtable(htbl, 'BP_BURN_IN',par_int=par%bp_burnin)
     call get_parameter_hashtable(htbl, 'BP_MAX_ITER',par_int=par%bp_max)
@@ -461,7 +454,6 @@ contains
     allocate(par%bp_id(n2),par%bp_file(n2))
     allocate(par%band_unit(n2))
     allocate(par%bp_map(n2))
-    allocate(par%dust_corr(n2))
     
     allocate(par%init_gain(n2))
     allocate(par%init_offset(n2))
@@ -496,7 +488,6 @@ contains
        call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(j))
        call get_parameter_hashtable(htbl, 'BAND_FIT_OFFSET'//itext, len_itext=len_itext, par_lgt=par%fit_offs(j))
        call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(j))
-       call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(j))
     end do
   end subroutine read_data_params
   
@@ -519,14 +510,6 @@ contains
     call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
     call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
     call get_parameter_hashtable(htbl, 'NUM_CG_GROUPS', par_int=par%ncggroup)
-    call get_parameter_hashtable(htbl, 'DUST_CORR_TYPE', par_string=par%dust_corr_type)
-       
-    allocate(par%mbb_gauss(2,2))
-    
-    call get_parameter_hashtable(htbl, 'MBB_TD_MEAN',par_dp=par%mbb_gauss(1,1))
-    call get_parameter_hashtable(htbl, 'MBB_TD_STD',par_dp=par%mbb_gauss(1,2))
-    call get_parameter_hashtable(htbl, 'MBB_BETA_MEAN',par_dp=par%mbb_gauss(2,1))
-    call get_parameter_hashtable(htbl, 'MBB_BETA_STD',par_dp=par%mbb_gauss(2,2))
     
     n  = par%ncomp
     n2 = par%ncggroup

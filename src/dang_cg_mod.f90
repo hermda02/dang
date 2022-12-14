@@ -152,9 +152,6 @@ contains
     integer(i4b)                           :: i, f
     real(dp), allocatable, dimension(:)    :: b
 
-    real(dp), allocatable, dimension(:,:)  :: x_map
-    allocate(x_map(0:npix-1,1))
-
     do i = 1, ncg_groups
        if (cg_groups(i)%p%sample) then
           write(*,*) "Computing a CG search of CG group ", i
@@ -221,17 +218,17 @@ contains
        allocate(self%x(n))
 
        ! Initialize on foreground amplitude maps
-       self%x(:) = 0.d0
-       do k = 1, self%ncg_components
-          c => self%cg_component(k)%p
-          if (.not. c%sample_amplitude) cycle
-          if (c%type /= 'template' .and. c%type /= 'hi_fit') then
-             do i = 0, npix-1
-                self%x(i+offset+1) = c%amplitude(i,1)
-             end do
-             offset = offset + npix
-          end if
-       end do
+       self%x(:) = 1.d0
+       ! do k = 1, self%ncg_components
+       !    c => self%cg_component(k)%p
+       !    if (.not. c%sample_amplitude) cycle
+       !    if (c%type /= 'template' .and. c%type /= 'hi_fit') then
+       !       do i = 0, npix-1
+       !          self%x(i+offset+1) = c%amplitude(i,1)
+       !       end do
+       !       offset = offset + npix
+       !    end if
+       ! end do
     end if
 
     allocate(eta(m))
@@ -295,9 +292,6 @@ contains
 
     end do
 
-    ! write(*,*) x_internal
-    ! stop
-
     self%x = x_internal
 
     ! Deallocate
@@ -345,8 +339,16 @@ contains
     ! Here is an object we'll call data, which we will correct to be the                                                      
     ! portion of the sky signal we wish to fit to      
     allocate(data(0:npix-1,nmaps,nbands))
-    do j = 1, nbands
-       data(0:,:,j) = (ddata%sig_map(0:,:,j)-ddata%offset(j))/ddata%gain(j)
+    do k = 1, nmaps
+       if (k == 1) then
+          do j = 1, nbands
+             data(0:,k,j) = (ddata%sig_map(0:,k,j)-ddata%offset(j))/ddata%gain(j)
+          end do
+       else
+          do j = 1, nbands
+             data(0:,k,j) = ddata%sig_map(0:,k,j)
+          end do
+       end if
     end do
 
     m = 0           ! length of the array b
@@ -409,14 +411,14 @@ contains
              do j = 1, nbands
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) then
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      b(i)     = 0.d0
+                      b(i)        = 0.d0
                       b(npix+i)   = 0.d0
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      b(i)     = 0.d0
+                      b(i)        = 0.d0
                       b(npix+i)   = 0.d0
                       b(2*npix+i) = 0.d0
                    else 
-                      b(i)     = 0.d0
+                      b(i)        = 0.d0
                    end if
                    cycle
                 else
@@ -432,10 +434,10 @@ contains
                       b(offset+i) = b(offset+i) + (data(i-1,1,j)*&
                            & c%eval_sed(j,i-1,1))/&
                            & (ddata%rms_map(i-1,1,j)**2.d0)
-                      b(npix+offset+i) = b(npix+offset+i) + (data(i-1,2,j)*&
+                      b(offset+i) = b(offset+i) + (data(i-1,2,j)*&
                            & c%eval_sed(j,i-1,2))/&
                            & (ddata%rms_map(i-1,2,j)**2.d0)
-                      b(2*npix+offset+i) = b(2*npix+offset+i) + (data(i-1,3,j)*&
+                      b(offset+i) = b(offset+i) + (data(i-1,3,j)*&
                            & c%eval_sed(j,i-1,3))/&
                            & (ddata%rms_map(i-1,3,j)**2.d0)
                    else
@@ -615,14 +617,14 @@ contains
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                   temp1(i)        = temp1(i) + x(offset+i)       *c%eval_sed(j,i-1,2)
-                   temp1(npix+i)   = temp1(i) + x(offset+npix+i)  *c%eval_sed(j,i-1,3)
+                   temp1(i)        = temp1(i)        + x(offset+i)       *c%eval_sed(j,i-1,2)
+                   temp1(npix+i)   = temp1(npix+i)   + x(offset+npix+i)  *c%eval_sed(j,i-1,3)
                 else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                   temp1(i)        = temp1(i) + x(offset+i)       *c%eval_sed(j,i-1,1)
-                   temp1(npix+i)   = temp1(i) + x(offset+npix+i)  *c%eval_sed(j,i-1,2)
-                   temp1(2*npix+i) = temp1(i) + x(offset+2*npix+i)*c%eval_sed(j,i-1,3)
+                   temp1(i)        = temp1(i)        + x(offset+i)       *c%eval_sed(j,i-1,1)
+                   temp1(npix+i)   = temp1(npix+i)   + x(offset+npix+i)  *c%eval_sed(j,i-1,2)
+                   temp1(2*npix+i) = temp1(2*npix+i) + x(offset+2*npix+i)*c%eval_sed(j,i-1,3)
                 else
-                   temp1(i)        = temp1(i) + x(offset+i)       *c%eval_sed(j,i-1,map_n)
+                   temp1(i)        = temp1(i)        + x(offset+i)       *c%eval_sed(j,i-1,map_n)
                 end if
              end do
              !$OMP END DO
@@ -654,14 +656,14 @@ contains
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      temp1(i)      = temp1(i)      + x(offset+l)*c%template(i-1,2)
-                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*c%template(i-1,3)
+                      temp1(i)      = temp1(i)          + x(offset+l)*c%eval_sed(j,i-1,2)
+                      temp1(npix+i) = temp1(npix+i)     + x(offset+l)*c%eval_sed(j,i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      temp1(i)      = temp1(i)      + x(offset+l)*c%template(i-1,1)
-                      temp1(npix+i) = temp1(npix+i) + x(offset+l)*c%template(i-1,2)
-                      temp1(2*npix+i) = temp1(npix+i) + x(offset+l)*c%template(i-1,3)
+                      temp1(i)        = temp1(i)        + x(offset+l)*c%eval_sed(j,i-1,1)
+                      temp1(npix+i)   = temp1(npix+i)   + x(offset+l)*c%eval_sed(j,i-1,2)
+                      temp1(2*npix+i) = temp1(2*npix+i) + x(offset+l)*c%eval_sed(j,i-1,3)
                    else
-                      temp1(i)      = temp1(i) + x(offset+l)*c%template(i-1,map_n)
+                      temp1(i)        = temp1(i)        + x(offset+l)*c%eval_sed(j,i-1,map_n)
                    end if
                 end do
                 !$OMP END DO
@@ -677,12 +679,12 @@ contains
        do i = 1, npix
           if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-             temp1(i)        = temp1(i)/(ddata%rms_map(i-1,2,j)**2.d0)
+             temp1(i)        = temp1(i)     /(ddata%rms_map(i-1,2,j)**2.d0)
              temp1(npix+i)   = temp1(npix+i)/(ddata%rms_map(i-1,3,j)**2.d0)
           else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
              temp1(i)        = temp1(i)/(ddata%rms_map(i-1,1,j)**2.d0)
              temp1(npix+i)   = temp1(npix+i)/(ddata%rms_map(i-1,2,j)**2.d0)
-             temp1(2*npix+i) = temp1(npix+i)/(ddata%rms_map(i-1,3,j)**2.d0)
+             temp1(2*npix+i) = temp1(2*npix+i)/(ddata%rms_map(i-1,3,j)**2.d0)
           else
              temp1(i)        = temp1(i)/(ddata%rms_map(i-1,map_n,j)**2.d0)
           end if
@@ -706,14 +708,14 @@ contains
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                   temp3(offset+i)        = temp1(i)*c%eval_sed(j,i-1,2)
-                   temp3(offset+npix+i)   = temp1(npix+i)*c%eval_sed(j,i-1,3)
+                   temp3(offset+i)        = temp1(i)       *c%eval_sed(j,i-1,2)
+                   temp3(offset+npix+i)   = temp1(npix+i)  *c%eval_sed(j,i-1,3)
                 else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                   temp3(offset+i)        = temp1(i)*c%eval_sed(j,i-1,1)
-                   temp3(offset+npix+i)   = temp1(npix+i)*c%eval_sed(j,i-1,2)
+                   temp3(offset+i)        = temp1(i)       *c%eval_sed(j,i-1,1)
+                   temp3(offset+npix+i)   = temp1(npix+i)  *c%eval_sed(j,i-1,2)
                    temp3(offset+2*npix+i) = temp1(2*npix+i)*c%eval_sed(j,i-1,3)
                 else
-                   temp3(offset+i)        = temp1(i)*c%eval_sed(j,i-1,map_n)
+                   temp3(offset+i)        = temp1(i)       *c%eval_sed(j,i-1,map_n)
                 end if
              end do
              !$OMP END DO
@@ -746,17 +748,14 @@ contains
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      temp3(offset+l) = temp3(offset+l) + temp1(i)*c%template(i-1,2)
-                      temp3(offset+l) = temp3(offset+l) + temp1(npix+i)*&
-                           & c%template(i-1,3)
+                      temp3(offset+l) = temp3(offset+l) + temp1(i)*c%eval_sed(j,i-1,2)
+                      temp3(offset+l) = temp3(offset+l) + temp1(npix+i)*c%eval_sed(j,i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      temp3(offset+l) = temp3(offset+l) + temp1(i)*c%template(i-1,1)
-                      temp3(offset+l) = temp3(offset+l) + temp1(npix+i)*&
-                           & c%template(i-1,2)
-                      temp3(offset+l) = temp3(offset+l) + temp1(2*npix+i)*&
-                           & c%template(i-1,3)
+                      temp3(offset+l) = temp3(offset+l) + temp1(i)*c%eval_sed(j,i-1,1)
+                      temp3(offset+l) = temp3(offset+l) + temp1(npix+i)*c%eval_sed(j,i-1,2)
+                      temp3(offset+l) = temp3(offset+l) + temp1(2*npix+i)*c%eval_sed(j,i-1,3)
                    else
-                      temp3(offset+l) = temp3(offset+l) + temp1(i)*c%template(i-1,map_n)
+                      temp3(offset+l) = temp3(offset+l) + temp1(i)*c%eval_sed(j,i-1,map_n)
                    end if
                 end do
                 !!$OMP END DO
