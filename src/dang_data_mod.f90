@@ -358,19 +358,19 @@ contains
                 if (c%sample_index(j)) then
                    do k = 1, c%nflag(j)
                       if (iand(c%pol_flag(j,k),1) .ne. 0) then
-                         write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' I mean:   ',&
+                         write(*,fmt='(a,a,a,a,a,f12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' I mean:   ',&
                               mask_avg(c%indices(:,1,j),self%masks(:,1))
                       else if (iand(c%pol_flag(j,k),2) .ne. 0) then
-                         write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' Q mean:   ',&
+                         write(*,fmt='(a,a,a,a,a,f12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' Q mean:   ',&
                               mask_avg(c%indices(:,2,j),self%masks(:,1))
                       else if (iand(c%pol_flag(j,k),4) .ne. 0) then
-                         write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' U mean:   ',&
+                         write(*,fmt='(a,a,a,a,a,f12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' U mean:   ',&
                               mask_avg(c%indices(:,3,j),self%masks(:,1))
                       else if (iand(c%pol_flag(j,k),8) .ne. 0) then
-                         write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' Q+U mean:   ',&
+                         write(*,fmt='(a,a,a,a,a,f12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' Q+U mean:   ',&
                               mask_avg(c%indices(:,2,j),self%masks(:,1))
                       else if (iand(c%pol_flag(j,k),0) .ne. 0) then
-                         write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' I+Q+U mean:   ',&
+                         write(*,fmt='(a,a,a,a,a,f12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' I+Q+U mean:   ',&
                               mask_avg(c%indices(:,1,j),self%masks(:,1))
                       end if
                    end do
@@ -523,23 +523,24 @@ contains
     call compute_chisq(ddata,dpar)
     write(33,*) ddata%chisq
     close(33)
-    
+
     ! Output template amplitudes - if applicable
-    fmt = '('//trim(nband_str)//'(E17.8))'
+    ! fmt = '('//trim(nband_str)//'(E17.8))'
     do n = 1, ncomp
        c => component_list(n)%p
        if (trim(c%type) == 'template' .or. trim(c%type) == 'hi_fit') then
+          unit = getlun()
           title = trim(dpar%outdir) //  trim(c%label) // '_' //trim(tqu(map_n)) // '_amplitudes.dat'
           inquire(file=title,exist=exist)
           if (exist) then
-             open(34,file=title, status="old", &
+             open(unit,file=title, status="old", &
                   position="append", action="write")
           else
-             open(34,file=title, status="new", action="write")
-             write(34,fmt='('//trim(nband_str)//'(A17))') dpar%band_label
+             open(unit,file=title, status="new", action="write")
+             write(unit,fmt='('//trim(nband_str)//'(A17))') dpar%band_label
           endif
-          write(34,fmt=fmt) c%template_amplitudes(:,map_n)
-          close(34)
+          write(unit,fmt='('//trim(nband_str)//'(E17.8))') c%template_amplitudes(:,map_n)
+          close(unit)
        end if
        do j = 1, c%nindices
           if (c%sample_index(j)) then
