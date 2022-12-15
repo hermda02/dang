@@ -356,8 +356,24 @@ contains
              c => component_list(i)%p
              do j = 1, c%nindices
                 if (c%sample_index(j)) then
-                   write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' mean:   ',&
-                        mask_avg(c%indices(:,2,j),self%masks(:,1))
+                   do k = 1, c%nflag(j)
+                      if (iand(c%pol_flag(j,k),1) .ne. 0) then
+                         write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' I mean:   ',&
+                              mask_avg(c%indices(:,1,j),self%masks(:,1))
+                      else if (iand(c%pol_flag(j,k),2) .ne. 0) then
+                         write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' Q mean:   ',&
+                              mask_avg(c%indices(:,2,j),self%masks(:,1))
+                      else if (iand(c%pol_flag(j,k),4) .ne. 0) then
+                         write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' U mean:   ',&
+                              mask_avg(c%indices(:,3,j),self%masks(:,1))
+                      else if (iand(c%pol_flag(j,k),8) .ne. 0) then
+                         write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' Q+U mean:   ',&
+                              mask_avg(c%indices(:,2,j),self%masks(:,1))
+                      else if (iand(c%pol_flag(j,k),0) .ne. 0) then
+                         write(*,fmt='(a,a,a,a,a,e12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' I+Q+U mean:   ',&
+                              mask_avg(c%indices(:,1,j),self%masks(:,1))
+                      end if
+                   end do
                 end if
              end do
           end do
@@ -482,9 +498,10 @@ contains
     type(dang_data)                     :: ddata
     type(dang_comps),         pointer   :: c
     integer(i4b),            intent(in) :: map_n
-    integer(i4b)                        :: i, n
+    integer(i4b)                        :: i, j, n, unit
     character(len=2)                    :: temp_n
     character(len=128)                  :: title, fmt, str_fmt
+    character(len=1)                    :: nmaps_str
     character(len=4)                    :: nband_str
     character(len=5)                    :: iter_str
 
@@ -493,6 +510,7 @@ contains
     ! Select output formatting
     write(nband_str, '(i4)') nbands
     write(iter_str, '(i0.5)') iter
+    write(nmaps_str, '(i1)') nmaps
     
     ! Output total chisquare
     title = trim(dpar%outdir) // 'total_chisq_' // trim(tqu(map_n)) // '.dat'
@@ -523,6 +541,20 @@ contains
           write(34,fmt=fmt) c%template_amplitudes(:,map_n)
           close(34)
        end if
+       do j = 1, c%nindices
+          if (c%sample_index(j)) then
+             fmt = '('//nmaps_str//'(f12.8))'
+             unit = getlun()
+             title = trim(dpar%outdir) // trim(c%label) //'_' // trim(c%ind_label(j))//'_mean_'// trim(tqu(map_n)) // '.dat'
+             inquire(file=title,exist=exist)
+             if (exist) then
+                open(unit,file=title,status="old",position="append",action="write")
+             else
+                open(unit,file=title,status="new",action="write")
+             end if
+             write(unit,fmt=fmt) mask_avg(c%indices(:,map_n,j),ddata%masks(:,1))
+          end if
+       end do
     end do
     
 
