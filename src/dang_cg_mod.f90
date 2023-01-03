@@ -218,7 +218,7 @@ contains
        allocate(self%x(n))
 
        ! Initialize on foreground amplitude maps
-       self%x(:) = 1.d0
+       self%x(:) = 0.d0
        ! do k = 1, self%ncg_components
        !    c => self%cg_component(k)%p
        !    if (.not. c%sample_amplitude) cycle
