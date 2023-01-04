@@ -201,7 +201,7 @@ contains
        allocate(constructor%ind_label(constructor%nindices))
 
 
-       constructor%ind_label = ['BETA']
+       constructor%ind_label = ['beta']
        
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
@@ -285,7 +285,7 @@ contains
        allocate(constructor%indices(0:npix-1,nmaps,constructor%nindices))
        allocate(constructor%ind_label(constructor%nindices))
 
-       constructor%ind_label = ['T_E']
+       constructor%ind_label = ['T_e']
        
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
@@ -835,11 +835,11 @@ contains
 
     ! Evaluate
     if (bp(band)%id == 'delta') then
-       spectrum = exp(-0.5*(log(bp(band)%nu_c/nu_p)/w_ame)**2)*(self%nu_ref/bp(band)%nu_c)**2
+       spectrum = exp(-0.5*(log(bp(band)%nu_c/(nu_p*1e9))/w_ame)**2)*(self%nu_ref/bp(band)%nu_c)**2
     else
        do i = 1, bp(band)%n
           spectrum = spectrum + bp(band)%tau0(i)*&
-               & exp(-0.5*(log(bp(band)%nu0(i)/nu_p)/w_ame)**2)*(self%nu_ref/bp(band)%nu0(i))**2
+               & exp(-0.5*(log(bp(band)%nu0(i)/(nu_p*1e9))/w_ame)**2)*(self%nu_ref/bp(band)%nu0(i))**2
        end do
     end if
 
@@ -847,11 +847,8 @@ contains
 
   end function evaluate_lognormal
 
-
   function evaluate_freefree(self, band, pix, map_n, theta)
     ! always computed in RJ units
-
-    ! s_nu = A_AME*exp(-0.5*(log(nu/nu_p)/w_ame)**2)*(nu_ref/n)**2
     
     implicit none
     class(dang_comps)                  :: self
