@@ -288,8 +288,8 @@ contains
        write(*,*) 'Sampling per-pixel at nside ', c%sample_nside(nind)
        ! Pixel-by-pixel
 
-       !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
-       !$OMP DO SCHEDULE(static)
+       !!$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
+       !!$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
           if (mask(i,1) == 0.d0 .or. mask(i,1) == 0.d0) cycle
 
@@ -369,9 +369,9 @@ contains
           ! Cast the final sample back to the component index map
           index_map(i,map_inds(1):map_inds(2)) = sample(nind)
        end do
-       !$OMP END DO
-       !$OMP END PARALLEL
-       !$OMP BARRIER
+       !!$OMP END DO
+       !!$OMP END PARALLEL
+       !!$OMP BARRIER
        call udgrade_ring(index_map,c%sample_nside(nind),index_full_res,nside)
        c%indices(:,map_inds(1):map_inds(2),nind) = index_full_res(:,map_inds(1):map_inds(2))
     end if
