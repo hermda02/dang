@@ -328,6 +328,8 @@ contains
     integer(i4b)                                                :: i, j, k
 
     self%chisq = 0.d0
+    !$OMP PARALLEL PRIVATE(i,j,k)
+    !$OMP DO SCHEDULE(static)
     do i = 0, npix-1
        if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
        do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
@@ -344,7 +346,8 @@ contains
           end if
        end do
     end do
-    self%chisq = self%chisq
+    !$OMP END DO
+    !$OMP END PARALLEL
     
   end subroutine compute_chisq
 
@@ -423,11 +426,7 @@ contains
                 end do
              end do
              ! Mask it!
-             do i = 0, npix-1
-                if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
-                   map(i,:) = missval
-                end if
-             end do
+             call apply_mask(map,ddata%masks(:,1),missing=.true.)
              call write_result_map(trim(title), nside, ordering, header, map)
           end do
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
@@ -445,11 +444,8 @@ contains
     do j = 1, nbands
        title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
        map(:,:)   = ddata%res_map(:,:,j)/ddata%conversion(j)
-       do i = 0, npix-1
-          if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
-             map(i,:) = missval
-          end if
-       end do
+       ! Mask it!
+       call apply_mask(map,ddata%masks(:,1),missing=.true.)
        call write_result_map(trim(title), nside, ordering, header, map)
     end do
 
@@ -459,22 +455,16 @@ contains
        c => component_list(n)%p
        title = trim(dpar%outdir) // trim(c%label) // '_c001_k' // trim(iter_str) // '.fits'
        map(:,:)   = c%amplitude
-       do i = 0, npix-1
-          if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
-             map(i,:) = missval
-          end if
-       end do
+       ! Mask it!
+       call apply_mask(map,ddata%masks(:,1),missing=.true.)
        call write_result_map(trim(title), nside, ordering, header, map)
 
        do l = 1, c%nindices
           title = trim(dpar%outdir) // trim(c%label) //&
                '_' // trim(c%ind_label(l))//'_k' // trim(iter_str) // '.fits'
           map(:,:) = c%indices(:,:,l)
-          do i = 0, npix-1
-             if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
-                map(i,:) = missval
-             end if
-          end do
+          ! Mask it!
+          call apply_mask(map,ddata%masks(:,1),missing=.true.)
           call write_result_map(trim(title),nside,ordering,header,map)
        end do
     end do
@@ -490,12 +480,8 @@ contains
     ddata%chi_map(:,:) = ddata%chi_map(:,:)/(nbands)
     title = trim(dpar%outdir) // 'chisq_k'// trim(iter_str) // '.fits'
     map(:,:)   = ddata%chi_map(:,:)
-    do i = 0, npix-1
-       if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
-          map(i,:) = missval
-          ddata%chi_map(i,:) = missval
-       end if
-    end do
+    ! Mask it!
+    call apply_mask(map,ddata%masks(:,1),missing=.true.)
     call write_result_map(trim(title), nside, ordering, header, map)
     
   end subroutine write_maps

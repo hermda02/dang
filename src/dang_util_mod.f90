@@ -371,5 +371,40 @@ contains
     end if
 
   end subroutine udgrade_mask
+
+  subroutine apply_mask(map,mask,missing)
+    implicit none
+
+    real(dp), dimension(:,:), intent(inout) :: map
+    real(dp), dimension(:),   intent(in)    :: mask
+    logical(lgt)                            :: missing
+
+    integer(i4b)                            :: i, k
+    integer(i4b)                            :: pix0, pixn
+    integer(i4b)                            :: map0, mapn
+    real(dp)                                :: mask_val
+
+    if (missing) then
+       mask_val = missval
+    else
+       mask_val = 0.d0
+    end if
+
+    pix0 = lbound(map,DIM=1); pixn = ubound(map,DIM=1)
+    map0 = lbound(map,DIM=2); mapn = ubound(map,DIM=2)
+
+    !$OMP PARALLEL PRIVATE(i,k)
+    !$OMP DO
+    do i = pix0, pixn
+       do k = map0, mapn
+          if (mask(i) == 0.d0) then
+             map(i,k) = mask_val
+          end if
+       end do
+    end do
+    !$OMP END DO
+    !$OMP END PARALLEL
+    !$OMP BARRIER
+  end subroutine apply_mask
   
 end module dang_util_mod
