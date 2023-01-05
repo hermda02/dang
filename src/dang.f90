@@ -96,21 +96,14 @@ program dang
         call convert_bp_maps(ddata, dpar)
         write(*,*) ''
      end if
-     
      ! ------------------------------------------------------------------------------------------
      ! Sample each CG group for amplitudes
      ! ------------------------------------------------------------------------------------------
      call sample_cg_groups(dpar,ddata)
-     call ddata%update_sky_model
-     call write_stats_to_term(ddata,dpar,iter)
-     
      ! ------------------------------------------------------------------------------------------
      ! Sample each spectral parameter
      ! ------------------------------------------------------------------------------------------
-     call sample_spectral_parameters(ddata)
-     call ddata%update_sky_model
-     call write_stats_to_term(ddata,dpar,iter)
-     
+     call sample_spectral_parameters(dpar,ddata)
      ! ------------------------------------------------------------------------------------------
      ! Sample band calibrators
      ! ------------------------------------------------------------------------------------------

@@ -341,7 +341,11 @@ contains
     real(dp), dimension(:,:) :: data_out
     integer(i4b), intent(in) :: nside_in, nside_out
 
-    call udgrade_ring(data_in, nside_in, data_out, nside_out)
+    real(dp), allocatable, dimension(:,:) :: data_buffer
+
+    data_buffer = data_in*data_in
+
+    call udgrade_ring(data_buffer, nside_in, data_out, nside_out)
 
     data_out = sqrt(data_out)*(nside_out*1.d0/nside_in)
 
@@ -350,11 +354,12 @@ contains
   subroutine udgrade_mask(data_in, nside_in, data_out, nside_out,threshold)
     implicit none
 
+
     real(dp), dimension(:,:) :: data_in
     real(dp), dimension(:,:) :: data_out
     integer(i4b), intent(in) :: nside_in, nside_out
     real(dp)                 :: threshold
-
+    
     call udgrade_ring(data_in, nside_in, data_out, nside_out)
 
     if (nside_in > nside_out) then

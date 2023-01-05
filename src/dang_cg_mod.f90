@@ -146,7 +146,7 @@ contains
     !                                                       |
     ! ===================================================== |
     implicit none
-    type(dang_data),         intent(in)    :: ddata
+    type(dang_data)                        :: ddata
     type(dang_params)                      :: dpar
 
     integer(i4b)                           :: i, f
@@ -161,6 +161,8 @@ contains
              call cg_groups(i)%p%unpack_amplitudes(f)
              if (allocated(b)) deallocate(b)
           end do
+          call ddata%update_sky_model
+          call write_stats_to_term(ddata,dpar,iter)
        end if
     end do
 

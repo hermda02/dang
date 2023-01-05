@@ -17,23 +17,34 @@ module dang_sample_mod
   
 contains
 
-  subroutine sample_spectral_parameters(ddata)
+  subroutine sample_spectral_parameters(dpar,ddata)
     ! ============================================ |
     ! This function simply loops over each of the  |
     ! parameters, checking to see if their indices |
     ! ought to be sampled.                         |
     ! ============================================ |
-
     implicit none
 
-    type(dang_data),             intent(in) :: ddata
-    type(dang_comps),            pointer    :: c
-    integer(i4b)                            :: i, j, k
+    type(dang_data)              :: ddata
+    type(dang_params)            :: dpar
+    type(dang_comps), pointer    :: c
+    integer(i4b)                 :: i, j, k
+
+    logical(lgt)                 :: sampled
+
+    sampled = .false.
 
     ! Loop over all foregrounds and sample for indices
     do i = 1, ncomp
        c => component_list(i)%p
+       ! if there are no indices, don't even look
        if (c%nindices == 0) cycle
+       ! if none get sampled, don't even look
+       if  (any(c%sample_index)) then
+          sampled = .true.
+       else
+          cycle
+       end if
        do j = 1, c%nindices
           if (c%sample_index(j)) then
              do k = 1, c%nflag(j)
@@ -60,6 +71,11 @@ contains
           end if
        end do
     end do
+
+    if (sampled) then
+       call ddata%update_sky_model
+       call write_stats_to_term(ddata,dpar,iter)
+    end if
 
   end subroutine sample_spectral_parameters
   
