@@ -106,9 +106,9 @@ contains
     ! Read maskfile
     call read_bintab(dpar%mask_file,self%masks,npix,1,nullval,anynull,header=header)
     do i = 0, npix-1
-       do j = 1, nmaps
-          if (self%masks(i,j) == 0.d0 .or. self%masks(i,j) == missval) then
-             self%masks(i,j) = missval
+       do k = 1, nmaps
+          if (self%masks(i,k) == 0.d0 .or. self%masks(i,k) == missval) then
+             self%masks(i,k) = 0.d0
           else 
              nump = nump + 1
           end if
@@ -189,6 +189,8 @@ contains
     self%sky_model(:,:,:) = 0.d0
     do l = 1, ncomp
        c => component_list(l)%p
+       !$OMP PARALLEL PRIVATE(i,j,k)
+       !$OMP DO SCHEDULE(static)
        do i = 0, npix-1
           do k = 1, nmaps
              do j = 1, nbands
@@ -196,9 +198,14 @@ contains
              end do
           end do
        end do
+       !$OMP END DO
+       !$OMP END PARALLEL
     end do
+    !$OMP BARRIER
 
     ! Calculate the residual
+    !$OMP PARALLEL PRIVATE(i,j,k)
+    !$OMP DO SCHEDULE(static)
     do i = 0, npix-1
        do k = 1, nmaps
           do j = 1, nbands
@@ -212,6 +219,9 @@ contains
           end do
        end do
     end do
+    !$OMP END DO
+    !$OMP END PARALLEL
+    !$OMP BARRIER
 
   end subroutine update_sky_model
 
@@ -455,17 +465,15 @@ contains
           end if
        end do
        call write_result_map(trim(title), nside, ordering, header, map)
+
        do l = 1, c%nindices
           title = trim(dpar%outdir) // trim(c%label) //&
                '_' // trim(c%ind_label(l))//'_k' // trim(iter_str) // '.fits'
+          map(:,:) = c%indices(:,:,l)
           do i = 0, npix-1
              if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                 map(i,:) = missval
-                cycle
              end if
-             do k = 1, nmaps
-                map(i,k) = c%indices(i,k,l)
-             end do
           end do
           call write_result_map(trim(title),nside,ordering,header,map)
        end do

@@ -1,6 +1,7 @@
 module dang_util_mod
   use healpix_types
   use pix_tools
+  use udgrade_nr
   use fitstools
   use head_fits
   use mpi
@@ -333,5 +334,42 @@ contains
 
   end subroutine read_map
 
+  subroutine udgrade_rms(data_in, nside_in, data_out, nside_out)
+    implicit none
+
+    real(dp), dimension(:,:) :: data_in
+    real(dp), dimension(:,:) :: data_out
+    integer(i4b), intent(in) :: nside_in, nside_out
+
+    real(dp), allocatable, dimension(:,:) :: data_buffer
+
+    data_buffer = data_in*data_in
+
+    call udgrade_ring(data_buffer, nside_in, data_out, nside_out)
+
+    data_out = sqrt(data_out)*(nside_out*1.d0/nside_in)
+
+  end subroutine udgrade_rms
+
+  subroutine udgrade_mask(data_in, nside_in, data_out, nside_out,threshold)
+    implicit none
+
+
+    real(dp), dimension(:,:) :: data_in
+    real(dp), dimension(:,:) :: data_out
+    integer(i4b), intent(in) :: nside_in, nside_out
+    real(dp)                 :: threshold
+    
+    call udgrade_ring(data_in, nside_in, data_out, nside_out)
+
+    if (nside_in > nside_out) then
+       where (data_out < threshold)
+          data_out = 0.d0
+       elsewhere
+          data_out = 1.d0
+       end where
+    end if
+
+  end subroutine udgrade_mask
   
 end module dang_util_mod

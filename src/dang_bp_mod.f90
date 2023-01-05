@@ -49,7 +49,7 @@ contains
          threshold = 0.d0
        end if
        if (trim(dpar%bp_file(i)) /= '') then
-          call read_bandpass(trim(dpar%bp_file(i)), threshold, bp(i)%n, bp(i)%nu0, bp(i)%tau0)
+          call read_bandpass(trim(dpar%datadir)//trim(dpar%bp_file(i)), threshold, bp(i)%n, bp(i)%nu0, bp(i)%tau0)
           bp(i)%tau0 = normalize_bandpass(bp(i)%tau0)
           allocate(bp(i)%nu(bp(i)%n), bp(i)%tau(bp(i)%n))
        end if

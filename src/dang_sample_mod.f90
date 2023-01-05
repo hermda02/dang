@@ -17,23 +17,34 @@ module dang_sample_mod
   
 contains
 
-  subroutine sample_spectral_parameters(ddata)
+  subroutine sample_spectral_parameters(dpar,ddata)
     ! ============================================ |
     ! This function simply loops over each of the  |
     ! parameters, checking to see if their indices |
     ! ought to be sampled.                         |
     ! ============================================ |
-
     implicit none
 
-    type(dang_data),             intent(in) :: ddata
-    type(dang_comps),            pointer    :: c
-    integer(i4b)                            :: i, j, k
+    type(dang_data)              :: ddata
+    type(dang_params)            :: dpar
+    type(dang_comps), pointer    :: c
+    integer(i4b)                 :: i, j, k
+
+    logical(lgt)                 :: sampled
+
+    sampled = .false.
 
     ! Loop over all foregrounds and sample for indices
     do i = 1, ncomp
        c => component_list(i)%p
+       ! if there are no indices, don't even look
        if (c%nindices == 0) cycle
+       ! if none get sampled, don't even look
+       if  (any(c%sample_index)) then
+          sampled = .true.
+       else
+          cycle
+       end if
        do j = 1, c%nindices
           if (c%sample_index(j)) then
              do k = 1, c%nflag(j)
@@ -41,16 +52,16 @@ contains
                    write(*,*) 'Sampling spectral index ', trim(c%ind_label(j)), ' for ', trim(c%label), ', poltype = I.'
                    call sample_index_mh(ddata,c,j,1)
                 else if (iand(c%pol_flag(j,k),2) .ne. 0) then
-                   write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = Q.'
+                   write(*,*) 'Sampling spectral index ', trim(c%ind_label(j)), ' for ', trim(c%label), ', poltype = Q.'
                    call sample_index_mh(ddata,c,j,2)
                 else if (iand(c%pol_flag(j,k),4) .ne. 0) then
-                   write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = U.'
+                   write(*,*) 'Sampling spectral index ', trim(c%ind_label(j)), ' for ', trim(c%label), ', poltype = U.'
                    call sample_index_mh(ddata,c,j,3)
                 else if (iand(c%pol_flag(j,k),8) .ne. 0) then
-                   write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = Q+U.'
+                   write(*,*) 'Sampling spectral index ', trim(c%ind_label(j)), ' for ', trim(c%label), ', poltype = Q+U.'
                    call sample_index_mh(ddata,c,j,-1)
                 else if (iand(c%pol_flag(j,k),0) .ne. 0) then
-                   write(*,*) 'Sampling spectral index for ', trim(c%label), ', poltype = I+Q+U.'
+                   write(*,*) 'Sampling spectral index ', trim(c%ind_label(j)), ' for ', trim(c%label), ', poltype = I+Q+U.'
                    call sample_index_mh(ddata,c,j,-2)
                 else
                    write(*,*) "There is something wrong with the poltype flag"
@@ -60,6 +71,11 @@ contains
           end if
        end do
     end do
+
+    if (sampled) then
+       call ddata%update_sky_model
+       call write_stats_to_term(ddata,dpar,iter)
+    end if
 
   end subroutine sample_spectral_parameters
   
@@ -94,66 +110,35 @@ contains
     integer(i4b),                intent(in) :: nind
     integer(i4b),                intent(in) :: map_n
     type(dang_comps),   pointer             :: c2
+    logical(lgt)                            :: sample_it
     
-    real(dp), allocatable, dimension(:,:,:) :: data, model
-    real(dp), allocatable, dimension(:,:)   :: index_map
     real(dp), allocatable, dimension(:)     :: sample, theta
     integer(i4b),          dimension(2)     :: map_inds
 
-    integer(i4b)                            :: i, j, k
-    integer(i4b)                            :: l, m, n, mh_mode
+    ! Arrays for the native resolution data/rms
+    real(dp), allocatable, dimension(:,:,:) :: data_raw, rms_raw
+    real(dp), allocatable, dimension(:,:)   :: mask_raw
+    real(dp), allocatable, dimension(:,:)   :: index_full_res
+
+    ! And what's used in the routines:
+    real(dp), allocatable, dimension(:,:,:) :: data, rms
+    real(dp), allocatable, dimension(:,:,:) :: model
+    real(dp), allocatable, dimension(:,:)   :: mask, index_map
+
+    integer(i4b)                            :: i, j, k, sample_npix
+    integer(i4b)                            :: l, m, n
+
+    ! Metropolis parameters
     real(dp)                                :: lnl, lnl_old, lnl_new
     real(dp)                                :: diff, ratio, num
 
-    real(dp), dimension(1000)               :: theta_grid, lnl_grid
+    ! real(dp), dimension(1000)               :: theta_grid, lnl_grid
 
     real(dp)                                :: t1, t2, t3, t4, t5, t6 ! Timing variables
-
-    logical(lgt)                            :: sample_it
-
-    ! Here is an object we'll call data, which we will correct to be the
-    ! portion of the sky signal we wish to fit to
-    allocate(data(0:npix-1,nmaps,nbands))
-    allocate(model(0:npix-1,nmaps,nbands))
-
-    allocate(index_map(0:npix-1,nmaps))
 
     ! This parameter is set in case we want to sample from the prior
     ! If we do, we turn this to false so we don't get into the sampling loop
     sample_it = .true.
-
-    ! Initialize data and model
-    model(0:,:,:) = 0.d0
-    do j = 1, nbands
-       data(0:,:,j)  = ddata%sig_map(0:,:,j)/ddata%gain(j)
-    end do
-
-    ! Loop over components, remove all others
-    do l = 1, ncomp
-       c2 => component_list(l)%p
-       if (c2%label /= c%label) then
-          if (c2%type /='template') then
-             do i = 0, npix-1
-                do k = 1, nmaps
-                   do j = 1, nbands
-                      data(i,k,j) = data(i,k,j) - c2%amplitude(i,k)*c2%eval_sed(j,i,k)
-                   end do
-                end do
-             end do
-          else if (c2%type == 'template') then
-             do i = 0, npix-1
-                do k = 1, nmaps
-                   do j = 1, nbands
-                      data(i,k,j) = data(i,k,j) - c2%template(i,k)*c2%template_amplitudes(j,k)
-                   end do
-                end do
-             end do
-          end if
-       end if
-    end do
-
-    ! Initialize index map from previous Gibbs iteration
-    allocate(sample(c%nindices),theta(c%nindices))
     
     ! Little extra section here for mode determination
     !=================================================
@@ -169,13 +154,76 @@ contains
        map_inds(1) = map_n; map_inds(2) = map_n
     end if
     !=================================================
+
+    ! Here is an object we'll call data, which we will correct to be the
+    ! portion of the sky signal we wish to fit to
+    allocate(data_raw(0:npix-1,nmaps,nbands))
+    allocate(rms_raw(0:npix-1,nmaps,nbands))
+    allocate(mask_raw(0:npix-1,nmaps))
     
+    ! Initialize data and model
+    do j = 1, nbands
+       data_raw(0:,1,j)   = ddata%sig_map(0:,1,j)/ddata%gain(j)
+       data_raw(0:,2:3,j) = ddata%sig_map(0:,2:3,j)
+       rms_raw(0:,:,j)    = ddata%rms_map(0:,:,j)
+    end do
+    mask_raw = ddata%masks
+
+    ! Loop over components, remove all others
+    do l = 1, ncomp
+       c2 => component_list(l)%p
+       if (c2%label /= c%label) then
+          do i = 0, npix-1
+             do k = 1, nmaps
+                do j = 1, nbands
+                   data_raw(i,k,j) = data_raw(i,k,j) - c2%eval_signal(j,i,k)
+                end do
+             end do
+          end do
+       end if
+    end do
+
+    ! Set up data structures at the appropriate nside
+    sample_npix = 12*c%sample_nside(nind)**2
+    allocate(data(0:sample_npix-1,nmaps,nbands))   
+    allocate(rms(0:sample_npix-1,nmaps,nbands))   
+    allocate(mask(0:sample_npix-1,nmaps))   
+
+    if (nside == c%sample_nside(nind)) then
+       data = data_raw
+       rms  = rms_raw 
+       mask = mask_raw
+    else
+       ! udgrade the mask
+       call udgrade_mask(mask_raw,nside,mask,c%sample_nside(nind),0.5d0)
+       
+       ! and data and rms maps
+       do j = 1, nbands
+          call udgrade_ring(data_raw(:,:,j),nside,data(:,:,j),c%sample_nside(nind))
+          call udgrade_rms(rms_raw(:,:,j),nside,rms(:,:,j),c%sample_nside(nind))
+       end do
+    end if
+    deallocate(data_raw,rms_raw,mask_raw)
+
+    ! Allocate and initialize empty arrays
+    allocate(model(0:sample_npix-1,nmaps,nbands))   
+    allocate(index_map(0:sample_npix-1,nmaps))   
+    allocate(index_full_res(0:npix-1,nmaps))
+    model(:,:,:)        = 0.d0
+    index_map(:,:)      = 0.d0
+    index_full_res(:,:) = 0.d0
+
+    allocate(sample(c%nindices),theta(c%nindices))
+
     ! Now time to begin sampling
+    !======================================================================
     ! Index mode 1 corresponds to full sky value for the spectral parameter
     if (c%index_mode(nind) == 1) then
        write(*,*) 'Sampling fullsky'
+
        lnl = 0.d0
 
+       ! Initialize index map from previous Gibbs iteration
        ! Ensure proper handling of poltypes
        do l = 1, c%nindices
           sample(l) = c%indices(0,map_inds(1),l)
@@ -189,9 +237,9 @@ contains
        
        ! Evaluate the lnL (already includes the -0.5 out front)
        if (c%lnl_type(nind) == 'chisq') then
-          lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+          lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
        else if (c%lnl_type(nind) == 'marginal') then
-          lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+          lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask(:,1))
        else if (c%lnl_type(nind) == 'prior') then
           sample_it = .false.
           sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
@@ -216,9 +264,9 @@ contains
              
              ! Evaluate the lnL (already includes the -0.5 out front)
              if (c%lnl_type(nind) == 'chisq') then
-                lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+                lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
              else if (c%lnl_type(nind) == 'marginal') then
-                lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,-1,ddata%masks(:,1))
+                lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask(:,1))
              end if
              
              ! Ensure prior contributes
@@ -244,22 +292,22 @@ contains
                    lnl_old      = lnl_new
                 end if
              end if
+
           end do
        end if
 
-       ! Ensure proper handling of poltypes
-       ! Cast the final sample back to the component index map
-       c%indices(:,map_inds(1):map_inds(2),nind) = sample(nind)
+       ! Cast the final sample back to the dummy index map
+       index_map(:,map_inds(1):map_inds(2)) = sample(nind)
 
     ! Index mode 2 corresponds to per-pixel values for the spectral parameter
     else if (c%index_mode(nind) == 2) then
-       write(*,*) 'Sampling per-pixel'
+       write(*,*) 'Sampling per-pixel at nside ', c%sample_nside(nind)
        ! Pixel-by-pixel
 
        !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
        !$OMP DO SCHEDULE(static)
-       do i = 0, npix-1
-          if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == 0.d0) cycle
+       do i = 0, sample_npix-1
+          if (mask(i,1) == 0.d0 .or. mask(i,1) == 0.d0) cycle
 
           ! Initialize the MH chain
           lnl      = 0.d0
@@ -277,9 +325,9 @@ contains
 
           ! Evaluate the lnL (already includes the -0.5 out front)
           if (c%lnl_type(nind) == 'chisq') then
-             lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
+             lnl = evaluate_lnL(data,rms,model,map_inds,i,mask(:,1))
           else if (c%lnl_type(nind) == 'marginal') then
-             lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
+             lnl = evaluate_marginal_lnL(data,rms,model,map_inds,i,mask(:,1))
           else if (c%lnl_type(nind) == 'prior') then
              sample_it = .false.
              sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
@@ -303,9 +351,9 @@ contains
                 
                 ! Evaluate likelihood of sample
                 if (c%lnl_type(nind) == 'chisq') then
-                   lnl = evaluate_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
+                   lnl = evaluate_lnL(data,rms,model,map_inds,i,mask(:,1))
                 else if (c%lnl_type(nind) == 'marginal') then
-                   lnl = evaluate_marginal_lnL(data,ddata%rms_map,model,map_inds,i,ddata%masks(:,1))
+                   lnl = evaluate_marginal_lnL(data,rms,model,map_inds,i,mask(:,1))
                 end if
                 
                 ! With the prior of course
@@ -335,16 +383,14 @@ contains
           end if
           ! Ensure proper handling of poltypes
           ! Cast the final sample back to the component index map
-          c%indices(i,map_inds(1):map_inds(2),nind) = sample(nind)
-          ! index_map(i,map_inds(1):map_inds(2)) = sample(nind)
+          index_map(i,map_inds(1):map_inds(2)) = sample(nind)
        end do
        !$OMP END DO
        !$OMP END PARALLEL
        !$OMP BARRIER
-       ! c%indices(:,map_inds(1):map_inds(2),nind) = index_map(:,map_inds(1):map_inds(2))
+       call udgrade_ring(index_map,c%sample_nside(nind),index_full_res,nside)
+       c%indices(:,map_inds(1):map_inds(2),nind) = index_full_res(:,map_inds(1):map_inds(2))
     end if
-
-    deallocate(data,model)
 
   end subroutine sample_index_mh
 
@@ -390,13 +436,15 @@ contains
 
     implicit none
 
-    real(dp),  dimension(0:npix-1,nmaps,nbands), intent(inout) :: model 
-    type(dang_comps),   pointer, intent(in)    :: c
-    integer(i4b),  dimension(2), intent(in)    :: map_inds
-    real(dp),      dimension(:), intent(in)    :: sample
-    integer(i4b),  optional,     intent(in)    :: pixel
+    real(dp),  dimension(0:,:,:), intent(inout) :: model 
+    type(dang_comps),    pointer, intent(in)    :: c
+    integer(i4b),   dimension(2), intent(in)    :: map_inds
+    real(dp),       dimension(:), intent(in)    :: sample
+    integer(i4b),   optional,     intent(in)    :: pixel
 
-    integer(i4b)                               :: i, j, k
+    integer(i4b)                                :: i, j, k, sample_npix
+
+    sample_npix = size(model,DIM=1)
 
     if (present(pixel)) then
        do k = map_inds(1), map_inds(2)
@@ -407,7 +455,7 @@ contains
     else
        !$OMP PARALLEL PRIVATE(i,j,k)
        !$OMP DO SCHEDULE(static)
-       do i = 0, npix-1
+       do i = 0, sample_npix-1
           do k = map_inds(1), map_inds(2)
              do j = 1, nbands
                 model(i,k,j) = c%eval_signal(j,i,k,sample)
@@ -453,17 +501,17 @@ contains
     !============================================================================|
     implicit none
 
-    real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data, rms, model
-    real(dp), dimension(0:npix-1),              intent(in) :: mask
-    integer(i4b),  dimension(2), intent(in) :: map_inds
-    integer(i4b),                intent(in) :: pixel
-    integer(i4b)                            :: i,j,k
-    real(dp)                                :: lnL
-    real(dp)                                :: TNd, TNT, invTNT
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms, model
+    real(dp), dimension(0:),      intent(in) :: mask
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    integer(i4b),                 intent(in) :: pixel
+    integer(i4b)                             :: i,j,k
+    real(dp)                                 :: lnL
+    real(dp)                                 :: TNd, TNT, invTNT
 
-    real(dp), allocatable, dimension(:)     :: TN
+    real(dp), allocatable, dimension(:)      :: TN
 
-    integer(i4b), dimension(2,2)            :: inds
+    integer(i4b), dimension(2,2)             :: inds
 
 
     ! Initialize the result to null
@@ -477,7 +525,7 @@ contains
        inds(2,:) = pixel
     else
        ! For all pixels
-       inds(2,1) = 0; inds(2,2) = npix-1
+       inds(2,1) = 0; inds(2,2) = size(data,DIM=1)-1
     end if
 
     ! So for the pixel-by-pixel case, this whole thing will be easy because all of 
@@ -527,13 +575,13 @@ contains
     !==========================================================================
     implicit none
 
-    real(dp), dimension(0:npix-1,nmaps,nbands), intent(in) :: data, rms, model
-    real(dp), dimension(0:npix-1),              intent(in) :: mask
-    integer(i4b),  dimension(2), intent(in) :: map_inds
-    integer(i4b),                intent(in) :: pixel
-    integer(i4b)                            :: i,j,k
-    integer(i4b), dimension(2,2)            :: inds
-    real(dp)                                :: lnL
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms, model
+    real(dp), dimension(0:),      intent(in) :: mask
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    integer(i4b),                 intent(in) :: pixel
+    integer(i4b)                             :: i,j,k
+    integer(i4b),   dimension(2,2)           :: inds
+    real(dp)                                 :: lnL
 
     ! Initialize the result to null
     lnL = 0.d0
@@ -546,7 +594,7 @@ contains
        inds(2,:) = pixel
     else
        ! For all pixels
-       inds(2,1) = 0; inds(2,2) = npix-1
+       inds(2,1) = lbound(data,DIM=1); inds(2,2) = ubound(data,DIM=1)
     end if
 
     do i = inds(2,1), inds(2,2)
