@@ -75,6 +75,7 @@ contains
     if (sampled) then
        call ddata%update_sky_model
        call write_stats_to_term(ddata,dpar,iter)
+       stop
     end if
 
   end subroutine sample_spectral_parameters
@@ -173,6 +174,8 @@ contains
     do l = 1, ncomp
        c2 => component_list(l)%p
        if (c2%label /= c%label) then
+          !$OMP PARALLEL PRIVATE(i,j,k)
+          !$OMP DO SCHEDULE(static)
           do i = 0, npix-1
              do k = 1, nmaps
                 do j = 1, nbands
@@ -180,6 +183,8 @@ contains
                 end do
              end do
           end do
+          !$OMP END DO
+          !$OMP END PARALLEL
        end if
     end do
 
@@ -221,36 +226,25 @@ contains
     if (c%index_mode(nind) == 1) then
        write(*,*) 'Sampling fullsky'
 
-       lnl = 0.d0
-
        ! Initialize index map from previous Gibbs iteration
        ! Ensure proper handling of poltypes
        do l = 1, c%nindices
           sample(l) = c%indices(0,map_inds(1),l)
        end do
 
+       ! If we want to just sample from the prior, do it and call it good
+       if (c%lnl_type(nind) == 'prior') then
+          sample_it = .false.
+          sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
+       end if
+
        ! Init theta
        theta = sample
        
        ! Define the model to toss into the likelihood evaluation
        call update_sample_model(model,c,map_inds,sample)
+       lnl_old = evaluate_model_lnL(c,data,rms,model,map_inds,-1,mask(:,1),sample,nind)
        
-       ! Evaluate the lnL (already includes the -0.5 out front)
-       if (c%lnl_type(nind) == 'chisq') then
-          lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
-       else if (c%lnl_type(nind) == 'marginal') then
-          lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask(:,1))
-       else if (c%lnl_type(nind) == 'prior') then
-          sample_it = .false.
-          sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
-       end if
-       
-       if (trim(c%prior_type(nind)) == 'gaussian') then
-          lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
-       else if (trim(c%prior_type(nind)) == 'uniform') then
-          lnl_old = lnl
-       end if
-
        ! Now we do the real sampling
        if (sample_it) then
           do l = 1, nsample
@@ -261,38 +255,21 @@ contains
              if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
              
              call update_sample_model(model,c,map_inds,theta)
-             
-             ! Evaluate the lnL (already includes the -0.5 out front)
-             if (c%lnl_type(nind) == 'chisq') then
-                lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
-             else if (c%lnl_type(nind) == 'marginal') then
-                lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask(:,1))
-             end if
-             
-             ! Ensure prior contributes
-             if (trim(c%prior_type(nind)) == 'gaussian') then
-                lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
-             else if (trim(c%prior_type(nind)) == 'uniform') then
-                lnl_new = lnl
-             end if
+             lnl_new = evaluate_model_lnL(c,data,rms,model,map_inds,-1,mask(:,1),theta,nind)
              
              ! Accept/reject
              diff  = lnl_new - lnl_old
              ratio = exp(diff)
              
              if (trim(ml_mode) == 'optimize') then
-                if (ratio > 1.d0) then
-                   sample(nind) = theta(nind)
-                   lnl_old      = lnl_new
-                end if
+                num = 1.0
              else if (trim(ml_mode) == 'sample') then
                 call RANDOM_NUMBER(num)
-                if (ratio > num) then
-                   sample(nind) = theta(nind)
-                   lnl_old      = lnl_new
-                end if
              end if
-
+             if (ratio > num) then
+                sample(nind) = theta(nind)
+                lnl_old      = lnl_new
+             end if
           end do
        end if
 
@@ -301,93 +278,72 @@ contains
 
     ! Index mode 2 corresponds to per-pixel values for the spectral parameter
     else if (c%index_mode(nind) == 2) then
-       write(*,*) 'Sampling per-pixel at nside ', c%sample_nside(nind)
+       write(*,fmt='(a,i4)') 'Sampling per-pixel at nside ', c%sample_nside(nind)
        ! Pixel-by-pixel
 
-       !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
+       !$OMP PARALLEL PRIVATE(i,j,k,l,sample,theta,lnl_old,lnl_new)!,model)
        !$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
-          if (mask(i,1) == 0.d0 .or. mask(i,1) == 0.d0) cycle
-
-          ! Initialize the MH chain
-          lnl      = 0.d0
+          if (mask(i,1) == 0.d0) cycle
+          ! write(*,*) i, OMP_GET_THREAD_NUM()
 
           ! Ensure proper handling of poltypes
           do l = 1, c%nindices
              sample(l) = c%indices(i,map_inds(1),l)
           end do
 
+          ! ! If we want to just sample from the prior, do it and call it good
+          if (c%lnl_type(nind) == 'prior') then
+             ! write(*,*) 'sample the prior'
+             sample_it    = .false.
+             sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
+             index_map(i,map_inds(1):map_inds(2)) = sample(nind)
+             ! cycle
+          end if
+
           ! Init theta
           theta = sample
 
-          ! Define the model to toss into the likelihood evaluation
-          call update_sample_model(model,c,map_inds,sample,i)
-
-          ! Evaluate the lnL (already includes the -0.5 out front)
-          if (c%lnl_type(nind) == 'chisq') then
-             lnl = evaluate_lnL(data,rms,model,map_inds,i,mask(:,1))
-          else if (c%lnl_type(nind) == 'marginal') then
-             lnl = evaluate_marginal_lnL(data,rms,model,map_inds,i,mask(:,1))
-          else if (c%lnl_type(nind) == 'prior') then
-             sample_it = .false.
-             sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
-          end if
-
-          if (trim(c%prior_type(nind)) == 'gaussian') then
-             lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
-          else if (trim(c%prior_type(nind)) == 'uniform') then
-             lnl_old = lnl
-          end if
-
-          ! Now we do the real sampling
-          if (sample_it) then
-             do l = 1, nsample
-                
-                ! Update theta with the new sample
-                ! Evaluate model for likelihood evaluation
-                theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
-                if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
-                call update_sample_model(model,c,map_inds,theta,i)
-                
-                ! Evaluate likelihood of sample
-                if (c%lnl_type(nind) == 'chisq') then
-                   lnl = evaluate_lnL(data,rms,model,map_inds,i,mask(:,1))
-                else if (c%lnl_type(nind) == 'marginal') then
-                   lnl = evaluate_marginal_lnL(data,rms,model,map_inds,i,mask(:,1))
-                end if
-                
-                ! With the prior of course
-                if (trim(c%prior_type(nind)) == 'gaussian') then
-                   lnl_new = lnl + & 
-                        & log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
-                else if (trim(c%prior_type(nind)) == 'uniform') then
-                   lnl_new = lnl
-                end if
-                
-                ! Accept/reject
-                diff  = lnl_new - lnl_old
-                ratio = exp(diff)
-                if (trim(ml_mode) == 'optimize') then
-                   if (ratio > 1.d0) then
-                      sample(nind) = theta(nind)
-                      lnl_old      = lnl_new
-                   end if
-                else if (trim(ml_mode) == 'sample') then
-                   call RANDOM_NUMBER(num)
-                   if (ratio > num) then
-                      sample(nind) = theta(nind)
-                      lnl_old      = lnl_new
-                   end if
-                end if
+          do k = map_inds(1), map_inds(2)
+             do j = 1, nbands
+                model(i,k,j) = 1.d0!c%eval_signal(j,i,k,sample)
              end do
-          end if
-          ! Ensure proper handling of poltypes
-          ! Cast the final sample back to the component index map
+          end do
+
+          ! call update_sample_model(model,c,map_inds,sample,i)
+          lnl_old = evaluate_model_lnL(c,data,rms,model,map_inds,i,mask(:,1),sample,nind)
+
+          ! if (.false.) then
+          !    do l = 1, 1
+                
+          !       ! Update theta with the new sample
+          !       theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
+          !       ! If outside bounds, reject and cycle
+          !       if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
+          !       ! Evaluate the model and toss into the likelihood evaluation
+          !       call update_sample_model(model,c,map_inds,theta,i)
+          !       lnl_new = evaluate_model_lnL(c,data,rms,model,map_inds,i,mask(:,1),theta,nind)
+                
+          !       ! Accept/reject
+          !       diff  = lnl_new - lnl_old
+          !       ratio = exp(diff)
+          !       if (trim(ml_mode) == 'optimize') then
+          !          num = 1.0
+          !       else if (trim(ml_mode) == 'sample') then
+          !          call RANDOM_NUMBER(num)
+          !       end if
+          !       if (ratio > num) then
+          !          sample(nind) = theta(nind)
+          !          lnl_old      = lnl_new
+          !       end if
+          !    end do
+          ! end if
           index_map(i,map_inds(1):map_inds(2)) = sample(nind)
        end do
        !$OMP END DO
        !$OMP END PARALLEL
-       !$OMP BARRIER
+       !!$OMP BARRIER
+       write(*,*) 'outside of omp loop'
        call udgrade_ring(index_map,c%sample_nside(nind),index_full_res,nside)
        c%indices(:,map_inds(1):map_inds(2),nind) = index_full_res(:,map_inds(1):map_inds(2))
     end if
@@ -453,8 +409,8 @@ contains
           end do
        end do
     else
-       !$OMP PARALLEL PRIVATE(i,j,k)
-       !$OMP DO SCHEDULE(static)
+       !!$OMP PARALLEL PRIVATE(i,j,k)
+       !!$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
           do k = map_inds(1), map_inds(2)
              do j = 1, nbands
@@ -462,11 +418,38 @@ contains
              end do
           end do
        end do
-       !$OMP END DO
-       !$OMP END PARALLEL
+       !!$OMP END DO
+       !!$OMP END PARALLEL
     end if
 
   end subroutine update_sample_model
+
+  function evaluate_model_lnL(c,data,rms,model,map_inds,pixel,mask,sample,nind) result(lnL_out)
+    implicit none
+    type(dang_comps),    pointer, intent(in) :: c
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms, model
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    integer(i4b),   optional,     intent(in) :: pixel
+    real(dp), dimension(0:),      intent(in) :: mask
+    integer(i4b),                 intent(in) :: nind
+    real(dp),       dimension(:), intent(in) :: sample
+
+    real(dp)                                 :: lnl_temp, lnl_out
+
+    ! Evaluate the lnL (already includes the -0.5 out front)
+    if (c%lnl_type(nind) == 'chisq') then
+       lnl_temp = evaluate_lnL(data,rms,model,map_inds,pixel,mask)
+    else if (c%lnl_type(nind) == 'marginal') then
+       lnl_temp = evaluate_marginal_lnL(data,rms,model,map_inds,pixel,mask)
+    end if
+    
+    if (trim(c%prior_type(nind)) == 'gaussian') then
+       lnl_out = lnl_temp + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+    else if (trim(c%prior_type(nind)) == 'uniform') then
+       lnl_out = lnl_temp
+    end if
+
+  end function evaluate_model_lnL
 
   function evaluate_marginal_lnL(data,rms,model,map_inds,pixel,mask) result(lnL)
     !==========================================================================++|
