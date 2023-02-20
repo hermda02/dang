@@ -163,9 +163,9 @@ contains
     
     ! Initialize data and model
     do j = 1, nbands
-       data_raw(0:,1,j)   = ddata%sig_map(0:,1,j)/ddata%gain(j)
-       data_raw(0:,2:3,j) = ddata%sig_map(0:,2:3,j)
+       data_raw(0:,:,j)   = ddata%sig_map(0:,:,j)
        rms_raw(0:,:,j)    = ddata%rms_map(0:,:,j)
+       if (map_inds(1) == 1) data_raw(0:,1,j) = data_raw(0:,1,j)/ddata%gain(j)
     end do
     mask_raw = ddata%masks
 
@@ -297,7 +297,7 @@ contains
        end if
 
        ! Cast the final sample back to the dummy index map
-       index_map(:,map_inds(1):map_inds(2)) = sample(nind)
+       index_map(0:,map_inds(1):map_inds(2)) = sample(nind)
 
     ! Index mode 2 corresponds to per-pixel values for the spectral parameter
     else if (c%index_mode(nind) == 2) then
@@ -388,9 +388,13 @@ contains
        !!$OMP END DO
        !!$OMP END PARALLEL
        !!$OMP BARRIER
-       call udgrade_ring(index_map,c%sample_nside(nind),index_full_res,nside)
-       c%indices(:,map_inds(1):map_inds(2),nind) = index_full_res(:,map_inds(1):map_inds(2))
     end if
+    if (c%sample_nside(nind) /= nside) then
+       call udgrade_ring(index_map,c%sample_nside(nind),index_full_res,nside)
+    else
+       index_full_res = index_map
+    end if
+    c%indices(0:,map_inds(1):map_inds(2),nind) = index_map(0:,map_inds(1):map_inds(2))!index_full_res(:,map_inds(1):map_inds(2))
 
   end subroutine sample_index_mh
 
