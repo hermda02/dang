@@ -240,7 +240,7 @@ contains
     do i = 0, npix-1
        if (c%template(i,1) > dpar%thresh) then
           self%masks(i,1) = 0.d0
-       else if (self%masks(i,1) == missval) then
+       else if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) then
           self%masks(i,1) = 0.d0
        else if (self%rms_map(i,1,1) == 0.d0) then
           self%masks(i,1) = 0.d0

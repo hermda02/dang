@@ -112,7 +112,6 @@ contains
     type(dang_comps),   pointer             :: c2
     logical(lgt)                            :: sample_it
     
-    real(dp), allocatable, dimension(:)     :: sample, theta
     integer(i4b),          dimension(2)     :: map_inds
 
     ! Arrays for the native resolution data/rms
@@ -122,7 +121,6 @@ contains
 
     ! And what's used in the routines:
     real(dp), allocatable, dimension(:,:,:) :: data, rms
-    real(dp), allocatable, dimension(:,:,:) :: model
     real(dp), allocatable, dimension(:,:)   :: mask, index_map
 
     integer(i4b)                            :: i, j, k, sample_npix
@@ -135,6 +133,11 @@ contains
     ! real(dp), dimension(1000)               :: theta_grid, lnl_grid
 
     real(dp)                                :: t1, t2, t3, t4, t5, t6 ! Timing variables
+
+
+    real(dp), allocatable, dimension(:,:,:) :: model
+    real(dp), allocatable, dimension(:)   :: sample, theta
+
 
     ! This parameter is set in case we want to sample from the prior
     ! If we do, we turn this to false so we don't get into the sampling loop
@@ -164,7 +167,7 @@ contains
     ! Initialize data and model
     do j = 1, nbands
        data_raw(0:,1,j)   = ddata%sig_map(0:,1,j)/ddata%gain(j)
-       data_raw(0:,2:3,j) = ddata%sig_map(0:,2:3,j)
+       if (nmaps > 1) data_raw(0:,2:3,j) = ddata%sig_map(0:,2:3,j)
        rms_raw(0:,:,j)    = ddata%rms_map(0:,:,j)
     end do
     mask_raw = ddata%masks
@@ -206,14 +209,12 @@ contains
     deallocate(data_raw,rms_raw,mask_raw)
 
     ! Allocate and initialize empty arrays
-    allocate(model(0:sample_npix-1,nmaps,nbands))   
     allocate(index_map(0:sample_npix-1,nmaps))   
     allocate(index_full_res(0:npix-1,nmaps))
-    model(:,:,:)        = 0.d0
     index_map(:,:)      = 0.d0
     index_full_res(:,:) = 0.d0
 
-    allocate(sample(c%nindices),theta(c%nindices))
+    !allocate(sample(c%nindices),theta(c%nindices))
 
     ! Now time to begin sampling
     !======================================================================
@@ -238,8 +239,10 @@ contains
        ! Evaluate the lnL (already includes the -0.5 out front)
        if (c%lnl_type(nind) == 'chisq') then
           lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
+          sample_it = .true.
        else if (c%lnl_type(nind) == 'marginal') then
           lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask(:,1))
+          sample_it = .true.
        else if (c%lnl_type(nind) == 'prior') then
           sample_it = .false.
           sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
@@ -304,13 +307,22 @@ contains
        write(*,*) 'Sampling per-pixel at nside ', c%sample_nside(nind)
        ! Pixel-by-pixel
 
-       !!$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
-       !!$OMP DO SCHEDULE(static)
+       !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
+       allocate(sample(c%nindices),theta(c%nindices))
+       allocate(model(0:sample_npix-1,nmaps,nbands))   
+       sample(:) = 0.d0
+       theta(:)  = 0.d0
+       model(:,:,:)        = 0.d0
+       !$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
-          if (mask(i,1) == 0.d0 .or. mask(i,1) == 0.d0) cycle
+          sample_it = .true.
+
+          if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) cycle
 
           ! Initialize the MH chain
           lnl      = 0.d0
+          lnl_old  = 0.d0
+          lnl_new  = 0.d0
 
           ! Ensure proper handling of poltypes
           do l = 1, c%nindices
@@ -363,7 +375,7 @@ contains
                 else if (trim(c%prior_type(nind)) == 'uniform') then
                    lnl_new = lnl
                 end if
-                
+
                 ! Accept/reject
                 diff  = lnl_new - lnl_old
                 ratio = exp(diff)
@@ -385,9 +397,10 @@ contains
           ! Cast the final sample back to the component index map
           index_map(i,map_inds(1):map_inds(2)) = sample(nind)
        end do
-       !!$OMP END DO
-       !!$OMP END PARALLEL
-       !!$OMP BARRIER
+       !$OMP END DO 
+       deallocate(sample,theta,model)
+       !$OMP END PARALLEL
+       !$OMP BARRIER
        call udgrade_ring(index_map,c%sample_nside(nind),index_full_res,nside)
        c%indices(:,map_inds(1):map_inds(2),nind) = index_full_res(:,map_inds(1):map_inds(2))
     end if
