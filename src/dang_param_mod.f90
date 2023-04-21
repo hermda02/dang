@@ -571,6 +571,8 @@ contains
           call read_power_law(par,htbl,i)
        else if (trim(par%fg_type(i)) == 'cmb') then
           cycle
+       else if (trim(par%fg_type(i)) == 'T_cmb') then
+          call read_T_cmb(par,htbl,i)
        else if (trim(par%fg_type(i)) == 'freefree') then
           call read_freefree(par,htbl,i)
        else if (trim(par%fg_type(i)) == 'lognormal') then
@@ -585,6 +587,47 @@ contains
     end do
     
   end subroutine read_comp_params
+
+  subroutine read_T_cmb(par,htbl,comp)
+    implicit none
+    type(hash_tbl_sll),  intent(in)    :: htbl
+    type(dang_params),   intent(inout) :: par
+    integer(i4b),        intent(in)    :: comp
+
+    integer(i4b)     :: len_itext
+    character(len=2) :: itext
+    
+    len_itext = len(trim(itext))
+    
+    call int2string(comp, itext)
+
+    call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&
+         par_dp=par%fg_gauss(comp,1,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_STD'//itext, len_itext=len_itext,&
+         par_dp=par%fg_gauss(comp,1,2))
+    call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_UNI_LOW'//itext, len_itext=len_itext,&
+         par_dp=par%fg_uni(comp,1,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_UNI_HIGH'//itext, len_itext=len_itext,&
+         par_dp=par%fg_uni(comp,1,2))
+    call get_parameter_hashtable(htbl, 'COMP_T_POLTYPE'//itext, len_itext=len_itext,&
+         par_string=par%fg_spec_poltype(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T'//itext, len_itext=len_itext, par_dp=par%fg_init(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_SAMP_NSIDE'//itext, len_itext=len_itext,&
+         par_int=par%fg_samp_nside(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
+         par_lgt=par%fg_samp_spec(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
+         par_string=par%fg_spec_file(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_REGION'//itext, len_itext=len_itext,&
+         par_string=par%fg_ind_region(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_LNL_TYPE'//itext, len_itext=len_itext,&
+         par_string=par%fg_ind_lnl(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_PRIOR'//itext, len_itext=len_itext,&
+         par_string=par%fg_prior_type(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&
+         par_dp=par%fg_spec_step(comp,1))
+
+  end subroutine read_T_cmb
 
   subroutine read_power_law(par,htbl,comp)
     implicit none

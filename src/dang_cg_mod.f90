@@ -391,6 +391,9 @@ contains
        c => component_list(comp)%p
        ! Remove foregrounds that are not in the CG group or aren't having amplitudes sampled
        if ((c%cg_group /= self%cg_group) .or. (.not. c%sample_amplitude)) then
+          ! write(*,*) c%label
+          ! write(*,*) c%indices(0,1,1)
+          ! stop
           !$OMP PARALLEL PRIVATE(i,j,k)
           !$OMP DO SCHEDULE(static) 
           do i = 0, npix-1

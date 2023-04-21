@@ -70,6 +70,10 @@ contains
              end do
           end if
        end do
+       ! Update the global variable T_CMB
+       if (trim(c%type) == 'T_cmb') then
+          T_CMB = c%indices(0,1,1)
+       end if
     end do
 
     if (sampled) then
@@ -221,6 +225,8 @@ contains
     ! Index mode 1 corresponds to full sky value for the spectral parameter
     if (c%index_mode(nind) == 1) then
        write(*,*) 'Sampling fullsky'
+       allocate(sample(c%nindices),theta(c%nindices))
+       allocate(model(0:sample_npix-1,nmaps,nbands))   
 
        lnl = 0.d0
 
@@ -282,6 +288,8 @@ contains
              ! Accept/reject
              diff  = lnl_new - lnl_old
              ratio = exp(diff)
+
+             ! write(*,*) l, theta(nind), sample(nind), lnl_old, lnl_new, diff, ratio
              
              if (trim(ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
@@ -297,10 +305,11 @@ contains
              end if
 
           end do
+          ! stop
        end if
 
        ! Cast the final sample back to the dummy index map
-       index_map(:,map_inds(1):map_inds(2)) = sample(nind)
+       index_full_res(:,map_inds(1):map_inds(2)) = sample(nind)
 
     ! Index mode 2 corresponds to per-pixel values for the spectral parameter
     else if (c%index_mode(nind) == 2) then
@@ -402,8 +411,9 @@ contains
        !$OMP END PARALLEL
        !$OMP BARRIER
        call udgrade_ring(index_map,c%sample_nside(nind),index_full_res,nside)
-       c%indices(:,map_inds(1):map_inds(2),nind) = index_full_res(:,map_inds(1):map_inds(2))
     end if
+    ! Broadcast the result to the appropriate object
+    c%indices(:,map_inds(1):map_inds(2),nind) = index_full_res(:,map_inds(1):map_inds(2))
 
   end subroutine sample_index_mh
 
@@ -594,7 +604,7 @@ contains
     integer(i4b),                 intent(in) :: pixel
     integer(i4b)                             :: i,j,k
     integer(i4b),   dimension(2,2)           :: inds
-    real(dp)                                 :: lnL
+    real(dp)                                 :: lnL, lnL_local
 
     ! Initialize the result to null
     lnL = 0.d0
@@ -610,14 +620,19 @@ contains
        inds(2,1) = lbound(data,DIM=1); inds(2,2) = ubound(data,DIM=1)
     end if
 
+    !!$OMP PARALLEL PRIVATE(i,j,k)
+    !!$OMP DO SCHEDULE(static)
     do i = inds(2,1), inds(2,2)
        if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
        do k = inds(1,1), inds(1,2)
           do j = 1, nbands
-             lnL = lnL - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
+             lnL_local = lnL_local - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
           end do
        end do
     end do
+    lnL = lnL + lnL_local
+    !!$OMP END DO
+    !!$OMP END PARALLEL
 
   end function evaluate_lnL
   
