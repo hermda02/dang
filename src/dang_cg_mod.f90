@@ -391,9 +391,6 @@ contains
        c => component_list(comp)%p
        ! Remove foregrounds that are not in the CG group or aren't having amplitudes sampled
        if ((c%cg_group /= self%cg_group) .or. (.not. c%sample_amplitude)) then
-          ! write(*,*) c%label
-          ! write(*,*) c%indices(0,1,1)
-          ! stop
           !$OMP PARALLEL PRIVATE(i,j,k)
           !$OMP DO SCHEDULE(static) 
           do i = 0, npix-1
@@ -473,6 +470,8 @@ contains
           l = 1
           do j = 1, nbands
              if (c%corr(j)) then
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
 
@@ -494,6 +493,9 @@ contains
                            & data(i-1,map_n,j)*c%eval_sed(j,i-1,map_n)
                    end if
                 end do
+                !$OMP END DO
+                !$OMP END PARALLEL
+                !$OMP BARRIER
                 l = l + 1
              end if
           end do
@@ -744,15 +746,15 @@ contains
              end if
           else if (c%type == 'hi_fit') then
              if (c%corr(j)) then
-                !!$OMP PARALLEL PRIVATE(i)
-                !!$OMP DO SCHEDULE(static) 
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    temp3(offset+l) = temp3(offset+l) + temp1(i)*c%eval_sed(j,i-1,1)
                 end do
-                !!$OMP END DO
-                !!$OMP END PARALLEL
-                !!$OMP BARRIER
+                !$OMP END DO
+                !$OMP END PARALLEL
+                !$OMP BARRIER
                 l = l + 1 
              end if
           else if (c%type == 'template') then
@@ -914,10 +916,14 @@ contains
              !$OMP END PARALLEL
           else if (c%type == 'hi_fit') then
              if (c%corr(j)) then
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    temp2(offset+l) = temp2(offset+l) + temp1(i)*c%eval_sed(j,i-1,map_n)
                 end do
+                !$OMP END DO
+                !$OMP END PARALLEL
                 l = l + 1
              end if
           else if (c%type == 'template') then

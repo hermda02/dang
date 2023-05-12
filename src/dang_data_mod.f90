@@ -277,7 +277,7 @@ contains
              self%conversion(j)  = 1.0/a2t(bp(j))
           else if (trim(dpar%band_unit(j)) == 'MJy/sr') then
              ! MJy/sr -> uK_RJ
-             write(*,*) 'Putting band ', trim(dpar%band_label(j)), ' from MJy/sr to uK_RJ'
+             write(*,*) 'Putting band ', trim(dpar%band_label(j)), ' from MJy/sr to uK_RJ.'
              self%conversion(j)  = 1.0/a2f(bp(j))
           else
              write(*,*) 'Not a unit, dumbass! '//dpar%band_unit(j)
@@ -420,22 +420,30 @@ contains
              c => component_list(n)%p
              title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_'// trim(c%label) //&
                   '_k' // trim(iter_str) // '.fits'
+             !$OMP PARALLEL PRIVATE(i,k)
+             !$OMP DO
              do i = 0, npix-1
                 do k = 1, nmaps
                    map(i,k) = c%eval_signal(j,i,k)/ddata%conversion(j)
                 end do
              end do
+             !$OMP END DO
+             !$OMP END PARALLEL
              ! Mask it!
              call apply_mask(map,ddata%masks(:,1),missing=.true.)
              call write_result_map(trim(title), nside, ordering, header, map)
           end do
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
           map(:,:)   = ddata%sky_model(:,:,j)/ddata%conversion(j)
+          !$OMP PARALLEL PRIVATE(i)
+          !$OMP DO
           do i = 0, npix-1
              if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                 map(i,:) = missval
              end if
           end do
+          !$OMP END DO
+          !$OMP END PARALLEL
           call write_result_map(trim(title), nside, ordering, header, map)
        end do
     end if
@@ -469,6 +477,8 @@ contains
        end do
     end do
     ! Write the chisquare map
+    !$OMP PARALLEL PRIVATE(i,j,k)
+    !$OMP DO
     do k = 1, nmaps
        ddata%chi_map(:,k) = 0.d0
        do i = 0, npix-1
@@ -477,6 +487,8 @@ contains
           end do
        end do
     end do
+    !$OMP END DO
+    !$OMP END PARALLEL
     ddata%chi_map(:,:) = ddata%chi_map(:,:)/(nbands)
     title = trim(dpar%outdir) // 'chisq_k'// trim(iter_str) // '.fits'
     map(:,:)   = ddata%chi_map(:,:)
