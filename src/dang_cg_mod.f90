@@ -201,6 +201,7 @@ contains
     real(dp)                               :: delta_old, delta_new
     real(dp)                               :: t3, t4, t5, t6
 
+    t1         = mpi_wtime()
     ! How big is the input RHS vector?
     m = 0
     n = size(b)
@@ -270,13 +271,12 @@ contains
     do while( (i .lt. self%i_max) .and. (delta_new .gt. self%converge))
 
        t3         = mpi_wtime()
-       q          = self%compute_Ax(ddata, d, nbands, flag_n)
-       alpha      = delta_new/(sum(d*q))
-       x_internal = x_internal + alpha*d
-
        ! if (mod(i+1,50) == 0) then
        !    r = b2 - self%compute_Ax(ddata, x_internal, nbands, flag_n)
        ! else
+       q          = self%compute_Ax(ddata, d, nbands, flag_n)
+       alpha      = delta_new/(sum(d*q))
+       x_internal = x_internal + alpha*d
        r = r - alpha*q
        ! end if
 
@@ -293,6 +293,9 @@ contains
        end if
 
     end do
+    t2         = mpi_wtime()
+
+    write(*,fmt='(a,e12.5,a)') 'Total CG wall time: ', t2-t1, 's.'
 
     self%x = x_internal
 
@@ -574,7 +577,7 @@ contains
     type(dang_comps),       pointer       :: c
 
     integer(i4b)                          :: i, j, k, map_n, comp
-    integer(i4b)                          :: l, m, n, offset
+    integer(i4b)                          :: l, m, n, offset, pix
 
     ! Initialize CG group stuff based off of pol_flags
     if (iand(self%pol_flag(flag_n),1) .ne. 0) then
@@ -621,6 +624,7 @@ contains
        offset = 0
 
        ! Solving temp1 = (T_nu)x
+       t5         = mpi_wtime()
        do comp = 1, self%ncg_components
           c => self%cg_component(comp)%p
 
@@ -688,7 +692,10 @@ contains
              end if
           end if
        end do
+       t6         = mpi_wtime()
+       ! write(*,fmt='(a,e12.5,a)') 'First Ax step: ', t6-t5, 's.'
 
+       t5         = mpi_wtime()
        !$OMP PARALLEL PRIVATE(i)
        !$OMP DO SCHEDULE(static) 
        ! Solving temp1 = (N^-1)temp1
@@ -708,9 +715,12 @@ contains
        !$OMP END DO
        !$OMP END PARALLEL
        !$OMP BARRIER
+       t6         = mpi_wtime()
+       ! write(*,fmt='(a,e12.5,a)') 'Second Ax step: ', t6-t5, 's.'
+
+       t5         = mpi_wtime()
        ! Reset the offset for each multiplication
        offset = 0
-
        ! Solving (T_nu^t)temp1
        do comp = 1, self%ncg_components
           c => self%cg_component(comp)%p
@@ -781,6 +791,9 @@ contains
              end if
           end if
        end do
+       t6         = mpi_wtime()
+       ! write(*,fmt='(a,e12.5,a)') 'Last Ax step: ', t6-t5, 's.'
+       ! write(*,*)
        res = res + temp3
     end do
   end function compute_Ax

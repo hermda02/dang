@@ -134,13 +134,8 @@ contains
     real(dp)                                :: lnl, lnl_old, lnl_new
     real(dp)                                :: diff, ratio, num
 
-    ! real(dp), dimension(1000)               :: theta_grid, lnl_grid
-
-    real(dp)                                :: t1, t2, t3, t4, t5, t6 ! Timing variables
-
-
     real(dp), allocatable, dimension(:,:,:) :: model
-    real(dp), allocatable, dimension(:)   :: sample, theta
+    real(dp), allocatable, dimension(:)     :: sample, theta
 
 
     ! This parameter is set in case we want to sample from the prior

@@ -13,7 +13,7 @@ module dang_util_mod
   real(dp)           :: h       = 1.0545726691251021d-34 * 2.d0 * pi
   real(dp)           :: c       = 2.99792458d8
   real(dp)           :: T_CMB   = 2.7255d0
-  real(dp)           :: t1, t2, t3
+  real(dp)           :: t1, t2, t3, t4, t5, t6
   real(dp)           :: nullval
   real(dp)           :: missval = -1.6375d30
   integer(i4b)       :: ierr, rank, numprocs
@@ -36,10 +36,11 @@ module dang_util_mod
   character(len=10)                 :: ml_mode
   
   public    :: npix, nbands, nmaps, ordering, header, h, c, k_B, T_CMB
-  public    :: ncomp, ncg_groups, nsample
+  public    :: ncomp, ncg_groups, nsample, nump
   public    :: npixpar, nglobalpar, title
   public    :: iter, iter_str, exist, tqu
   public    :: ml_mode, mask_hi
+  public    :: t1, t2, t3, t4, t5, t6
 
 contains 
   
