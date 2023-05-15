@@ -1,0 +1,59 @@
+#!/bin/bash
+me="/mn/stornext/u3/daniher/danieltools/Cosmotools/map_editor/map_editor"
+
+read -p "beam [arcmin]: " beam
+read -p "nside: " nside
+
+str_nside=$(printf "%04d\n" $nside)
+
+echo "Smooth the maps"
+
+echo "100 GHz"
+$me smooth g2g HFI_map_100_IQU_n2048_uKcmb.fits 0 5000 2048 9.66 $beam planck_dr3_map_100_${beam}arcmin_n2048_uK_cmb.fits
+$me ud_grade planck_dr3_map_100_${beam}arcmin_n2048_uK_cmb.fits $nside planck_dr3_map_100_${beam}arcmin_n${str_nside}_uK_cmb.fits
+
+echo "143 GHz"
+$me smooth g2g HFI_map_143_IQU_n2048_uKcmb.fits 0 5000 2048 7.27 $beam planck_dr3_map_143_${beam}arcmin_n2048_uK_cmb.fits
+$me ud_grade planck_dr3_map_143_${beam}arcmin_n2048_uK_cmb.fits $nside planck_dr3_map_143_${beam}arcmin_n${str_nside}_uK_cmb.fits
+
+echo "217 GHz"
+$me smooth g2g HFI_map_217_IQU_n2048_uKcmb.fits 0 5000 2048 5.01 $beam planck_dr3_map_217_${beam}arcmin_n2048_uK_cmb.fits
+$me ud_grade planck_dr3_map_217_${beam}arcmin_n2048_uK_cmb.fits $nside planck_dr3_map_217_${beam}arcmin_n${str_nside}_uK_cmb.fits
+
+echo "353 GHz"
+$me smooth g2g HFI_map_353-psb_IQU_n2048_uKcmb.fits 0 5000 2048 4.86 $beam planck_dr3_map_353_${beam}arcmin_n2048_uK_cmb.fits
+$me ud_grade planck_dr3_map_353_${beam}arcmin_n2048_uK_cmb.fits $nside planck_dr3_map_353_${beam}arcmin_n${str_nside}_uK_cmb.fits
+
+echo "545 GHz"
+$me smooth g2g HFI_map_545_I_n2048_MJy.fits 0 5000 2048 4.84 $beam planck_dr3_map_545_${beam}arcmin_n2048_MJy.fits
+$me ud_grade planck_dr3_map_545_${beam}arcmin_n2048_MJy.fits $nside planck_dr3_map_545_${beam}arcmin_n${str_nside}_MJy.fits
+
+echo "857 GHz"
+$me smooth g2g HFI_map_857_I_n2048_MJy.fits 0 5000 2048 4.63 $beam planck_dr3_map_857_${beam}arcmin_n2048_MJy.fits
+$me ud_grade planck_dr3_map_857_${beam}arcmin_n2048_MJy.fits $nside planck_dr3_map_857_${beam}arcmin_n${str_nside}_MJy.fits
+
+echo "Smooth the rmss"
+
+echo "100 GHz"
+$me smooth_rms g2g HFI_rms_100_IQU_n2048_uKcmb.fits 0 5000 2048 9.66 $beam planck_dr3_rms_100_${beam}arcmin_n2048_uK_cmb.fits
+$me ud_grade_rms planck_dr3_rms_100_${beam}arcmin_n2048_uK_cmb.fits $nside planck_dr3_rms_100_${beam}arcmin_n${str_nside}_uK_cmb.fits
+
+echo "143 GHz"
+$me smooth_rms g2g HFI_rms_143_IQU_n2048_uKcmb.fits 0 5000 2048 7.27 $beam planck_dr3_rms_143_${beam}arcmin_n2048_uK_cmb.fits
+$me ud_grade_rms planck_dr3_rms_143_${beam}arcmin_n2048_uK_cmb.fits $nside planck_dr3_rms_143_${beam}arcmin_n${str_nside}_uK_cmb.fits
+
+echo "217 GHz"
+$me smooth_rms g2g HFI_rms_217_IQU_n2048_uKcmb.fits 0 5000 2048 5.01 $beam planck_dr3_rms_217_${beam}arcmin_n2048_uK_cmb.fits
+$me ud_grade_rms planck_dr3_rms_217_${beam}arcmin_n2048_uK_cmb.fits $nside planck_dr3_rms_217_${beam}arcmin_n${str_nside}_uK_cmb.fits
+
+echo "353 GHz"
+$me smooth_rms g2g HFI_rms_353-psb_IQU_n2048_uKcmb.fits 0 5000 2048 4.86 $beam planck_dr3_rms_353_${beam}arcmin_n2048_uK_cmb.fits
+$me ud_grade_rms planck_dr3_rms_353_${beam}arcmin_n2048_uK_cmb.fits $nside planck_dr3_rms_353_${beam}arcmin_n${str_nside}_uK_cmb.fits
+
+echo "545 GHz"
+$me smooth_rms g2g HFI_rms_545_I_n2048_MJy.fits 0 5000 2048 4.84 $beam planck_dr3_rms_545_${beam}arcmin_n2048_MJy.fits
+$me ud_grade_rms planck_dr3_rms_545_${beam}arcmin_n2048_MJy.fits $nside planck_dr3_rms_545_${beam}arcmin_n${str_nside}_MJy.fits
+
+echo "857 GHz"
+$me smooth_rms g2g HFI_rms_857_I_n2048_MJy.fits 0 5000 2048 4.63 $beam planck_dr3_rms_857_${beam}arcmin_n2048_MJy.fits
+$me ud_grade_rms planck_dr3_rms_857_${beam}arcmin_n2048_MJy.fits $nside planck_dr3_rms_857_${beam}arcmin_n${str_nside}_MJy.fits

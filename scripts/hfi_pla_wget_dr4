@@ -1,0 +1,14 @@
+#!/bin/bash
+
+wget -O HFI_SkyMap_100-BPassCorrected-field-IQU_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_100-BPassCorrected-field-IQU_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_100-BPassCorrected_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_100-BPassCorrected_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_143-BPassCorrected_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_143-BPassCorrected_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_143-BPassCorrected-field-IQU_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_143-BPassCorrected-field-IQU_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_217-BPassCorrected-field-IQU_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_217-BPassCorrected-field-IQU_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_217-BPassCorrected_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_217-BPassCorrected_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_353-BPassCorrected_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_353-BPassCorrected_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_353-BPassCorrected-field-IQU_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_353-BPassCorrected-field-IQU_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_545-BPassCorrected-field-I_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_545-BPassCorrected-field-I_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_545-BPassCorrected_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_545-BPassCorrected_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_857-BPassCorrected-field-I_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_857-BPassCorrected-field-I_2048_R4.00_full.fits"
+wget -O HFI_SkyMap_857-BPassCorrected_2048_R4.00_full.fits "http://pla.esac.esa.int/pla/aio/product-action?MAP.MAP_ID=HFI_SkyMap_857-BPassCorrected_2048_R4.00_full.fits"
