@@ -241,9 +241,14 @@ contains
     ! Check mode
     if (trim(dpar%ml_mode) == 'sample') then
        ! First draw a univariate for sampling if in sampling mode
+       !$OMP PARALLEL PRIVATE(i)
+       !$OMP DO SCHEDULE(static)        
        do i = 1, m
           eta(i) = rand_normal(0.d0,1.d0)
        end do
+       !$OMP END DO
+       !$OMP END PARALLEL
+       !$OMP BARRIER
        b2 = b + self%compute_sample_vector(ddata,eta,nbands,b,flag_n)
     else if (trim(dpar%ml_mode) == 'optimize') then
        b2 = b

@@ -148,6 +148,8 @@ contains
 
     allocate(loaded(nbands))
 
+    loaded(:) = .false.
+
     write(nband_str, '(i4)') nbands
 
     file = trim(dpar%offset_file)
@@ -285,6 +287,7 @@ contains
           end if
           self%sig_map(:,:,j) = self%sig_map(:,:,j)*self%conversion(j)
           self%rms_map(:,:,j) = self%rms_map(:,:,j)*self%conversion(j)
+          self%offset(j)      = self%offset(j)*self%conversion(j)
        end if
     end do
 
@@ -314,6 +317,7 @@ contains
           end if
           self%sig_map(:,:,j) = self%sig_map(:,:,j)*self%conversion(j)
           self%rms_map(:,:,j) = self%rms_map(:,:,j)*self%conversion(j)
+          self%offset(j)      = self%offset(j)*self%conversion(j)
        end if
     end do
     
@@ -429,6 +433,7 @@ contains
              end do
              !$OMP END DO
              !$OMP END PARALLEL
+             !$OMP BARRIER
              ! Mask it!
              call apply_mask(map,ddata%masks(:,1),missing=.true.)
              call write_result_map(trim(title), nside, ordering, header, map)
@@ -481,11 +486,15 @@ contains
     !$OMP DO
     do k = 1, nmaps
        ddata%chi_map(:,k) = 0.d0
+       !$OMP PARALLEL PRIVATE(i,j)
+       !$OMP DO
        do i = 0, npix-1
           do j = 1, nbands
              ddata%chi_map(i,k) = ddata%chi_map(i,k) + ddata%masks(i,1)*(ddata%res_map(i,k,j)**2)/ddata%rms_map(i,k,j)**2.d0
           end do
        end do
+       !$OMP END DO
+       !$OMP END PARALLEL
     end do
     !$OMP END DO
     !$OMP END PARALLEL
