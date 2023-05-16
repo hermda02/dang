@@ -567,19 +567,10 @@ contains
           TNd    = sum(TN*data(inds(2,1):inds(2,2),k,j))
           TNT    = sum(TN*model(inds(2,1):inds(2,2),k,j))
           invTNT = 1.d0/TNT
-          ! write(*,*) j, k, invTNT, TNd
-          ! write(*,*) " ", -0.5d0*TNd*invTNT*TNd
-          ! write(*,*) " ", -0.5d0*sum(data(inds(2,1):inds(2,2),k,j)**2/rms(inds(2,1):inds(2,2),k,j)**2)
-          ! write(*,*) " ", 0.5*log(invTNT)
-          ! write(*,*) ""
 
           lnL    = lnL - 0.5d0*TNd*invTNT*TNd
-
-          ! If we use the determinant
-          ! lnL = lnL + 0.5*log(invTNT)
        end do
     end do
-    ! stop
 
   end function evaluate_marginal_lnL
 
@@ -718,69 +709,5 @@ contains
     ddata%offset(band) = offset
     
   end subroutine fit_band_offset
-
-  ! NEEDS A FULL REWRITE FOR HOW COMPONENTS WORK NOW
-  ! function eval_jeffreys_prior(dpar, dat, comp, map_n, ind, val, pixel) result(prob)
-  !   implicit none
-
-  !   class(dang_params)                    :: dpar
-  !   type(dang_comps),       intent(inout) :: comp
-  !   type(dang_data)                       :: dat
-  !   real(dp),               intent(in)    :: val
-  !   integer(i4b),           intent(in)    :: map_n, ind
-  !   integer(i4b), optional, intent(in)    :: pixel
-  !   real(dp)                              :: prob, sum, ss
-  !   integer(i4b)                          :: i, j, k
-    
-  !   prob = 0.d0
-  !   sum = 0.d0
-
-  !   if (trim(dpar%fg_label(ind)) == 'synch') then
-  !      ! Is this evaluated for a single pixel?
-  !      if (present(pixel)) then
-  !         ! If map_n = -1, then sum over poltypes
-  !         if (map_n == -1) then
-  !            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-  !               do j = 1, nbands
-  !                  ss  = dat%fg_map(pixel,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !                  sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,0,ind))*&
-  !                       & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !               end do
-  !            end do
-  !         else
-  !            do j = 1, nbands
-  !               ss  = dat%fg_map(pixel,map_n,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !               sum = sum + (((1.0/dat%rms_map(pixel,map_n,j))**2)*(ss/dat%fg_map(pixel,map_n,0,ind))*&
-  !                    & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !            end do
-  !         end if
-  !      else
-  !         ! If map_n = -1, then sum over poltypes
-  !         if (map_n == -1) then
-  !            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-  !               do i = 0, npix-1
-  !                  if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-  !                  do j = 1, nbands
-  !                     ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !                     sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*&
-  !                          & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !                  end do
-  !               end do
-  !            end do
-  !         else
-  !            do i = 0, npix-1
-  !               if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-  !               do j = 1, nbands
-  !                  ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !                  sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*& 
-  !                       & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !               end do
-  !            end do
-  !         end if
-  !      end if
-  !   end if
-  !   prob = sqrt(sum)
-
-  ! end function eval_jeffreys_prior
   
 end module dang_sample_mod

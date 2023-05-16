@@ -63,14 +63,16 @@ module dang_component_mod
 contains 
 
   function constructor(dpar,component)
+    !--------------------------------------------------------------------
     ! The overall constructor for the component class
     ! Takes the parameters as read in from the parameter 
     ! file and sets them as attributes to the class
-    !
+    !--------------------------------------------------------------------
     ! Input: 
     !        dpar: class - dang_params
     !        component: integer - which component are we initializing?
     !    
+    !--------------------------------------------------------------------
     implicit none
 
     type(dang_params), intent(in) :: dpar
@@ -387,8 +389,6 @@ contains
        allocate(constructor%step_size(1))
        
        ! Allocate maps for the components
-       ! allocate(constructor%template_amplitudes(nbands,nmaps))
-       ! allocate(constructor%template(0:npix-1,nmaps))
        allocate(constructor%amplitude(0:npix-1,nmaps))
        allocate(constructor%indices(0:npix-1,nmaps,1))
        allocate(constructor%ind_label(constructor%nindices))
@@ -670,7 +670,6 @@ contains
     allocate(component_list(dpar%ncomp))
 
     do i = 1, dpar%ncomp
-       ! write(*,*) 'Initialize component ', i
        component_list(i)%p => dang_comps(dpar,i)
     end do
 
@@ -781,11 +780,11 @@ contains
     end if
 
     if (bp(band)%id == 'delta') then
-       spectrum = B_nu(bp(band)%nu_c,T)/compute_bnu_prime_RJ(bp(band)%nu_c)!/a2f(bp(band))
+       spectrum = B_nu(bp(band)%nu_c,T)/compute_bnu_prime_RJ(bp(band)%nu_c)
     else
        do i = 1, bp(band)%n
           spectrum = spectrum + bp(band)%tau0(i)*B_nu(bp(band)%nu0(i),T)/&
-               & compute_bnu_prime_RJ(bp(band)%nu0(i))!/a2f(bp(band))
+               & compute_bnu_prime_RJ(bp(band)%nu0(i))
        end do
     end if
 
@@ -897,8 +896,7 @@ contains
        end do
     end if
 
-    evaluate_mbb = spectrum
-
+    evaluate_mbb = spectrum 
   end function evaluate_mbb
 
   function evaluate_lognormal(self, band, pix, map_n, theta)

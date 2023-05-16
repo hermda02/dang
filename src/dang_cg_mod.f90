@@ -126,7 +126,6 @@ contains
     allocate(cg_groups(dpar%ncggroup))
     count = 0
     do i = 1, dpar%ncggroup
-       ! write(*,*) 'Initialize CG group ', i
        cg_groups(i)%p => dang_cg(dpar,i)
     end do
   end subroutine initialize_cg_groups
@@ -221,16 +220,6 @@ contains
 
        ! Initialize on foreground amplitude maps
        self%x(:) = 0.d0
-       ! do k = 1, self%ncg_components
-       !    c => self%cg_component(k)%p
-       !    if (.not. c%sample_amplitude) cycle
-       !    if (c%type /= 'template' .and. c%type /= 'hi_fit') then
-       !       do i = 0, npix-1
-       !          self%x(i+offset+1) = c%amplitude(i,1)
-       !       end do
-       !       offset = offset + npix
-       !    end if
-       ! end do
     end if
 
     allocate(eta(m))
@@ -279,11 +268,7 @@ contains
        alpha      = delta_new/(sum(d*q))
        x_internal = x_internal + alpha*d
 
-       ! if (mod(i+1,50) == 0) then
-       !    r = b2 - self%compute_Ax(ddata, x_internal, nbands, flag_n)
-       ! else
        r = r - alpha*q
-       ! end if
 
        delta_old = delta_new
        delta_new = sum(r*r)
@@ -396,9 +381,6 @@ contains
        c => component_list(comp)%p
        ! Remove foregrounds that are not in the CG group or aren't having amplitudes sampled
        if ((c%cg_group /= self%cg_group) .or. (.not. c%sample_amplitude)) then
-          ! write(*,*) c%label
-          ! write(*,*) c%indices(0,1,1)
-          ! stop
           !$OMP PARALLEL PRIVATE(i,j,k)
           !$OMP DO SCHEDULE(static) 
           do i = 0, npix-1
