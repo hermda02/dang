@@ -180,6 +180,8 @@ contains
     do l = 1, ncomp
        c2 => component_list(l)%p
        if (c2%label /= c%label) then
+          !$OMP PARALLEL PRIVATE(i,j,k)
+          !$OMP DO
           do i = 0, npix-1
              do k = 1, nmaps
                 do j = 1, nbands
@@ -187,6 +189,8 @@ contains
                 end do
              end do
           end do
+          !$OMP END DO
+          !$OMP END PARALLEL
        end if
     end do
 
