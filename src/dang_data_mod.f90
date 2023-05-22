@@ -148,6 +148,8 @@ contains
 
     allocate(loaded(nbands))
 
+    loaded(:) = .false.
+
     write(nband_str, '(i4)') nbands
 
     file = trim(dpar%offset_file)
@@ -240,7 +242,7 @@ contains
     do i = 0, npix-1
        if (c%template(i,1) > dpar%thresh) then
           self%masks(i,1) = 0.d0
-       else if (self%masks(i,1) == missval) then
+       else if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) then
           self%masks(i,1) = 0.d0
        else if (self%rms_map(i,1,1) == 0.d0) then
           self%masks(i,1) = 0.d0
@@ -248,16 +250,6 @@ contains
           self%masks(i,1) = 1.d0
        end if
     end do
-    ! nump = 0
-    ! do i = 0, npix-1
-    !    do j = 1, nmaps
-    !       if (self%masks(i,j) == 0.d0 .or. self%masks(i,j) == missval) then
-    !          self%masks(i,j) = 0.d0
-    !       else 
-    !          nump = nump + 1
-    !       end if
-    !    end do
-    ! end do
   end subroutine mask_hi_threshold
 
   subroutine convert_maps(self,dpar)
@@ -285,6 +277,7 @@ contains
           end if
           self%sig_map(:,:,j) = self%sig_map(:,:,j)*self%conversion(j)
           self%rms_map(:,:,j) = self%rms_map(:,:,j)*self%conversion(j)
+          self%offset(j)      = self%offset(j)*self%conversion(j)
        end if
     end do
 
@@ -314,6 +307,7 @@ contains
           end if
           self%sig_map(:,:,j) = self%sig_map(:,:,j)*self%conversion(j)
           self%rms_map(:,:,j) = self%rms_map(:,:,j)*self%conversion(j)
+          self%offset(j)      = self%offset(j)*self%conversion(j)
        end if
     end do
     
@@ -420,22 +414,31 @@ contains
              c => component_list(n)%p
              title = trim(dpar%outdir) // trim(dpar%band_label(j)) //'_'// trim(c%label) //&
                   '_k' // trim(iter_str) // '.fits'
+             !$OMP PARALLEL PRIVATE(i,k)
+             !$OMP DO
              do i = 0, npix-1
                 do k = 1, nmaps
                    map(i,k) = c%eval_signal(j,i,k)/ddata%conversion(j)
                 end do
              end do
+             !$OMP END DO
+             !$OMP END PARALLEL
+             !$OMP BARRIER
              ! Mask it!
              call apply_mask(map,ddata%masks(:,1),missing=.true.)
              call write_result_map(trim(title), nside, ordering, header, map)
           end do
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
           map(:,:)   = ddata%sky_model(:,:,j)/ddata%conversion(j)
+          !$OMP PARALLEL PRIVATE(i,j,k)
+          !$OMP DO
           do i = 0, npix-1
              if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
                 map(i,:) = missval
              end if
           end do
+          !$OMP END DO
+          !$OMP END PARALLEL
           call write_result_map(trim(title), nside, ordering, header, map)
        end do
     end if
@@ -471,11 +474,15 @@ contains
     ! Write the chisquare map
     do k = 1, nmaps
        ddata%chi_map(:,k) = 0.d0
+       !$OMP PARALLEL PRIVATE(i,j)
+       !$OMP DO
        do i = 0, npix-1
           do j = 1, nbands
              ddata%chi_map(i,k) = ddata%chi_map(i,k) + ddata%masks(i,1)*(ddata%res_map(i,k,j)**2)/ddata%rms_map(i,k,j)**2.d0
           end do
        end do
+       !$OMP END DO
+       !$OMP END PARALLEL
     end do
     ddata%chi_map(:,:) = ddata%chi_map(:,:)/(nbands)
     title = trim(dpar%outdir) // 'chisq_k'// trim(iter_str) // '.fits'
@@ -519,7 +526,6 @@ contains
     close(33)
 
     ! Output template amplitudes - if applicable
-    ! fmt = '('//trim(nband_str)//'(E17.8))'
     do n = 1, ncomp
        c => component_list(n)%p
        if (trim(c%type) == 'template' .or. trim(c%type) == 'hi_fit') then
@@ -551,7 +557,6 @@ contains
           end if
        end do
     end do
-    
 
     ! And finally band calibration values
     fmt = '(a12,f12.8)'

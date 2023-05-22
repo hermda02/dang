@@ -63,14 +63,16 @@ module dang_component_mod
 contains 
 
   function constructor(dpar,component)
+    !--------------------------------------------------------------------
     ! The overall constructor for the component class
     ! Takes the parameters as read in from the parameter 
     ! file and sets them as attributes to the class
-    !
+    !--------------------------------------------------------------------
     ! Input: 
     !        dpar: class - dang_params
     !        component: integer - which component are we initializing?
     !    
+    !--------------------------------------------------------------------
     implicit none
 
     type(dang_params), intent(in) :: dpar
@@ -89,6 +91,8 @@ contains
 
     if (trim(constructor%type) /= 'template' .and. trim(constructor%type) /= 'hi_fit') then
        constructor%sample_amplitude = dpar%fg_amp_samp(component)
+    else if (trim(constructor%type) == 'T_cmb') then
+       constructor%sample_amplitude = .false. ! Treat the CMB monopole as a uniform template
     else
        constructor%sample_amplitude = .true.
     end if
@@ -371,6 +375,58 @@ contains
           call read_bintab(trim(dpar%datadir)//trim(dpar%fg_filename(component)),&
                constructor%amplitude, npix, nmaps, nullval, anynull, header=header)
        end if
+    else if (trim(constructor%type) == 'T_cmb') then
+       constructor%nindices = 1
+       
+       allocate(constructor%corr(nbands))
+       allocate(constructor%gauss_prior(1,2))
+       allocate(constructor%uni_prior(1,2))
+       allocate(constructor%sample_index(1))
+       allocate(constructor%sample_nside(1))
+       allocate(constructor%prior_type(1))
+       allocate(constructor%lnl_type(1))
+       allocate(constructor%index_mode(1))
+       allocate(constructor%step_size(1))
+       
+       ! Allocate maps for the components
+       allocate(constructor%amplitude(0:npix-1,nmaps))
+       allocate(constructor%indices(0:npix-1,nmaps,1))
+       allocate(constructor%ind_label(constructor%nindices))
+
+       constructor%ind_label = ['T']
+
+       ! Allocate general pol_type flag array
+       allocate(constructor%nflag(1))
+       allocate(constructor%pol_flag(1,3)) ! The three is here because that's the max number of poltypes we can handle
+
+       ! Load the poltype into the flag buffer, and store bit flags for each component
+       constructor%nflag = 1
+       constructor%pol_flag(1,1) = 1 ! Only total intensity
+       constructor%index_mode(1) = 1 ! Only assume the temperature is fullsky
+
+       ! Treat the CMB like a template, essentially
+       constructor%amplitude = 1.d0
+
+       ! Do we sample this index?
+       constructor%sample_index(1)  = dpar%fg_samp_spec(component,1)
+
+       ! What NSDIE?
+       constructor%sample_nside(1)  = dpar%fg_samp_nside(component,1)
+
+       ! Define the lnl evaluation for each index
+       constructor%lnl_type(1)      = dpar%fg_ind_lnl(component,1)
+       
+       ! Define MH step size
+       constructor%step_size(1)     = dpar%fg_spec_step(component,1)
+       
+       ! Define prior for likelihood evaluation
+       constructor%prior_type(1)    = dpar%fg_prior_type(component,1) 
+       constructor%gauss_prior(1,1) = dpar%fg_gauss(component,1,1)
+       constructor%gauss_prior(1,2) = dpar%fg_gauss(component,1,2)
+       constructor%uni_prior(1,1)   = dpar%fg_uni(component,1,1)
+       constructor%uni_prior(1,2)   = dpar%fg_uni(component,1,2)
+
+       constructor%indices(:,:,1)   = dpar%fg_init(component,1)
 
     else if (trim(constructor%type) == 'lognormal') then
 
@@ -437,7 +493,7 @@ contains
           ! Define the lnl evaluation for each index
           constructor%lnl_type(i)      = dpar%fg_ind_lnl(component,i)
 
-          ! Define MH step siz
+          ! Define MH step size
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
 
           ! Define prior for likelihood evaluation
@@ -614,7 +670,6 @@ contains
     allocate(component_list(dpar%ncomp))
 
     do i = 1, dpar%ncomp
-       ! write(*,*) 'Initialize component ', i
        component_list(i)%p => dang_comps(dpar,i)
     end do
 
@@ -660,6 +715,8 @@ contains
        eval_signal = self%template_amplitudes(band,map_n)*self%eval_sed(band,pix,map_n,theta)
     else if (trim(self%type) == 'template') then
        eval_signal = self%template_amplitudes(band,map_n)*self%template(pix,map_n)
+    else if (trim(self%type) == 'T_cmb') then
+       eval_signal = self%eval_sed(band,pix,map_n,theta)
     else 
        eval_signal = self%amplitude(pix,map_n)*self%eval_sed(band,pix,map_n,theta)
     end if
@@ -689,6 +746,8 @@ contains
        spectrum = evaluate_lognormal(self, band, pix, map_n, theta)
     else if (trim(self%type) == 'cmb') then
        spectrum = 1.0/a2t(bp(band))
+    else if (trim(self%type) == 'T_cmb') then
+       spectrum = evaluate_T_cmb(self,band,pix,map_n,theta)
     else if (trim(self%type) == 'template') then
        spectrum = self%template(pix,map_n)
     else if (trim(self%type) == 'hi_fit') then
@@ -698,6 +757,40 @@ contains
     eval_sed = spectrum
 
   end function eval_sed
+
+  function evaluate_T_cmb(self, band, pix, map_n, theta)
+    ! always computed in RJ units
+    
+    implicit none
+    class(dang_comps)                  :: self
+    integer(i4b),           intent(in) :: band
+    integer(i4b),           optional   :: pix
+    integer(i4b),           optional   :: map_n
+    integer(i4b)                       :: i
+    real(dp), dimension(:), optional   :: theta
+    real(dp)                           :: T, spectrum
+    real(dp)                           :: evaluate_T_cmb
+
+    spectrum = 0.d0
+
+    if (present(theta)) then
+       T = theta(1)
+    else
+       T = self%indices(pix,map_n,1)
+    end if
+
+    if (bp(band)%id == 'delta') then
+       spectrum = B_nu(bp(band)%nu_c,T)/compute_bnu_prime_RJ(bp(band)%nu_c)
+    else
+       do i = 1, bp(band)%n
+          spectrum = spectrum + bp(band)%tau0(i)*B_nu(bp(band)%nu0(i),T)/&
+               & compute_bnu_prime_RJ(bp(band)%nu0(i))
+       end do
+    end if
+
+    evaluate_T_cmb = spectrum*1e6
+
+  end function evaluate_T_cmb
 
   function evaluate_hi_fit(self, band, pix, map_n, theta)
     ! always computed in RJ units
@@ -803,8 +896,7 @@ contains
        end do
     end if
 
-    evaluate_mbb = spectrum
-
+    evaluate_mbb = spectrum 
   end function evaluate_mbb
 
   function evaluate_lognormal(self, band, pix, map_n, theta)

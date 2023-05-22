@@ -51,8 +51,6 @@ contains
                '_n0064_60arcmin_k'//trim(iter_str) // '.fits'
 
           ! This is for switching to the 'plus_cmb' maps:
-          ! write(*,*) 'PLUS CMB'
-          ! bp_maps(j,1) = trim(dpar%bp_dir) // trim(dpar%band_label(j))//'_map_'//trim(chain_c)//'_n0064_60arcmin_k'//trim(iter_str) // '_plus_cmb.fits'
           bp_maps(j,2) = trim(dpar%bp_dir) // trim(dpar%band_label(j))//'_rms_'//trim(chain_c)//&
                '_n0064_60arcmin_k'//trim(iter_str) // '.fits'
           write(*,'(a,a,a)') 'Swapping band ', trim(dpar%band_label(j)), '.'
