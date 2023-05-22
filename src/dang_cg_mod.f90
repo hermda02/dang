@@ -221,15 +221,27 @@ contains
        allocate(self%x(n))
 
        ! Initialize on foreground amplitude maps
+       write(*,*) 'Initialize on foreground amplitude maps'
        self%x(:) = 0.d0
        ! do k = 1, self%ncg_components
        !    c => self%cg_component(k)%p
        !    if (.not. c%sample_amplitude) cycle
+       !    write(*,*) 'Foreground: ', trim(c%label)
        !    if (c%type /= 'template' .and. c%type /= 'hi_fit') then
        !       do i = 0, npix-1
        !          self%x(i+offset+1) = c%amplitude(i,1)
        !       end do
-       !       offset = offset + npix
+       !       if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+       !          offset = offset + 2*npix
+       !       else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+       !          offset = offset + 3*npix
+       !       else
+       !          offset = offset + npix
+       !       end if
+       !    else if (c%type == 'hi_fit') then
+       !       offset = offset + c%nfit
+       !    else if (c%type == 'template') then
+       !       offset = offset + c%nfit
        !    end if
        ! end do
     end if
@@ -271,12 +283,13 @@ contains
     do while( (i .lt. self%i_max) .and. (delta_new .gt. self%converge))
 
        t3         = mpi_wtime()
-       ! if (mod(i+1,50) == 0) then
-       !    r = b2 - self%compute_Ax(ddata, x_internal, nbands, flag_n)
-       ! else
        q          = self%compute_Ax(ddata, d, nbands, flag_n)
        alpha      = delta_new/(sum(d*q))
        x_internal = x_internal + alpha*d
+
+       ! if (mod(i+1,50) == 0) then
+       !    r = b2 - self%compute_Ax(ddata, x_internal, nbands, flag_n)
+       ! else
        r = r - alpha*q
        ! end if
 
@@ -462,7 +475,7 @@ contains
           !$OMP END DO
           !$OMP END PARALLEL
           !$OMP BARRIER
-          If (iand(self%pol_flag(flag_n),8) .ne. 0) then
+          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
              offset = offset + 2*npix
           else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
              offset = offset + 3*npix
