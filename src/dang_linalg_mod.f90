@@ -330,18 +330,12 @@ contains
          do k = col_p(i), col_p(i+1)-1
             if (k > nnz) then
                write(*,*) 'k too big'
-               !stop
                exit
             end if
             col = i
             do ii = 1, n+1
                row = ii
                do ik = col_p(ii), col_p(ii+1)-1
-                  if (ik > nnz) then
-                     !write(*,*) ik
-                     !write(*,*) 'ik too big'
-                     !stop
-                  end if
                   if (row_i(k) == row_i(ik)) then
                      b(row,col) = b(row,col) + v(k)*v(ik)
                   end if

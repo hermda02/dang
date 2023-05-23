@@ -175,6 +175,8 @@ contains
     do l = 1, ncomp
        c2 => component_list(l)%p
        if (c2%label /= c%label) then
+          !$OMP PARALLEL PRIVATE(i,j,k)
+          !$OMP DO
           do i = 0, npix-1
              do k = 1, nmaps
                 do j = 1, nbands
@@ -182,6 +184,8 @@ contains
                 end do
              end do
           end do
+          !$OMP END DO
+          !$OMP END PARALLEL
        end if
     end do
 
@@ -213,8 +217,6 @@ contains
     index_map(:,:)      = 0.d0
     index_full_res(:,:) = 0.d0
 
-    !allocate(sample(c%nindices),theta(c%nindices))
-
     ! Now time to begin sampling
     !======================================================================
     ! Index mode 1 corresponds to full sky value for the spectral parameter
@@ -222,8 +224,6 @@ contains
        write(*,*) 'Sampling fullsky'
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
-
-       lnl = 0.d0
 
        ! Initialize index map from previous Gibbs iteration
        ! Ensure proper handling of poltypes
@@ -265,26 +265,24 @@ contains
              if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
              
              call update_sample_model(model,c,map_inds,theta)
-             
+
              ! Evaluate the lnL (already includes the -0.5 out front)
              if (c%lnl_type(nind) == 'chisq') then
                 lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
              else if (c%lnl_type(nind) == 'marginal') then
                 lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask(:,1))
              end if
-             
-             ! Ensure prior contributes
+
+             ! Ensure prior contribution
              if (trim(c%prior_type(nind)) == 'gaussian') then
                 lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
              else if (trim(c%prior_type(nind)) == 'uniform') then
                 lnl_new = lnl
              end if
-             
+
              ! Accept/reject
              diff  = lnl_new - lnl_old
              ratio = exp(diff)
-
-             ! write(*,*) l, theta(nind), sample(nind), lnl_old, lnl_new, diff, ratio
              
              if (trim(ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
@@ -298,7 +296,6 @@ contains
                    lnl_old      = lnl_new
                 end if
              end if
-
           end do
           ! stop
        end if
@@ -308,15 +305,15 @@ contains
 
     ! Index mode 2 corresponds to per-pixel values for the spectral parameter
     else if (c%index_mode(nind) == 2) then
-       write(*,*) 'Sampling per-pixel at nside ', c%sample_nside(nind)
+       write(*,fmt='(a,i4)') 'Sampling per-pixel at nside ', c%sample_nside(nind)
        ! Pixel-by-pixel
 
        !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
-       sample(:) = 0.d0
-       theta(:)  = 0.d0
-       model(:,:,:)        = 0.d0
+       sample(:)    = 0.d0
+       theta(:)     = 0.d0
+       model(:,:,:) = 0.d0
        !$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
           sample_it = .true.
@@ -338,17 +335,19 @@ contains
 
           ! Define the model to toss into the likelihood evaluation
           call update_sample_model(model,c,map_inds,sample,i)
-
+          
           ! Evaluate the lnL (already includes the -0.5 out front)
           if (c%lnl_type(nind) == 'chisq') then
              lnl = evaluate_lnL(data,rms,model,map_inds,i,mask(:,1))
+             sample_it = .true.
           else if (c%lnl_type(nind) == 'marginal') then
              lnl = evaluate_marginal_lnL(data,rms,model,map_inds,i,mask(:,1))
+             sample_it = .true.
           else if (c%lnl_type(nind) == 'prior') then
              sample_it = .false.
              sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
           end if
-
+          
           if (trim(c%prior_type(nind)) == 'gaussian') then
              lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
           else if (trim(c%prior_type(nind)) == 'uniform') then
@@ -364,7 +363,7 @@ contains
                 theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
                 if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
                 call update_sample_model(model,c,map_inds,theta,i)
-                
+
                 ! Evaluate likelihood of sample
                 if (c%lnl_type(nind) == 'chisq') then
                    lnl = evaluate_lnL(data,rms,model,map_inds,i,mask(:,1))
@@ -404,7 +403,7 @@ contains
        !$OMP END DO 
        deallocate(sample,theta,model)
        !$OMP END PARALLEL
-       !$OMP BARRIER
+       !!$OMP BARRIER
        call udgrade_ring(index_map,c%sample_nside(nind),index_full_res,nside)
     end if
     ! Broadcast the result to the appropriate object
@@ -471,8 +470,8 @@ contains
           end do
        end do
     else
-       !$OMP PARALLEL PRIVATE(i,j,k)
-       !$OMP DO SCHEDULE(static)
+       !!$OMP PARALLEL PRIVATE(i,j,k)
+       !!$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
           do k = map_inds(1), map_inds(2)
              do j = 1, nbands
@@ -480,11 +479,38 @@ contains
              end do
           end do
        end do
-       !$OMP END DO
-       !$OMP END PARALLEL
+       !!$OMP END DO
+       !!$OMP END PARALLEL
     end if
 
   end subroutine update_sample_model
+
+  function evaluate_model_lnL(c,data,rms,model,map_inds,pixel,mask,sample,nind) result(lnL_out)
+    implicit none
+    type(dang_comps),    pointer, intent(in) :: c
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms, model
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    integer(i4b),   optional,     intent(in) :: pixel
+    real(dp), dimension(0:),      intent(in) :: mask
+    integer(i4b),                 intent(in) :: nind
+    real(dp),       dimension(:), intent(in) :: sample
+
+    real(dp)                                 :: lnl_temp, lnl_out
+
+    ! Evaluate the lnL (already includes the -0.5 out front)
+    if (c%lnl_type(nind) == 'chisq') then
+       lnl_temp = evaluate_lnL(data,rms,model,map_inds,pixel,mask)
+    else if (c%lnl_type(nind) == 'marginal') then
+       lnl_temp = evaluate_marginal_lnL(data,rms,model,map_inds,pixel,mask)
+    end if
+    
+    if (trim(c%prior_type(nind)) == 'gaussian') then
+       lnl_out = lnl_temp + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+    else if (trim(c%prior_type(nind)) == 'uniform') then
+       lnl_out = lnl_temp
+    end if
+
+  end function evaluate_model_lnL
 
   function evaluate_marginal_lnL(data,rms,model,map_inds,pixel,mask) result(lnL)
     !==========================================================================++|
@@ -558,19 +584,10 @@ contains
           TNd    = sum(TN*data(inds(2,1):inds(2,2),k,j))
           TNT    = sum(TN*model(inds(2,1):inds(2,2),k,j))
           invTNT = 1.d0/TNT
-          ! write(*,*) j, k, invTNT, TNd
-          ! write(*,*) " ", -0.5d0*TNd*invTNT*TNd
-          ! write(*,*) " ", -0.5d0*sum(data(inds(2,1):inds(2,2),k,j)**2/rms(inds(2,1):inds(2,2),k,j)**2)
-          ! write(*,*) " ", 0.5*log(invTNT)
-          ! write(*,*) ""
 
           lnL    = lnL - 0.5d0*TNd*invTNT*TNd
-
-          ! If we use the determinant
-          ! lnL = lnL + 0.5*log(invTNT)
        end do
     end do
-    ! stop
 
   end function evaluate_marginal_lnL
 
@@ -709,69 +726,5 @@ contains
     ddata%offset(band) = offset
     
   end subroutine fit_band_offset
-
-  ! NEEDS A FULL REWRITE FOR HOW COMPONENTS WORK NOW
-  ! function eval_jeffreys_prior(dpar, dat, comp, map_n, ind, val, pixel) result(prob)
-  !   implicit none
-
-  !   class(dang_params)                    :: dpar
-  !   type(dang_comps),       intent(inout) :: comp
-  !   type(dang_data)                       :: dat
-  !   real(dp),               intent(in)    :: val
-  !   integer(i4b),           intent(in)    :: map_n, ind
-  !   integer(i4b), optional, intent(in)    :: pixel
-  !   real(dp)                              :: prob, sum, ss
-  !   integer(i4b)                          :: i, j, k
-    
-  !   prob = 0.d0
-  !   sum = 0.d0
-
-  !   if (trim(dpar%fg_label(ind)) == 'synch') then
-  !      ! Is this evaluated for a single pixel?
-  !      if (present(pixel)) then
-  !         ! If map_n = -1, then sum over poltypes
-  !         if (map_n == -1) then
-  !            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-  !               do j = 1, nbands
-  !                  ss  = dat%fg_map(pixel,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !                  sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,0,ind))*&
-  !                       & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !               end do
-  !            end do
-  !         else
-  !            do j = 1, nbands
-  !               ss  = dat%fg_map(pixel,map_n,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !               sum = sum + (((1.0/dat%rms_map(pixel,map_n,j))**2)*(ss/dat%fg_map(pixel,map_n,0,ind))*&
-  !                    & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !            end do
-  !         end if
-  !      else
-  !         ! If map_n = -1, then sum over poltypes
-  !         if (map_n == -1) then
-  !            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-  !               do i = 0, npix-1
-  !                  if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-  !                  do j = 1, nbands
-  !                     ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !                     sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*&
-  !                          & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !                  end do
-  !               end do
-  !            end do
-  !         else
-  !            do i = 0, npix-1
-  !               if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-  !               do j = 1, nbands
-  !                  ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !                  sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*& 
-  !                       & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !               end do
-  !            end do
-  !         end if
-  !      end if
-  !   end if
-  !   prob = sqrt(sum)
-
-  ! end function eval_jeffreys_prior
   
 end module dang_sample_mod

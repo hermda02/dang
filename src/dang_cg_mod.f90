@@ -126,7 +126,6 @@ contains
     allocate(cg_groups(dpar%ncggroup))
     count = 0
     do i = 1, dpar%ncggroup
-       ! write(*,*) 'Initialize CG group ', i
        cg_groups(i)%p => dang_cg(dpar,i)
     end do
   end subroutine initialize_cg_groups
@@ -254,9 +253,14 @@ contains
     ! Check mode
     if (trim(dpar%ml_mode) == 'sample') then
        ! First draw a univariate for sampling if in sampling mode
+       !$OMP PARALLEL PRIVATE(i)
+       !$OMP DO SCHEDULE(static)        
        do i = 1, m
           eta(i) = rand_normal(0.d0,1.d0)
        end do
+       !$OMP END DO
+       !$OMP END PARALLEL
+       !$OMP BARRIER
        b2 = b + self%compute_sample_vector(ddata,eta,nbands,b,flag_n)
     else if (trim(dpar%ml_mode) == 'optimize') then
        b2 = b
@@ -287,11 +291,7 @@ contains
        alpha      = delta_new/(sum(d*q))
        x_internal = x_internal + alpha*d
 
-       ! if (mod(i+1,50) == 0) then
-       !    r = b2 - self%compute_Ax(ddata, x_internal, nbands, flag_n)
-       ! else
        r = r - alpha*q
-       ! end if
 
        delta_old = delta_new
        delta_new = sum(r*r)
