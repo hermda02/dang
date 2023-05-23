@@ -304,7 +304,6 @@ contains
        if (delta_new .lt. self%converge) then
           write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
        end if
-
     end do
     t2         = mpi_wtime()
 
@@ -490,28 +489,12 @@ contains
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-
-                   ! Bit flag selection for matrix building
-                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
-                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
-                           & data(i-1,1,j)*c%eval_sed(j,i-1,1)
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
-                   else
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
-                           & data(i-1,map_n,j)*c%eval_sed(j,i-1,map_n)
-                   end if
+                   b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
+                        & data(i-1,1,j)*c%eval_sed(j,i-1,1)
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
-                !$OMP BARRIER
+                !!$OMP BARRIER
                 l = l + 1
              end if
           end do
@@ -676,11 +659,11 @@ contains
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp1(i) = temp1(i) + x(offset+l)*c%eval_sed(j,i-1,map_n)
+                   temp1(i) = temp1(i) + x(offset+l)*c%eval_sed(j,i-1,1)
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
-                !$OMP BARRIER
+                !!$OMP BARRIER
              end if
           else if (c%type == 'template') then
              if (c%corr(j)) then
@@ -777,7 +760,7 @@ contains
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
-                !$OMP BARRIER
+                !!$OMP BARRIER
                 l = l + 1 
              end if
           else if (c%type == 'template') then
