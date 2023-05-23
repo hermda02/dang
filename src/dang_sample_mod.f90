@@ -79,7 +79,6 @@ contains
     if (sampled) then
        call ddata%update_sky_model
        call write_stats_to_term(ddata,dpar,iter)
-       stop
     end if
 
   end subroutine sample_spectral_parameters
@@ -340,14 +339,14 @@ contains
           theta = sample
 
           ! Define the model to toss into the likelihood evaluation
-          call update_sample_model(model,c,map_inds,sample)
+          call update_sample_model(model,c,map_inds,sample,i)
           
           ! Evaluate the lnL (already includes the -0.5 out front)
           if (c%lnl_type(nind) == 'chisq') then
-             lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
+             lnl = evaluate_lnL(data,rms,model,map_inds,i,mask(:,1))
              sample_it = .true.
           else if (c%lnl_type(nind) == 'marginal') then
-             lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask(:,1))
+             lnl = evaluate_marginal_lnL(data,rms,model,map_inds,i,mask(:,1))
              sample_it = .true.
           else if (c%lnl_type(nind) == 'prior') then
              sample_it = .false.
@@ -410,7 +409,6 @@ contains
        deallocate(sample,theta,model)
        !$OMP END PARALLEL
        !!$OMP BARRIER
-       write(*,*) 'outside of omp loop'
        call udgrade_ring(index_map,c%sample_nside(nind),index_full_res,nside)
     end if
     ! Broadcast the result to the appropriate object
