@@ -706,7 +706,7 @@ contains
           end if
        end do
        t6         = mpi_wtime()
-       ! write(*,fmt='(a,e12.5,a)') 'First Ax step: ', t6-t5, 's.'
+       write(*,fmt='(a,e12.5,a)') 'First Ax step: ', t6-t5, 's.'
 
        t5         = mpi_wtime()
        !$OMP PARALLEL PRIVATE(i)
@@ -729,7 +729,7 @@ contains
        !$OMP END PARALLEL
        !$OMP BARRIER
        t6         = mpi_wtime()
-       ! write(*,fmt='(a,e12.5,a)') 'Second Ax step: ', t6-t5, 's.'
+       write(*,fmt='(a,e12.5,a)') 'Second Ax step: ', t6-t5, 's.'
 
        t5         = mpi_wtime()
        ! Reset the offset for each multiplication
@@ -805,8 +805,8 @@ contains
           end if
        end do
        t6         = mpi_wtime()
-       ! write(*,fmt='(a,e12.5,a)') 'Last Ax step: ', t6-t5, 's.'
-       ! write(*,*)
+       write(*,fmt='(a,e12.5,a)') 'Last Ax step: ', t6-t5, 's.'
+       write(*,*)
        res = res + temp3
     end do
   end function compute_Ax
