@@ -475,8 +475,8 @@ contains
           end do
        end do
     else
-       !!$OMP PARALLEL PRIVATE(i,j,k)
-       !!$OMP DO SCHEDULE(static)
+       !$OMP PARALLEL PRIVATE(i,j,k)
+       !$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
           do k = map_inds(1), map_inds(2)
              do j = 1, nbands
@@ -484,8 +484,8 @@ contains
              end do
           end do
        end do
-       !!$OMP END DO
-       !!$OMP END PARALLEL
+       !$OMP END DO
+       !$OMP END PARALLEL
     end if
 
   end subroutine update_sample_model
@@ -637,8 +637,8 @@ contains
        inds(2,1) = lbound(data,DIM=1); inds(2,2) = ubound(data,DIM=1)
     end if
 
-    !!$OMP PARALLEL PRIVATE(i,j,k)
-    !!$OMP DO SCHEDULE(static)
+    !$OMP PARALLEL PRIVATE(i,j,k)
+    !$OMP DO SCHEDULE(static)
     do i = inds(2,1), inds(2,2)
        if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
        do k = inds(1,1), inds(1,2)
@@ -647,11 +647,68 @@ contains
           end do
        end do
     end do
+    !$OMP END DO
+    !$OMP END PARALLEL
     lnL = lnL + lnL_local
-    !!$OMP END DO
-    !!$OMP END PARALLEL
 
   end function evaluate_lnL
+
+  ! function evaluate_lnL_fullsky(data,rms,model,map_inds,pixel,mask) result(lnL)
+  !   !==========================================================================
+  !   ! Inputs:
+  !   !         data:  array(real(dp)) - data with which we compare the model
+  !   !         rms:   array(real(dp)) - noise associated with the data
+  !   !         model: array(real(dp)) - the model to compare to the data
+  !   !         map_n: integer         - poltype for likelihood evaluation
+  !   !         pixel: integer         - pixel number for likelihood evaluation
+  !   !
+  !   ! Output:
+  !   !         lnL: real(dp)
+  !   !
+  !   ! if pixel < 0,  evaluate full sky, otherwise sample that pixel
+  !   ! if map_n > 0,  evaluate that poltype
+  !   ! if map_n = -1, evaluate Q+U jointly
+  !   ! if map_n = -2, evaluate T+Q+U jointly
+  !   !==========================================================================
+  !   implicit none
+
+  !   real(dp), dimension(0:,:,:),  intent(in) :: data, rms, model
+  !   real(dp), dimension(0:),      intent(in) :: mask
+  !   integer(i4b),   dimension(2), intent(in) :: map_inds
+  !   integer(i4b),                 intent(in) :: pixel
+  !   integer(i4b)                             :: i,j,k
+  !   integer(i4b),   dimension(2,2)           :: inds
+  !   real(dp)                                 :: lnL, lnL_local
+
+  !   ! Initialize the result to null
+  !   lnL = 0.d0
+
+  !   ! Initialize the inds array to condense the following lines:
+  !   inds(1,:) = map_inds
+
+  !   if (pixel > -1) then
+  !      ! For a specific pixel
+  !      inds(2,:) = pixel
+  !   else
+  !      ! For all pixels
+  !      inds(2,1) = lbound(data,DIM=1); inds(2,2) = ubound(data,DIM=1)
+  !   end if
+
+  !   !$OMP PARALLEL PRIVATE(i,j,k)
+  !   !$OMP DO SCHEDULE(static)
+  !   do i = inds(2,1), inds(2,2)
+  !      if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+  !      do k = inds(1,1), inds(1,2)
+  !         do j = 1, nbands
+  !            lnL_local = lnL_local - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
+  !         end do
+  !      end do
+  !   end do
+  !   !$OMP END DO
+  !   !$OMP END PARALLEL
+  !   lnL = lnL + lnL_local
+
+  ! end function evaluate_lnL_fullsky
   
   subroutine fit_band_gain(ddata, map_n, band)
     

@@ -13,6 +13,7 @@ module dang_util_mod
   real(dp)           :: h       = 1.0545726691251021d-34 * 2.d0 * pi
   real(dp)           :: c       = 2.99792458d8
   real(dp)           :: T_CMB   = 2.7255d0
+  real(dp)           :: t0, t00 ! Gibbs iteration timing
   real(dp)           :: t1, t2, t3
   real(dp)           :: nullval
   real(dp)           :: missval = -1.6375d30

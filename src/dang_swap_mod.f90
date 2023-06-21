@@ -28,23 +28,24 @@ contains
     allocate(rms(0:npix-1,3))
     allocate(bp_maps(dpar%numband,2))
 
+
+    call RANDOM_SEED()
+    call RANDOM_NUMBER(temp)
+    
+    norm    = temp(1)*dpar%num_chains
+    chain_i = int(norm)+1
+    chain_c = dpar%bp_chain_list(chain_i)
+    
+    call RANDOM_SEED()
+    call RANDOM_NUMBER(temp)
+    
+    norm    = temp(1)*(dpar%bp_max-dpar%bp_burnin)
+    iter_i  = int(norm)+1+dpar%bp_burnin
+    
+    write(iter_str,'(i0.6)') iter_i
+    
     do j = 1, dpar%numband
        if (dpar%bp_map(j)) then
-
-          call RANDOM_SEED()
-          call RANDOM_NUMBER(temp)
-          
-          norm    = temp(1)*dpar%num_chains
-          chain_i = int(norm)+1
-          chain_c = dpar%bp_chain_list(chain_i)
-          
-          call RANDOM_SEED()
-          call RANDOM_NUMBER(temp)
-          
-          norm    = temp(1)*(dpar%bp_max-dpar%bp_burnin)
-          iter_i  = int(norm)+1+dpar%bp_burnin
-          
-          write(iter_str,'(i0.6)') iter_i
 
           ! Normal BP switching here
           bp_maps(j,1) = trim(dpar%bp_dir) // trim(dpar%band_label(j))//'_map_'//trim(chain_c)//&
@@ -58,7 +59,6 @@ contains
           dat%sig_map(:,:,j) = map
           call read_bintab(trim(bp_maps(j,2)),rms,dat%npix,3,nullval,anynull,header=header)
           dat%rms_map(:,:,j) = rms
-
 
        end if
     end do

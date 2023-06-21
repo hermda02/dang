@@ -559,7 +559,7 @@ contains
     end do
 
     ! And finally band calibration values
-    fmt = '(a12,f12.8)'
+    fmt = '(a12,f20.8)'
     
     title = trim(dpar%outdir)//'band_gains_k'//iter_str//'.dat'
     inquire(file=title,exist=exist)

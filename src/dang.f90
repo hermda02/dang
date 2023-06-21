@@ -87,6 +87,13 @@ program dang
   !--------------------------------------------------------------|
    
   do iter = 1, dpar%ngibbs
+     write(iter_str, '(i0.5)') iter
+     write(*,fmt='(a)') '|-----------------------------|'
+     write(*,fmt='(a)') '|Starting Gibbs sample # '//iter_str//'|'
+     write(*,fmt='(a)') '|-----------------------------|'
+     write(*,*) ''
+     write(*,*) ''
+     t0 = mpi_wtime()
      !--------------------- BP SWAP CHUNK -----------------------|
      ! -- Swap in a different BeyondPlanck map each iteration -- |
      !-----------------------------------------------------------|
@@ -121,8 +128,13 @@ program dang
      if (mod(iter,dpar%iter_out) .EQ. 0) then
         call write_maps(dpar,ddata)
      end if
-     write(*,*) ''
      ! ------------------------------------------------------------------------------------------
+     t00 = mpi_wtime()
+     write(*,fmt='(a)') '|-----------------------------|'
+     ! write(*,fmt='(a)') '|Gibbs sample|'
+     write(*,fmt='(a,f8.5,a)') '|Total sample time: ',t00-t0,'s.|'
+     write(*,fmt='(a)') '|=============================|'
+     write(*,*) ''
   end do
   call mpi_finalize(ierr)
 
