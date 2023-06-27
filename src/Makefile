@@ -4,8 +4,7 @@ F90       = ifort
 MPF90     = mpiifort
 #DEBUG
 # F90FLAGS  = -g -C -traceback
-F90FLAGS  = -g -traceback -O3
-
+F90FLAGS  = -g -traceback -O3 -qopenmp -parallel
 
 LOCAL=/mn/stornext/u3/hke/owl/local
 
@@ -45,7 +44,7 @@ OUTPUT          = dang
 
 # Executable
 dang: $(OBJS)
-	$(MPF90) $(OBJS) -qopenmp -parallel -o $(OUTPUT) $(LINK)
+	$(MPF90) $(OBJS) $(F90FLAGS) -o $(OUTPUT) $(LINK) -qopenmp
 
 # Dependencies
 spline_1D_mod.o        : math_tools.o locate_mod.o
@@ -61,7 +60,7 @@ dang.o : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_linalg_mod.o dang_s
 
 # Compilation stage
 %.o : %.f90
-	$(MPF90) -fpp $(F90COMP) -qopenmp -parallel -c $<
+	$(MPF90) -fpp $(F90COMP) -c $<
 
 # Cleaning command
 .PHONY: clean
