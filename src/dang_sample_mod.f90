@@ -115,7 +115,8 @@ contains
     integer(i4b),                intent(in) :: map_n
     type(dang_comps),   pointer             :: c2
     logical(lgt)                            :: sample_it
-    
+    ! logical(lgt)                            :: tuned
+     
     integer(i4b),          dimension(2)     :: map_inds
 
     ! Arrays for the native resolution data/rms
@@ -133,14 +134,16 @@ contains
     ! Metropolis parameters
     real(dp)                                :: lnl, lnl_old, lnl_new
     real(dp)                                :: diff, ratio, num
-
-    ! real(dp), dimension(1000)               :: theta_grid, lnl_grid
+    real(dp)                                :: accept ! Count accepted samples for ratio
 
     real(dp)                                :: t1, t2, t3, t4, t5, t6 ! Timing variables
 
 
     real(dp), allocatable, dimension(:,:,:) :: model
     real(dp), allocatable, dimension(:)   :: sample, theta
+
+
+    real(dp), dimension(1000)               :: theta_grid, lnl_grid
 
 
     ! This parameter is set in case we want to sample from the prior
@@ -223,6 +226,7 @@ contains
     index_map(:,:)      = 0.d0
     index_full_res(:,:) = 0.d0
 
+
     !allocate(sample(c%nindices),theta(c%nindices))
 
     ! Now time to begin sampling
@@ -233,15 +237,36 @@ contains
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
 
-       lnl = 0.d0
+       ! Testing block
+       if (.false.) then
+          do i = 1, 1000
+             theta_grid(i) = -4.0 + (i-1)*(1.5/999.)
+             lnl_grid(i) = 0.0
+          end do
+          
+          do i = 1, 1000 
+             if (mod(i,100) == 0) write(*,*) i
+             sample(nind) = theta_grid(i)
+             call update_sample_model(model,c,map_inds,sample)
+             lnl_grid(i) = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
+          end do
+          
+          open(44,file='theta_grid.dat')
+          do i = 1, 1000
+             write(44,fmt='(2(E16.8))') theta_grid(i), lnl_grid(i)
+          end do
+          close(44)
+       end if
+       ! stop
+       ! Init theta
 
+       lnl = 0.d0
+ 
        ! Initialize index map from previous Gibbs iteration
        ! Ensure proper handling of poltypes
        do l = 1, c%nindices
           sample(l) = c%indices(0,map_inds(1),l)
        end do
-
-       ! Init theta
        theta = sample
        
        ! Define the model to toss into the likelihood evaluation
@@ -267,6 +292,68 @@ contains
 
        ! Now we do the real sampling
        if (sample_it) then
+          if (.not. c%tuned(nind)) write(*,*) 'Tuning!'
+          do while (.not. c%tuned(nind))
+             accept = 0.d0
+             do l = 1, nsample
+                
+                ! Update theta with the new sample
+                ! Evaluate model for likelihood evaluation
+                theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
+                if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
+                
+                call update_sample_model(model,c,map_inds,theta)
+                
+                ! Evaluate the lnL (already includes the -0.5 out front)
+                if (c%lnl_type(nind) == 'chisq') then
+                   lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
+                else if (c%lnl_type(nind) == 'marginal') then
+                   lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask(:,1))
+                end if
+                
+                ! Ensure prior contributes
+                if (trim(c%prior_type(nind)) == 'gaussian') then
+                   lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+                else if (trim(c%prior_type(nind)) == 'uniform') then
+                   lnl_new = lnl
+                end if
+                
+                ! Accept/reject
+                diff  = lnl_new - lnl_old
+                ratio = exp(diff)
+                
+                ! write(*,fmt='(i3,6(f12.4))') l, theta(nind), sample(nind), lnl_old, lnl_new, diff, ratio
+                
+                if (trim(ml_mode) == 'optimize') then
+                   if (ratio > 1.d0) then
+                      sample(nind) = theta(nind)
+                      lnl_old      = lnl_new
+                      accept = accept + 1
+                   end if
+                else if (trim(ml_mode) == 'sample') then
+                   call RANDOM_NUMBER(num)
+                   if (ratio > num) then
+                      sample(nind) = theta(nind)
+                      lnl_old      = lnl_new
+                      accept = accept + 1
+                   end if
+                end if
+                
+             end do
+             if (accept/l .lt. 0.4) then
+                c%step_size(nind) = c%step_size(nind) - 0.5*c%step_size(nind)
+             else if (accept/l .gt. 0.6) then
+                c%step_size(nind) = c%step_size(nind) + 0.5*c%step_size(nind)
+             else
+                c%tuned = .true.
+             end if
+          end do
+          do l = 1, c%nindices
+             sample(l) = c%indices(0,map_inds(1),l)
+          end do
+          
+          ! The real sampling block
+          !========================
           do l = 1, nsample
              
              ! Update theta with the new sample
@@ -293,8 +380,8 @@ contains
              ! Accept/reject
              diff  = lnl_new - lnl_old
              ratio = exp(diff)
-
-             ! write(*,*) l, theta(nind), sample(nind), lnl_old, lnl_new, diff, ratio
+             
+             ! write(*,fmt='(i3,6(f12.4))') l, theta(nind), sample(nind), lnl_old, lnl_new, diff, ratio
              
              if (trim(ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
@@ -308,9 +395,9 @@ contains
                    lnl_old      = lnl_new
                 end if
              end if
-
+             
           end do
-          ! stop
+          !========================
        end if
 
        ! Cast the final sample back to the dummy index map
