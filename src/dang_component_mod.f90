@@ -170,7 +170,7 @@ contains
 
           ! Define MH step size
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
-          constructor%tuned(i) = .false.
+          constructor%tuned(i) = .not. dpar%fg_spec_tune(component,i)
 
           ! Define prior for likelihood evaluation
           constructor%prior_type(i)    = dpar%fg_prior_type(component,i) 
@@ -259,7 +259,7 @@ contains
 
           ! Define MH step size
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
-          constructor%tuned(i) = .false.
+          constructor%tuned(i) = .not. dpar%fg_spec_tune(component,i)
 
           ! Define prior for likelihood evaluation
           constructor%prior_type(i)    = dpar%fg_prior_type(component,i)
@@ -343,7 +343,7 @@ contains
 
           ! Define MH step size
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
-          constructor%tuned(i) = .false.
+          constructor%tuned(i) = .not. dpar%fg_spec_tune(component,i)
 
           ! Define prior for likelihood evaluation
           constructor%prior_type(i)    = dpar%fg_prior_type(component,i)
@@ -431,7 +431,7 @@ contains
        
        ! Define MH step size
        constructor%step_size(1)     = dpar%fg_spec_step(component,1)
-       constructor%tuned(1) = .false.
+       constructor%tuned(1)         = .not. dpar%fg_spec_tune(component,i)
        
        ! Define prior for likelihood evaluation
        constructor%prior_type(1)    = dpar%fg_prior_type(component,1) 
@@ -511,7 +511,7 @@ contains
 
           ! Define MH step size
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
-          constructor%tuned(i) = .false.
+          constructor%tuned(i)     = .not. dpar%fg_spec_tune(component,i)
 
           ! Define prior for likelihood evaluation
           constructor%prior_type(i)    = dpar%fg_prior_type(component,i) 
@@ -608,9 +608,6 @@ contains
        constructor%corr                = dpar%fg_temp_corr(component,:)
        constructor%template_amplitudes = 0.d0
 
-       constructor%step_size(1) = dpar%fg_spec_step(component,1)
-       constructor%tuned(1) = .false.
-
        ! Allocate general pol_type flag array
        allocate(constructor%nflag(1))
        allocate(constructor%pol_flag(1,3)) ! The three is here because that's the max number of poltypes we can handle
@@ -630,6 +627,11 @@ contains
 
           ! Define the lnl evaluation for each index
           constructor%lnl_type(i)      = dpar%fg_ind_lnl(component,i)
+
+
+          ! Define MH step size
+          constructor%step_size(i) = dpar%fg_spec_step(component,1)
+          constructor%tuned(i)     = .not. dpar%fg_spec_tune(component,i)
 
           ! Do we sample this index?
           constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)

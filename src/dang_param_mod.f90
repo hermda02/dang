@@ -74,6 +74,7 @@ module dang_param_mod
      character(len=512), allocatable, dimension(:,:)   :: fg_spec_file   ! Fg spectral parameter input map
      character(len=10),  allocatable, dimension(:,:)   :: fg_spec_poltype ! Fg spectral parameter poltype
      real(dp),           allocatable, dimension(:,:)   :: fg_spec_step   ! Fg index step-size of MH
+     logical(lgt),       allocatable, dimension(:,:)   :: fg_spec_tune   ! Logical - tune spectral parameter step size?
      logical(lgt),       allocatable, dimension(:,:)   :: fg_temp_corr   ! Logical - do we template correct this band?
      character(len=512), allocatable, dimension(:)     :: fg_type        ! Fg type (power-law feks)
      real(dp),           allocatable, dimension(:,:,:) :: fg_uni         ! Fg sampling bounds
@@ -519,6 +520,7 @@ contains
     allocate(par%fg_spec_file(n,2))
     allocate(par%fg_spec_poltype(n,2))
     allocate(par%fg_spec_step(n,2))
+    allocate(par%fg_spec_tune(n,2))
     allocate(par%fg_temp_corr(n,par%numband))
     
     allocate(par%cg_group_sample(n2))
@@ -617,6 +619,8 @@ contains
          par_string=par%fg_prior_type(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&
          par_dp=par%fg_spec_step(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
+         par_lgt=par%fg_spec_tune(comp,1))
 
   end subroutine read_T_cmb
 
@@ -658,6 +662,8 @@ contains
          par_string=par%fg_prior_type(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_BETA_STEPSIZE'//itext,len_itext=len_itext,&
          par_dp=par%fg_spec_step(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_BETA_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
+         par_lgt=par%fg_spec_tune(comp,1))
 
   end subroutine read_power_law
 
@@ -699,6 +705,8 @@ contains
          par_string=par%fg_prior_type(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_T_E_STEPSIZE'//itext,len_itext=len_itext,&
          par_dp=par%fg_spec_step(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_E_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
+         par_lgt=par%fg_spec_tune(comp,1))
 
   end subroutine read_freefree
 
@@ -772,6 +780,8 @@ contains
          par_string=par%fg_prior_type(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_BETA_STEPSIZE'//itext,len_itext=len_itext,&
          par_dp=par%fg_spec_step(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_BETA_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
+         par_lgt=par%fg_spec_tune(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&
          par_dp=par%fg_gauss(comp,2,1))
     call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_STD'//itext, len_itext=len_itext,&
@@ -797,6 +807,8 @@ contains
          par_string=par%fg_prior_type(comp,2))
     call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&
          par_dp=par%fg_spec_step(comp,2))
+    call get_parameter_hashtable(htbl, 'COMP_T_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
+         par_lgt=par%fg_spec_tune(comp,2))
 
   end subroutine read_mbb
 
@@ -838,6 +850,8 @@ contains
          par_string=par%fg_prior_type(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_NU_P_STEPSIZE'//itext,len_itext=len_itext,&
          par_dp=par%fg_spec_step(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_NU_P_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
+         par_lgt=par%fg_spec_tune(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_W_AME_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&
          par_dp=par%fg_gauss(comp,2,1))
     call get_parameter_hashtable(htbl, 'COMP_W_AME_PRIOR_GAUSS_STD'//itext, len_itext=len_itext,&
@@ -863,6 +877,8 @@ contains
          par_string=par%fg_prior_type(comp,2))
     call get_parameter_hashtable(htbl, 'COMP_W_AME_STEPSIZE'//itext,len_itext=len_itext,&
          par_dp=par%fg_spec_step(comp,2))
+    call get_parameter_hashtable(htbl, 'COMP_W_AME_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
+         par_lgt=par%fg_spec_tune(comp,2))
 
   end subroutine read_lognormal
 
@@ -927,123 +943,125 @@ contains
          par_string=par%fg_prior_type(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&
          par_dp=par%fg_spec_step(comp,1))
+    call get_parameter_hashtable(htbl, 'COMP_T_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
+         par_lgt=par%fg_spec_tune(comp,1))
 
   end subroutine read_hi_fit_test
 
-  subroutine read_hi_fit(par,htbl)
-    implicit none
-    type(hash_tbl_sll),  intent(in)    :: htbl
-    type(dang_params),   intent(inout) :: par
+  ! subroutine read_hi_fit(par,htbl)
+  !   implicit none
+  !   type(hash_tbl_sll),  intent(in)    :: htbl
+  !   type(dang_params),   intent(inout) :: par
 
-    integer(i4b)                       :: n, n2
-    integer(i4b)                       :: i, j
+  !   integer(i4b)                       :: n, n2
+  !   integer(i4b)                       :: i, j
 
-    integer(i4b)     :: len_itext, len_jtext
-    character(len=2) :: itext
-    character(len=3) :: jtext
+  !   integer(i4b)     :: len_itext, len_jtext
+  !   character(len=2) :: itext
+  !   character(len=3) :: jtext
     
-    len_itext = len(trim(itext))
-    len_jtext = len(trim(jtext))
+  !   len_itext = len(trim(itext))
+  !   len_jtext = len(trim(jtext))
 
-    call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
-    call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
-    call get_parameter_hashtable(htbl, 'NUM_CG_GROUPS', par_int=par%ncggroup)
-    call get_parameter_hashtable(htbl, 'HI_THRESH', par_dp=par%thresh)
-    call get_parameter_hashtable(htbl, 'HI_FILE',par_string=par%HI_file)
-    call get_parameter_hashtable(htbl, 'T_MAP_INIT',par_string=par%HI_Td_init)
-    call get_parameter_hashtable(htbl, 'T_MEAN',par_dp=par%HI_Td_mean)
-    call get_parameter_hashtable(htbl, 'T_STD',par_dp=par%HI_Td_std)
-    call get_parameter_hashtable(htbl, 'T_STEP',par_dp=par%HI_Td_step)
+  !   call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
+  !   call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
+  !   call get_parameter_hashtable(htbl, 'NUM_CG_GROUPS', par_int=par%ncggroup)
+  !   call get_parameter_hashtable(htbl, 'HI_THRESH', par_dp=par%thresh)
+  !   call get_parameter_hashtable(htbl, 'HI_FILE',par_string=par%HI_file)
+  !   call get_parameter_hashtable(htbl, 'T_MAP_INIT',par_string=par%HI_Td_init)
+  !   call get_parameter_hashtable(htbl, 'T_MEAN',par_dp=par%HI_Td_mean)
+  !   call get_parameter_hashtable(htbl, 'T_STD',par_dp=par%HI_Td_std)
+  !   call get_parameter_hashtable(htbl, 'T_STEP',par_dp=par%HI_Td_step)
        
-    n  = par%ncomp
-    n2 = par%ncggroup
+  !   n  = par%ncomp
+  !   n2 = par%ncggroup
     
-    !Component stuff for allocation
-    allocate(par%fg_filename(n))
-    allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n))
-    allocate(par%fg_spec_poltype(n,2))
-    allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
-    allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
-    allocate(par%fg_spec_file(n,2))
-    allocate(par%fg_spec_step(n,2))
-    allocate(par%fg_ind_region(n,2))
-    allocate(par%fg_ind_lnl(n,2))
-    allocate(par%fg_prior_type(n,2))
-    allocate(par%fg_init(n,2))
-    allocate(par%fg_cg_group(n))
-    allocate(par%fg_temp_corr(n,par%numband))
-    allocate(par%fg_nfit(n))
+  !   !Component stuff for allocation
+  !   allocate(par%fg_filename(n))
+  !   allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n))
+  !   allocate(par%fg_spec_poltype(n,2))
+  !   allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
+  !   allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
+  !   allocate(par%fg_spec_file(n,2))
+  !   allocate(par%fg_spec_step(n,2))
+  !   allocate(par%fg_ind_region(n,2))
+  !   allocate(par%fg_ind_lnl(n,2))
+  !   allocate(par%fg_prior_type(n,2))
+  !   allocate(par%fg_init(n,2))
+  !   allocate(par%fg_cg_group(n))
+  !   allocate(par%fg_temp_corr(n,par%numband))
+  !   allocate(par%fg_nfit(n))
    
-    ! CG Group stuff
-    allocate(par%cg_group_sample(n2))
-    allocate(par%cg_max_iter(n2))
-    allocate(par%cg_convergence(n2))
-    allocate(par%cg_poltype(n2))
+  !   ! CG Group stuff
+  !   allocate(par%cg_group_sample(n2))
+  !   allocate(par%cg_max_iter(n2))
+  !   allocate(par%cg_convergence(n2))
+  !   allocate(par%cg_poltype(n2))
     
     
-    do i = 1, n
-       call int2string(i, itext)
-       call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
-       call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i))
-       call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
-       if (par%fg_nu_ref(i) < 1d7) then
-          par%fg_nu_ref(i) = par%fg_nu_ref(i)*1d9
-       end if
-       call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
-       call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
-       do j = 1, par%numband
-          call int2string(j,jtext)
-          call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
-               len_itext=len_jtext,par_lgt=par%fg_temp_corr(i,j))
-          if (par%fg_temp_corr(i,j)) then
-             par%fg_nfit(i) = par%fg_nfit(i) + 1
-          end if
-       end do
-       call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
-            par_string=par%fg_spec_poltype(i,1))
-       call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&
-            par_dp=par%fg_gauss(i,1,1))
-       call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_STD'//itext, len_itext=len_itext,&
-            par_dp=par%fg_gauss(i,1,2))
-       call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_UNI_LOW'//itext, len_itext=len_itext,&
-            par_dp=par%fg_uni(i,1,1))
-       call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_UNI_HIGH'//itext, len_itext=len_itext,&
-            par_dp=par%fg_uni(i,1,2))
-       call get_parameter_hashtable(htbl, 'COMP_T_POLTYPE'//itext, len_itext=len_itext,&
-            par_string=par%fg_spec_poltype(i,1))
-       call get_parameter_hashtable(htbl, 'COMP_T'//itext, len_itext=len_itext, par_dp=par%fg_init(i,1))
-       call get_parameter_hashtable(htbl, 'COMP_T_SAMP_NSIDE'//itext, len_itext=len_itext,&
-            par_int=par%fg_samp_nside(i,1))
-       call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
-            par_lgt=par%fg_samp_spec(i,1))
-       call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
-            par_string=par%fg_spec_file(i,1))       
-       call get_parameter_hashtable(htbl, 'COMP_T_REGION'//itext, len_itext=len_itext,&
-            par_string=par%fg_ind_region(i,1))
-       call get_parameter_hashtable(htbl, 'COMP_T_LNL_TYPE'//itext, len_itext=len_itext,&
-            par_string=par%fg_ind_lnl(i,1))
-       call get_parameter_hashtable(htbl, 'COMP_T_PRIOR'//itext, len_itext=len_itext,&
-            par_string=par%fg_prior_type(i,1))
-       call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&
-            par_dp=par%fg_spec_step(i,1))
-    end do
+  !   do i = 1, n
+  !      call int2string(i, itext)
+  !      call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
+  !      call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i))
+  !      call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
+  !      if (par%fg_nu_ref(i) < 1d7) then
+  !         par%fg_nu_ref(i) = par%fg_nu_ref(i)*1d9
+  !      end if
+  !      call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
+  !      call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
+  !      do j = 1, par%numband
+  !         call int2string(j,jtext)
+  !         call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
+  !              len_itext=len_jtext,par_lgt=par%fg_temp_corr(i,j))
+  !         if (par%fg_temp_corr(i,j)) then
+  !            par%fg_nfit(i) = par%fg_nfit(i) + 1
+  !         end if
+  !      end do
+  !      call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
+  !           par_string=par%fg_spec_poltype(i,1))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&
+  !           par_dp=par%fg_gauss(i,1,1))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_STD'//itext, len_itext=len_itext,&
+  !           par_dp=par%fg_gauss(i,1,2))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_UNI_LOW'//itext, len_itext=len_itext,&
+  !           par_dp=par%fg_uni(i,1,1))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_UNI_HIGH'//itext, len_itext=len_itext,&
+  !           par_dp=par%fg_uni(i,1,2))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_POLTYPE'//itext, len_itext=len_itext,&
+  !           par_string=par%fg_spec_poltype(i,1))
+  !      call get_parameter_hashtable(htbl, 'COMP_T'//itext, len_itext=len_itext, par_dp=par%fg_init(i,1))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_SAMP_NSIDE'//itext, len_itext=len_itext,&
+  !           par_int=par%fg_samp_nside(i,1))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
+  !           par_lgt=par%fg_samp_spec(i,1))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
+  !           par_string=par%fg_spec_file(i,1))       
+  !      call get_parameter_hashtable(htbl, 'COMP_T_REGION'//itext, len_itext=len_itext,&
+  !           par_string=par%fg_ind_region(i,1))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_LNL_TYPE'//itext, len_itext=len_itext,&
+  !           par_string=par%fg_ind_lnl(i,1))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_PRIOR'//itext, len_itext=len_itext,&
+  !           par_string=par%fg_prior_type(i,1))
+  !      call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&
+  !           par_dp=par%fg_spec_step(i,1))
+  !   end do
        
-    ! Load the CG group specific parameters
-    do i = 1, n2
-       call int2string(i, itext)
-       call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, &
-            par_lgt=par%cg_group_sample(i))
-       call get_parameter_hashtable(htbl, 'CG_GROUP_MAX_ITER'//itext, len_itext=len_itext, &
-            par_int=par%cg_max_iter(i))
-       call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, &
-            par_dp=par%cg_convergence(i))
-       call get_parameter_hashtable(htbl, 'CG_POLTYPE'//itext, len_itext=len_itext, &
-            par_string=par%cg_poltype(i))
-    end do
+  !   ! Load the CG group specific parameters
+  !   do i = 1, n2
+  !      call int2string(i, itext)
+  !      call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, &
+  !           par_lgt=par%cg_group_sample(i))
+  !      call get_parameter_hashtable(htbl, 'CG_GROUP_MAX_ITER'//itext, len_itext=len_itext, &
+  !           par_int=par%cg_max_iter(i))
+  !      call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, &
+  !           par_dp=par%cg_convergence(i))
+  !      call get_parameter_hashtable(htbl, 'CG_POLTYPE'//itext, len_itext=len_itext, &
+  !           par_string=par%cg_poltype(i))
+  !   end do
        
-    par%temp_corr(1,:) = .true.
+  !   par%temp_corr(1,:) = .true.
     
-  end subroutine read_hi_fit
+  ! end subroutine read_hi_fit
     
   function get_token(string, sep, num, group, allow_empty) result(res)
     implicit none

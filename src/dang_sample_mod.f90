@@ -238,29 +238,8 @@ contains
        allocate(model(0:sample_npix-1,nmaps,nbands))   
 
        model(:,:,:)        = 0.d0
-       ! Testing block
-       if (.false.) then
-          do i = 1, 1000
-             theta_grid(i) = -4.0 + (i-1)*(1.5/999.)
-             lnl_grid(i) = 0.0
-          end do
-          
-          do i = 1, 1000 
-             if (mod(i,100) == 0) write(*,*) i
-             sample(nind) = theta_grid(i)
-             call update_sample_model(model,c,map_inds,sample)
-             lnl_grid(i) = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
-          end do
-          
-          open(44,file='theta_grid.dat')
-          do i = 1, 1000
-             write(44,fmt='(2(E16.8))') theta_grid(i), lnl_grid(i)
-          end do
-          close(44)
-       end if
-       ! stop
-       ! Init theta
 
+       ! Init theta
        lnl = 0.d0
  
        ! Initialize index map from previous Gibbs iteration
@@ -287,6 +266,8 @@ contains
        
        if (trim(c%prior_type(nind)) == 'gaussian') then
           lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+       else if (trim(c%prior_type(nind)) == 'jeffreys') then
+          lnl_old = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,-1,mask(:,1),sample(nind)))
        else if (trim(c%prior_type(nind)) == 'uniform') then
           lnl_old = lnl
        end if
@@ -322,6 +303,8 @@ contains
              ! Ensure prior contributes
              if (trim(c%prior_type(nind)) == 'gaussian') then
                 lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+             else if (trim(c%prior_type(nind)) == 'jeffreys') then
+                lnl_new = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,-1,mask(:,1),theta(nind)))
              else if (trim(c%prior_type(nind)) == 'uniform') then
                 lnl_new = lnl
              end if
@@ -329,8 +312,6 @@ contains
              ! Accept/reject
              diff  = lnl_new - lnl_old
              ratio = exp(diff)
-             
-             ! write(*,fmt='(i3,6(f12.4))') l, theta(nind), sample(nind), lnl_old, lnl_new, diff, ratio
              
              if (trim(ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
@@ -412,6 +393,8 @@ contains
 
           if (trim(c%prior_type(nind)) == 'gaussian') then
              lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+          else if (trim(c%prior_type(nind)) == 'jeffreys') then
+             lnl_old = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,i,mask(:,1),sample(nind)))
           else if (trim(c%prior_type(nind)) == 'uniform') then
              lnl_old = lnl
           end if
@@ -435,8 +418,9 @@ contains
                 
                 ! With the prior of course
                 if (trim(c%prior_type(nind)) == 'gaussian') then
-                   lnl_new = lnl + & 
-                        & log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+                   lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+                else if (trim(c%prior_type(nind)) == 'jeffreys') then
+                   lnl_new = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,i,mask(:,1),theta(nind)))
                 else if (trim(c%prior_type(nind)) == 'uniform') then
                    lnl_new = lnl
                 end if
@@ -683,6 +667,71 @@ contains
     !!$OMP END PARALLEL
 
   end function evaluate_lnL
+
+  ! NEEDS A FULL REWRITE FOR HOW COMPONENTS WORK NOW
+  function eval_jeffreys_prior(c,data,rms,model,map_inds,pixel,mask,val) result(prob)
+    !==========================================================================
+    ! Inputs:
+    !         data:  array(real(dp)) - data with which we compare the model
+    !         rms:   array(real(dp)) - noise associated with the data
+    !         model: array(real(dp)) - the model to compare to the data
+    !         map_n: integer         - poltype for likelihood evaluation
+    !         pixel: integer         - pixel number for likelihood evaluation
+    !
+    ! Output:
+    !         lnL: real(dp)
+    !
+    ! if pixel < 0,  evaluate full sky, otherwise sample that pixel
+    ! if map_n > 0,  evaluate that poltype
+    ! if map_n = -1, evaluate Q+U jointly
+    ! if map_n = -2, evaluate T+Q+U jointly
+    !==========================================================================
+    implicit none
+
+    type(dang_comps),    pointer, intent(in) :: c
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms, model
+    real(dp), dimension(0:),      intent(in) :: mask
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    integer(i4b),                 intent(in) :: pixel
+    real(dp),                     intent(in) :: val
+
+    integer(i4b),   dimension(2,2)           :: inds
+    real(dp), dimension(2)                   :: theta
+    real(dp)                                 :: prob, sum, ss
+    integer(i4b)                             :: i, j, k, l
+
+    prob = 0.d0
+    sum = 0.d0
+
+    theta(1) = val
+
+    ! Initialize the inds array to condense the following lines:
+    inds(1,:) = map_inds
+
+    if (pixel > -1) then
+       ! For a specific pixel
+       inds(2,:) = pixel
+    else
+       ! For all pixels
+       inds(2,1) = lbound(data,DIM=1); inds(2,2) = ubound(data,DIM=1)
+    end if
+
+    if (trim(c%label) == 'synch') then
+       ! Is this evaluated for a single pixel?
+       do i = inds(2,1), inds(2,2)
+          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+          do k = inds(1,1), inds(1,2)
+             do j = 1, nbands
+                ss  = c%eval_signal(j,i,k,theta)
+                sum = sum + (((1.0/rms(i,k,j))**2)*(ss/c%amplitude(i,k))*&
+                     & log(bp(j)%nu_c/c%nu_ref))**2.0
+             end do
+          end do
+       end do
+    end if
+    prob = sqrt(sum)
+
+  end function eval_jeffreys_prior
   
   subroutine fit_band_gain(ddata, map_n, band)
     
@@ -830,8 +879,6 @@ contains
           ! Accept/reject
           diff  = lnl_new - lnl_old
           ratio = exp(diff)
-          
-          ! write(*,fmt='(i3,7(f16.4))') l, theta(nind), sample(nind), lnl, lnl_old, lnl_new, diff, ratio
           
           if (trim(ml_mode) == 'optimize') then
              if (ratio > 1.d0) then
