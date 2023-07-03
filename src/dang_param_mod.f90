@@ -138,7 +138,6 @@ contains
        ! We get here if we reached the end of a file. Close it and                                   
        ! return to the file above.                                                                   
 1      close(units(depth))
-       !write(*,*) "Exiting file " // filenames(depth)                                               
        depth = depth-1
     end do
     return
@@ -168,7 +167,6 @@ contains
     call init_hash_tbl_sll(htable,tbl_len=10*parfile_len)
     ! Put the parameter file into the hash table                                                     
     call put_ascii_into_hashtable(parfile_cache,htable)
-    !deallocate(parfile_cache)
     
     call read_global_params(htable,par)    
     call read_data_params(htable,par)
@@ -264,14 +262,8 @@ contains
     
     logical(lgt)               :: found
     
-    ! found = .false.
-    ! call get_parameter_arg(parname, par_int, par_char, par_string, par_sp, par_dp, par_lgt, found, desc)
-    ! if(found) then
-    !    if(present(par_present)) par_present = .true.
-    ! else
     call get_parameter_from_hash(htbl, parname, len_itext, par_int, &
          & par_char, par_string, par_sp, par_dp, par_lgt, par_present, desc)
-    ! end if
   end subroutine get_parameter_hashtable
   
   ! getting parameter value from hash table                                                          
@@ -475,7 +467,6 @@ contains
           par%bp_file(j) = ''
        else
           call get_parameter_hashtable(htbl, 'BP_FILE' // itext, par_string=par%bp_file(j))
-          ! write(*,*) par%bp_file(j)
        end if
 
        ! call get_parameter_hashtable(htbl, 'BAND_CALIBRATOR'//itext, len_itext=len_itext, par_string=par%band_calibrator(j))

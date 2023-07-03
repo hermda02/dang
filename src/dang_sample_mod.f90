@@ -115,7 +115,8 @@ contains
     integer(i4b),                intent(in) :: map_n
     type(dang_comps),   pointer             :: c2
     logical(lgt)                            :: sample_it
-    
+    ! logical(lgt)                            :: tuned
+     
     integer(i4b),          dimension(2)     :: map_inds
 
     ! Arrays for the native resolution data/rms
@@ -133,14 +134,16 @@ contains
     ! Metropolis parameters
     real(dp)                                :: lnl, lnl_old, lnl_new
     real(dp)                                :: diff, ratio, num
-
-    ! real(dp), dimension(1000)               :: theta_grid, lnl_grid
+    real(dp)                                :: accept ! Count accepted samples for ratio
 
     real(dp)                                :: t1, t2, t3, t4, t5, t6 ! Timing variables
 
 
     real(dp), allocatable, dimension(:,:,:) :: model
     real(dp), allocatable, dimension(:)   :: sample, theta
+
+
+    real(dp), dimension(1000)               :: theta_grid, lnl_grid
 
 
     ! This parameter is set in case we want to sample from the prior
@@ -173,6 +176,7 @@ contains
        data_raw(0:,1,j)   = ddata%sig_map(0:,1,j)/ddata%gain(j)
        if (nmaps > 1) data_raw(0:,2:3,j) = ddata%sig_map(0:,2:3,j)
        rms_raw(0:,:,j)    = ddata%rms_map(0:,:,j)
+       if (map_inds(1) == 1) data_raw(0:,1,j) = data_raw(0:,1,j)/ddata%gain(j)
     end do
     mask_raw = ddata%masks
 
@@ -222,6 +226,7 @@ contains
     index_map(:,:)      = 0.d0
     index_full_res(:,:) = 0.d0
 
+
     !allocate(sample(c%nindices),theta(c%nindices))
 
     ! Now time to begin sampling
@@ -232,15 +237,37 @@ contains
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
 
-       lnl = 0.d0
+       model(:,:,:)        = 0.d0
+       ! Testing block
+       if (.false.) then
+          do i = 1, 1000
+             theta_grid(i) = -4.0 + (i-1)*(1.5/999.)
+             lnl_grid(i) = 0.0
+          end do
+          
+          do i = 1, 1000 
+             if (mod(i,100) == 0) write(*,*) i
+             sample(nind) = theta_grid(i)
+             call update_sample_model(model,c,map_inds,sample)
+             lnl_grid(i) = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
+          end do
+          
+          open(44,file='theta_grid.dat')
+          do i = 1, 1000
+             write(44,fmt='(2(E16.8))') theta_grid(i), lnl_grid(i)
+          end do
+          close(44)
+       end if
+       ! stop
+       ! Init theta
 
+       lnl = 0.d0
+ 
        ! Initialize index map from previous Gibbs iteration
        ! Ensure proper handling of poltypes
        do l = 1, c%nindices
           sample(l) = c%indices(0,map_inds(1),l)
        end do
-
-       ! Init theta
        theta = sample
        
        ! Define the model to toss into the likelihood evaluation
@@ -266,6 +293,16 @@ contains
 
        ! Now we do the real sampling
        if (sample_it) then
+          if (.not. c%tuned(nind)) then
+             write(*,*) 'Tuning!'
+             call tune_spectral_parameter_length(c,nind,sample,data,rms,model,map_inds,mask(:,1))
+          end if
+          do l = 1, c%nindices
+             sample(l) = c%indices(0,map_inds(1),l)
+          end do
+          theta = sample
+          ! The real sampling block
+          !========================
           do l = 1, nsample
              
              ! Update theta with the new sample
@@ -292,8 +329,8 @@ contains
              ! Accept/reject
              diff  = lnl_new - lnl_old
              ratio = exp(diff)
-
-             ! write(*,*) l, theta(nind), sample(nind), lnl_old, lnl_new, diff, ratio
+             
+             ! write(*,fmt='(i3,6(f12.4))') l, theta(nind), sample(nind), lnl_old, lnl_new, diff, ratio
              
              if (trim(ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
@@ -307,9 +344,9 @@ contains
                    lnl_old      = lnl_new
                 end if
              end if
-
+             
           end do
-          ! stop
+          !========================
        end if
 
        ! Cast the final sample back to the dummy index map
@@ -320,12 +357,27 @@ contains
        write(*,*) 'Sampling per-pixel at nside ', c%sample_nside(nind)
        ! Pixel-by-pixel
 
+       allocate(sample(c%nindices),theta(c%nindices))
+       allocate(model(0:sample_npix-1,nmaps,nbands))   
+       sample(:) = 0.d0
+       theta(:)  = 0.d0
+       model(:,:,:)        = 0.d0
+       if (.not. c%tuned(nind)) then
+          write(*,*) 'Tuning!'
+          do l = 1, c%nindices
+             sample(l) = sum(c%indices(:,map_inds(1),l))/sum(mask(:,1))
+             call tune_spectral_parameter_length(c,nind,sample,data,rms,model,map_inds,mask(:,1))
+          end do
+       end if
+       deallocate(sample,theta,model)
+
        !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
        sample(:) = 0.d0
        theta(:)  = 0.d0
        model(:,:,:)        = 0.d0
+
        !$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
           sample_it = .true.
@@ -567,19 +619,10 @@ contains
           TNd    = sum(TN*data(inds(2,1):inds(2,2),k,j))
           TNT    = sum(TN*model(inds(2,1):inds(2,2),k,j))
           invTNT = 1.d0/TNT
-          ! write(*,*) j, k, invTNT, TNd
-          ! write(*,*) " ", -0.5d0*TNd*invTNT*TNd
-          ! write(*,*) " ", -0.5d0*sum(data(inds(2,1):inds(2,2),k,j)**2/rms(inds(2,1):inds(2,2),k,j)**2)
-          ! write(*,*) " ", 0.5*log(invTNT)
-          ! write(*,*) ""
 
           lnL    = lnL - 0.5d0*TNd*invTNT*TNd
-
-          ! If we use the determinant
-          ! lnL = lnL + 0.5*log(invTNT)
        end do
     end do
-    ! stop
 
   end function evaluate_marginal_lnL
 
@@ -612,6 +655,7 @@ contains
 
     ! Initialize the result to null
     lnL = 0.d0
+    lnl_local = 0.d0
 
     ! Initialize the inds array to condense the following lines:
     inds(1,:) = map_inds
@@ -719,68 +763,102 @@ contains
     
   end subroutine fit_band_offset
 
-  ! NEEDS A FULL REWRITE FOR HOW COMPONENTS WORK NOW
-  ! function eval_jeffreys_prior(dpar, dat, comp, map_n, ind, val, pixel) result(prob)
-  !   implicit none
+  subroutine tune_spectral_parameter_length(c,nind,theta_init,data,rms,model,map_inds,mask)
+    implicit none
 
-  !   class(dang_params)                    :: dpar
-  !   type(dang_comps),       intent(inout) :: comp
-  !   type(dang_data)                       :: dat
-  !   real(dp),               intent(in)    :: val
-  !   integer(i4b),           intent(in)    :: map_n, ind
-  !   integer(i4b), optional, intent(in)    :: pixel
-  !   real(dp)                              :: prob, sum, ss
-  !   integer(i4b)                          :: i, j, k
+    type(dang_comps),    pointer, intent(in) :: c
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    real(dp), dimension(2),       intent(in) :: theta_init
+    real(dp), dimension(0:,:,:),  intent(inout) :: model 
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms
+    real(dp), dimension(0:),      intent(in) :: mask
+    real(dp), dimension(2)                   :: theta, sample
+    integer(i4b),                 intent(in) :: nind
+    real(dp)                                 :: accept, lnl, lnl_new, lnl_old
+    real(dp)                                 :: diff, ratio, num
+
+    integer(i4b) :: i,l
+
+    lnl = 0.d0
+    lnl_new = 0.d0
+    lnl_old = 0.d0
+
+    ! Initialize the tuner on the input spectral parameters
+    sample = theta_init
+    theta = theta_init
+    ! Define the model to toss into the likelihood evaluation
+    call update_sample_model(model,c,map_inds,sample)
     
-  !   prob = 0.d0
-  !   sum = 0.d0
+    ! Evaluate the lnL (already includes the -0.5 out front)
+    if (c%lnl_type(nind) == 'chisq') then
+       lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask)
+    else if (c%lnl_type(nind) == 'marginal') then
+       lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask)
+    else if (c%lnl_type(nind) == 'prior') then
+       sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
+    end if
+    
+    if (trim(c%prior_type(nind)) == 'gaussian') then
+       lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+    else if (trim(c%prior_type(nind)) == 'uniform') then
+       lnl_old = lnl
+    end if
+    do while (.not. c%tuned(nind))
+       accept = 0.d0
+       do l = 1, nsample
+          ! Update theta with the new sample
+          ! Evaluate model for likelihood evaluation
+          theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
+          if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
+          
+          call update_sample_model(model,c,map_inds,theta)
+          
+          ! Evaluate the lnL (already includes the -0.5 out front)
+          if (c%lnl_type(nind) == 'chisq') then
+             lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask)
+          else if (c%lnl_type(nind) == 'marginal') then
+             lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask)
+          end if
+          
+          ! Ensure prior contributes
+          if (trim(c%prior_type(nind)) == 'gaussian') then
+             lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+          else if (trim(c%prior_type(nind)) == 'uniform') then
+             lnl_new = lnl
+          end if
+          
+          ! Accept/reject
+          diff  = lnl_new - lnl_old
+          ratio = exp(diff)
+          
+          ! write(*,fmt='(i3,7(f16.4))') l, theta(nind), sample(nind), lnl, lnl_old, lnl_new, diff, ratio
+          
+          if (trim(ml_mode) == 'optimize') then
+             if (ratio > 1.d0) then
+                sample(nind) = theta(nind)
+                lnl_old      = lnl_new
+                accept = accept + 1
+             end if
+          else if (trim(ml_mode) == 'sample') then
+             call RANDOM_NUMBER(num)
+             if (ratio > num) then
+                sample(nind) = theta(nind)
+                lnl_old      = lnl_new
+                accept = accept + 1
+             end if
+          end if
+          lnl = 0.d0
+       end do
+       if (accept/l .lt. 0.4) then
+          c%step_size(nind) = c%step_size(nind) - 0.5*c%step_size(nind)
+       else if (accept/l .gt. 0.6) then
+          c%step_size(nind) = c%step_size(nind) + 0.5*c%step_size(nind)
+       else
+          c%tuned = .true.
+       end if
+       write(*,*) accept/l, c%step_size(nind)
+    end do
 
-  !   if (trim(dpar%fg_label(ind)) == 'synch') then
-  !      ! Is this evaluated for a single pixel?
-  !      if (present(pixel)) then
-  !         ! If map_n = -1, then sum over poltypes
-  !         if (map_n == -1) then
-  !            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-  !               do j = 1, nbands
-  !                  ss  = dat%fg_map(pixel,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !                  sum = sum + (((1.0/dat%rms_map(pixel,k,j))**2)*(ss/dat%fg_map(pixel,k,0,ind))*&
-  !                       & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !               end do
-  !            end do
-  !         else
-  !            do j = 1, nbands
-  !               ss  = dat%fg_map(pixel,map_n,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !               sum = sum + (((1.0/dat%rms_map(pixel,map_n,j))**2)*(ss/dat%fg_map(pixel,map_n,0,ind))*&
-  !                    & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !            end do
-  !         end if
-  !      else
-  !         ! If map_n = -1, then sum over poltypes
-  !         if (map_n == -1) then
-  !            do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-  !               do i = 0, npix-1
-  !                  if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-  !                  do j = 1, nbands
-  !                     ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !                     sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*&
-  !                          & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !                  end do
-  !               end do
-  !            end do
-  !         else
-  !            do i = 0, npix-1
-  !               if (dat%masks(i,1) == 0.d0 .or. dat%masks(i,1) == missval) cycle
-  !               do j = 1, nbands
-  !                  ss  = dat%fg_map(i,k,0,ind)*(dpar%band_nu(j)/dpar%fg_nu_ref(ind))**val
-  !                  sum = sum + (((1.0/dat%rms_map(i,k,j))**2)*(ss/dat%fg_map(i,k,0,ind))*& 
-  !                       & log(dpar%band_nu(j)/dpar%fg_nu_ref(ind)))**2.0
-  !               end do
-  !            end do
-  !         end if
-  !      end if
-  !   end if
-  !   prob = sqrt(sum)
-
-  ! end function eval_jeffreys_prior
+  end subroutine tune_spectral_parameter_length
   
 end module dang_sample_mod

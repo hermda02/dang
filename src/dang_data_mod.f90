@@ -250,16 +250,6 @@ contains
           self%masks(i,1) = 1.d0
        end if
     end do
-    ! nump = 0
-    ! do i = 0, npix-1
-    !    do j = 1, nmaps
-    !       if (self%masks(i,j) == 0.d0 .or. self%masks(i,j) == missval) then
-    !          self%masks(i,j) = 0.d0
-    !       else 
-    !          nump = nump + 1
-    !       end if
-    !    end do
-    ! end do
   end subroutine mask_hi_threshold
 
   subroutine convert_maps(self,dpar)
@@ -536,7 +526,6 @@ contains
     close(33)
 
     ! Output template amplitudes - if applicable
-    ! fmt = '('//trim(nband_str)//'(E17.8))'
     do n = 1, ncomp
        c => component_list(n)%p
        if (trim(c%type) == 'template' .or. trim(c%type) == 'hi_fit') then
@@ -568,7 +557,6 @@ contains
           end if
        end do
     end do
-    
 
     ! And finally band calibration values
     fmt = '(a12,f12.8)'
