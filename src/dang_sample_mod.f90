@@ -237,6 +237,7 @@ contains
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
 
+       model(:,:,:)        = 0.d0
        ! Testing block
        if (.false.) then
           do i = 1, 1000
@@ -292,66 +293,14 @@ contains
 
        ! Now we do the real sampling
        if (sample_it) then
-          if (.not. c%tuned(nind)) write(*,*) 'Tuning!'
-          do while (.not. c%tuned(nind))
-             accept = 0.d0
-             do l = 1, nsample
-                
-                ! Update theta with the new sample
-                ! Evaluate model for likelihood evaluation
-                theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
-                if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
-                
-                call update_sample_model(model,c,map_inds,theta)
-                
-                ! Evaluate the lnL (already includes the -0.5 out front)
-                if (c%lnl_type(nind) == 'chisq') then
-                   lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1))
-                else if (c%lnl_type(nind) == 'marginal') then
-                   lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask(:,1))
-                end if
-                
-                ! Ensure prior contributes
-                if (trim(c%prior_type(nind)) == 'gaussian') then
-                   lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
-                else if (trim(c%prior_type(nind)) == 'uniform') then
-                   lnl_new = lnl
-                end if
-                
-                ! Accept/reject
-                diff  = lnl_new - lnl_old
-                ratio = exp(diff)
-                
-                ! write(*,fmt='(i3,6(f12.4))') l, theta(nind), sample(nind), lnl_old, lnl_new, diff, ratio
-                
-                if (trim(ml_mode) == 'optimize') then
-                   if (ratio > 1.d0) then
-                      sample(nind) = theta(nind)
-                      lnl_old      = lnl_new
-                      accept = accept + 1
-                   end if
-                else if (trim(ml_mode) == 'sample') then
-                   call RANDOM_NUMBER(num)
-                   if (ratio > num) then
-                      sample(nind) = theta(nind)
-                      lnl_old      = lnl_new
-                      accept = accept + 1
-                   end if
-                end if
-                
-             end do
-             if (accept/l .lt. 0.4) then
-                c%step_size(nind) = c%step_size(nind) - 0.5*c%step_size(nind)
-             else if (accept/l .gt. 0.6) then
-                c%step_size(nind) = c%step_size(nind) + 0.5*c%step_size(nind)
-             else
-                c%tuned = .true.
-             end if
-          end do
+          if (.not. c%tuned(nind)) then
+             write(*,*) 'Tuning!'
+             call tune_spectral_parameter_length(c,nind,sample,data,rms,model,map_inds,mask(:,1))
+          end if
           do l = 1, c%nindices
              sample(l) = c%indices(0,map_inds(1),l)
           end do
-          
+          theta = sample
           ! The real sampling block
           !========================
           do l = 1, nsample
@@ -408,12 +357,27 @@ contains
        write(*,*) 'Sampling per-pixel at nside ', c%sample_nside(nind)
        ! Pixel-by-pixel
 
+       allocate(sample(c%nindices),theta(c%nindices))
+       allocate(model(0:sample_npix-1,nmaps,nbands))   
+       sample(:) = 0.d0
+       theta(:)  = 0.d0
+       model(:,:,:)        = 0.d0
+       if (.not. c%tuned(nind)) then
+          write(*,*) 'Tuning!'
+          do l = 1, c%nindices
+             sample(l) = sum(c%indices(:,map_inds(1),l))/sum(mask(:,1))
+             call tune_spectral_parameter_length(c,nind,sample,data,rms,model,map_inds,mask(:,1))
+          end do
+       end if
+       deallocate(sample,theta,model)
+
        !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
        sample(:) = 0.d0
        theta(:)  = 0.d0
        model(:,:,:)        = 0.d0
+
        !$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
           sample_it = .true.
@@ -691,6 +655,7 @@ contains
 
     ! Initialize the result to null
     lnL = 0.d0
+    lnl_local = 0.d0
 
     ! Initialize the inds array to condense the following lines:
     inds(1,:) = map_inds
@@ -797,5 +762,103 @@ contains
     ddata%offset(band) = offset
     
   end subroutine fit_band_offset
+
+  subroutine tune_spectral_parameter_length(c,nind,theta_init,data,rms,model,map_inds,mask)
+    implicit none
+
+    type(dang_comps),    pointer, intent(in) :: c
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    real(dp), dimension(2),       intent(in) :: theta_init
+    real(dp), dimension(0:,:,:),  intent(inout) :: model 
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms
+    real(dp), dimension(0:),      intent(in) :: mask
+    real(dp), dimension(2)                   :: theta, sample
+    integer(i4b),                 intent(in) :: nind
+    real(dp)                                 :: accept, lnl, lnl_new, lnl_old
+    real(dp)                                 :: diff, ratio, num
+
+    integer(i4b) :: i,l
+
+    lnl = 0.d0
+    lnl_new = 0.d0
+    lnl_old = 0.d0
+
+    ! Initialize the tuner on the input spectral parameters
+    sample = theta_init
+    theta = theta_init
+    ! Define the model to toss into the likelihood evaluation
+    call update_sample_model(model,c,map_inds,sample)
+    
+    ! Evaluate the lnL (already includes the -0.5 out front)
+    if (c%lnl_type(nind) == 'chisq') then
+       lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask)
+    else if (c%lnl_type(nind) == 'marginal') then
+       lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask)
+    else if (c%lnl_type(nind) == 'prior') then
+       sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
+    end if
+    
+    if (trim(c%prior_type(nind)) == 'gaussian') then
+       lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+    else if (trim(c%prior_type(nind)) == 'uniform') then
+       lnl_old = lnl
+    end if
+    do while (.not. c%tuned(nind))
+       accept = 0.d0
+       do l = 1, nsample
+          ! Update theta with the new sample
+          ! Evaluate model for likelihood evaluation
+          theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
+          if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
+          
+          call update_sample_model(model,c,map_inds,theta)
+          
+          ! Evaluate the lnL (already includes the -0.5 out front)
+          if (c%lnl_type(nind) == 'chisq') then
+             lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask)
+          else if (c%lnl_type(nind) == 'marginal') then
+             lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask)
+          end if
+          
+          ! Ensure prior contributes
+          if (trim(c%prior_type(nind)) == 'gaussian') then
+             lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+          else if (trim(c%prior_type(nind)) == 'uniform') then
+             lnl_new = lnl
+          end if
+          
+          ! Accept/reject
+          diff  = lnl_new - lnl_old
+          ratio = exp(diff)
+          
+          ! write(*,fmt='(i3,7(f16.4))') l, theta(nind), sample(nind), lnl, lnl_old, lnl_new, diff, ratio
+          
+          if (trim(ml_mode) == 'optimize') then
+             if (ratio > 1.d0) then
+                sample(nind) = theta(nind)
+                lnl_old      = lnl_new
+                accept = accept + 1
+             end if
+          else if (trim(ml_mode) == 'sample') then
+             call RANDOM_NUMBER(num)
+             if (ratio > num) then
+                sample(nind) = theta(nind)
+                lnl_old      = lnl_new
+                accept = accept + 1
+             end if
+          end if
+          lnl = 0.d0
+       end do
+       if (accept/l .lt. 0.4) then
+          c%step_size(nind) = c%step_size(nind) - 0.5*c%step_size(nind)
+       else if (accept/l .gt. 0.6) then
+          c%step_size(nind) = c%step_size(nind) + 0.5*c%step_size(nind)
+       else
+          c%tuned = .true.
+       end if
+       write(*,*) accept/l, c%step_size(nind)
+    end do
+
+  end subroutine tune_spectral_parameter_length
   
 end module dang_sample_mod
