@@ -31,6 +31,7 @@ module dang_param_mod
      character(len=512)                              :: bp_dir         ! Directory for BP swap maps
      character(len=512)                              :: mask_file      ! Mask filename
      character(len=512)                              :: offset_file    ! Offset init     
+     character(len=512)                              :: gain_file      ! Gain init     
      character(len=512), allocatable, dimension(:)   :: band_calibrator! Band filename
      character(len=512), allocatable, dimension(:)   :: band_label     ! Band label
      character(len=512), allocatable, dimension(:)   :: band_mapfile   ! Band filename
@@ -435,6 +436,7 @@ contains
     call get_parameter_hashtable(htbl, 'MASKFILE', par_string=par%mask_file)
 
     call get_parameter_hashtable(htbl, 'BAND_OFFSET_FILE', par_string=par%offset_file)
+    call get_parameter_hashtable(htbl, 'BAND_GAIN_FILE', par_string=par%gain_file)
     
     n  = par%numband
     n2 = par%numinc

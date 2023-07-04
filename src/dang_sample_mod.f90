@@ -173,10 +173,10 @@ contains
     
     ! Initialize data and model
     do j = 1, nbands
-       data_raw(0:,1,j)   = ddata%sig_map(0:,1,j)/ddata%gain(j)
+       data_raw(0:,1,j)   = (ddata%sig_map(0:,1,j)-ddata%offset(j))/ddata%gain(j)
        if (nmaps > 1) data_raw(0:,2:3,j) = ddata%sig_map(0:,2:3,j)
        rms_raw(0:,:,j)    = ddata%rms_map(0:,:,j)
-       if (map_inds(1) == 1) data_raw(0:,1,j) = data_raw(0:,1,j)/ddata%gain(j)
+       ! if (map_inds(1) == 1) data_raw(0:,1,j) = data_raw(0:,1,j)/ddata%gain(j)
     end do
     mask_raw = ddata%masks
 

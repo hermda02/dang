@@ -40,18 +40,39 @@ module dang_data_mod
     logical(lgt), allocatable, dimension(:)   :: fit_offset
 
   contains
+    procedure :: initialize_data_module
     procedure :: init_data_maps
     procedure :: read_data_maps
     procedure :: update_sky_model
     procedure :: convert_maps
     procedure :: mask_hi_threshold
     procedure :: read_band_offsets
+    procedure :: read_band_gains
   end type dang_data
 
   private :: i, j, k, l
   integer(i4b) :: i, j, k, l
 
 contains
+
+  subroutine initialize_data_module(self,dpar)
+    implicit none
+    class(dang_data),       intent(inout) :: self
+    type(dang_params)                     :: dpar
+
+    call self%init_data_maps(dpar)
+    call self%read_data_maps(dpar)
+    call self%read_band_offsets(dpar)
+    call self%read_band_gains(dpar)
+    if (dpar%bp_swap) then
+       call swap_bp_maps(self,dpar)
+       write(*,*) ''
+       call convert_bp_maps(self, dpar)
+       write(*,*) ''
+    end if
+    call self%convert_maps(dpar)
+    
+  end subroutine initialize_data_module
 
   subroutine init_data_maps(self,dpar)
     implicit none
@@ -131,6 +152,58 @@ contains
     deallocate(map,rms)
   end subroutine read_data_maps
 
+  subroutine swap_bp_maps(dat,dpar)
+    type(dang_params)                               :: dpar
+    class(dang_data),                  intent(inout) :: dat
+    character(len=512)                              :: chain_c
+    character(len=300), allocatable, dimension(:,:) :: bp_maps
+    integer(i4b)                                    :: i, j, iter_i, chain_i
+    character(len=6)                                :: iter_str
+    real(dp), allocatable, dimension(:,:)           :: map, rms
+    real(dp)                                        :: norm
+    double precision                                :: temp(1)
+
+    allocate(map(0:npix-1,3))
+    allocate(rms(0:npix-1,3))
+    allocate(bp_maps(dpar%numband,2))
+
+    do j = 1, dpar%numband
+       if (dpar%bp_map(j)) then
+
+          call RANDOM_SEED()
+          call RANDOM_NUMBER(temp)
+          
+          norm    = temp(1)*dpar%num_chains
+          chain_i = int(norm)+1
+          chain_c = dpar%bp_chain_list(chain_i)
+          
+          call RANDOM_SEED()
+          call RANDOM_NUMBER(temp)
+          
+          norm    = temp(1)*(dpar%bp_max-dpar%bp_burnin)
+          iter_i  = int(norm)+1+dpar%bp_burnin
+          
+          write(iter_str,'(i0.6)') iter_i
+
+          ! Normal BP switching here
+          bp_maps(j,1) = trim(dpar%bp_dir) // trim(dpar%band_label(j))//'_map_'//trim(chain_c)//&
+               '_n0064_60arcmin_k'//trim(iter_str) // '.fits'
+
+          ! This is for switching to the 'plus_cmb' maps:
+          bp_maps(j,2) = trim(dpar%bp_dir) // trim(dpar%band_label(j))//'_rms_'//trim(chain_c)//&
+               '_n0064_60arcmin_k'//trim(iter_str) // '.fits'
+          write(*,'(a,a,a)') 'Swapping band ', trim(dpar%band_label(j)), '.'
+          call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header)
+          dat%sig_map(:,:,j) = map
+          call read_bintab(trim(bp_maps(j,2)),rms,dat%npix,3,nullval,anynull,header=header)
+          dat%rms_map(:,:,j) = rms
+
+
+       end if
+    end do
+
+  end subroutine swap_bp_maps
+
   subroutine read_band_offsets(self,dpar)
     implicit none
     class(dang_data),       intent(inout) :: self
@@ -181,6 +254,57 @@ contains
     write(*,*) ''
     
   end subroutine read_band_offsets
+
+  subroutine read_band_gains(self,dpar)
+    implicit none
+    class(dang_data),       intent(inout) :: self
+    type(dang_params),      intent(in)    :: dpar
+    character(len=512)                    :: file
+    character(len=128)                    :: fmt, nband_str, band
+
+    real(dp)                              :: gain
+
+    logical(lgt)                          :: exist
+    logical(lgt), allocatable, dimension(:) :: loaded
+
+    integer(i4b)                          :: i, j, k
+    integer(i4b)                          :: unit, ios, ierror
+
+    allocate(loaded(nbands))
+
+    loaded(:) = .false.
+
+    write(nband_str, '(i4)') nbands
+
+    file = trim(dpar%gain_file)
+
+    unit = getlun()
+    ierror  = 0
+    fmt  = '('//trim(nband_str)//'(E17.8))'
+
+    if (trim(file) == '') then
+       write(*,*) 'No BAND_GAIN_FILE -- setting all gains to 1.0'
+       self%gain(:) = 1.d0
+    else
+       open(unit,file=trim(dpar%datadir)//file)
+       do while (ierror .eq. 0) 
+          read(unit=unit,fmt=*,iostat=ierror) band, gain
+          do j = 1, nbands
+             if (trim(band) == trim(dpar%band_label(j))) then
+                self%gain(j) = gain
+                loaded(j) = .true.
+             end if
+          end do
+       end do
+    end if
+    do j = 1, nbands
+       if (.not. loaded(j)) then
+          write(*,*) trim(dpar%band_label(j))//' gain not loaded -- set to 1.0'
+       end if
+    end do
+    write(*,*) ''
+    
+  end subroutine read_band_gains
 
   subroutine update_sky_model(self)
     implicit none
@@ -329,7 +453,7 @@ contains
        do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
           if (k == 1) then
              do j = 1, nbands
-                self%chisq = self%chisq + ((self%sig_map(i,k,j)/self%gain(j)-self%offset(j)) - & 
+                self%chisq = self%chisq + ((self%sig_map(i,k,j)-self%offset(j))/self%gain(j) - & 
                      self%sky_model(i,k,j))**2.d0/(self%rms_map(i,k,j)**2.d0)
              end do
           else
@@ -559,7 +683,7 @@ contains
     end do
 
     ! And finally band calibration values
-    fmt = '(a12,f12.8)'
+    fmt = '(a12,E16.8)'
     
     title = trim(dpar%outdir)//'band_gains_k'//iter_str//'.dat'
     inquire(file=title,exist=exist)
@@ -581,7 +705,7 @@ contains
        open(38,file=title,status="new",action="write")
     end if
     do j = 1, nbands
-       write(38,fmt=fmt) trim(dpar%band_label(j)), ddata%offset(j)
+       write(38,fmt=fmt) trim(dpar%band_label(j)), ddata%offset(j)/ddata%conversion(j)
     end do
     close(38)
     
