@@ -22,6 +22,7 @@ module dang_component_mod
      logical(lgt),      allocatable, dimension(:)     :: corr             ! Do we correct this band?
      character(len=16), allocatable, dimension(:)     :: ind_label        ! Label of the indices
      logical(lgt),      allocatable, dimension(:)     :: sample_index     ! Do we sample this spectral index?
+     logical(lgt),      allocatable, dimension(:)     :: tuned     ! Do we sample this spectral index?
      integer(i4b),      allocatable, dimension(:)     :: sample_nside     ! At which nside do we sample?
      real(dp),          allocatable, dimension(:)     :: step_size        ! M-H step size
 
@@ -110,7 +111,10 @@ contains
        allocate(constructor%prior_type(constructor%nindices))
        allocate(constructor%lnl_type(constructor%nindices))
        allocate(constructor%index_mode(constructor%nindices))
+
+       ! Metropolis step size parameters
        allocate(constructor%step_size(constructor%nindices))
+       allocate(constructor%tuned(constructor%nindices))
 
        ! Allocate general pol_type flag array
        allocate(constructor%nflag(constructor%nindices))
@@ -164,8 +168,9 @@ contains
           ! Define the lnl evaluation for each index
           constructor%lnl_type(i)      = dpar%fg_ind_lnl(component,i)
 
-          ! Define MH step siz
+          ! Define MH step size
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
+          constructor%tuned(i) = .not. dpar%fg_spec_tune(component,i)
 
           ! Define prior for likelihood evaluation
           constructor%prior_type(i)    = dpar%fg_prior_type(component,i) 
@@ -193,6 +198,8 @@ contains
        allocate(constructor%prior_type(constructor%nindices))
        allocate(constructor%lnl_type(constructor%nindices))
        allocate(constructor%index_mode(constructor%nindices))
+
+       allocate(constructor%tuned(constructor%nindices))
        allocate(constructor%step_size(constructor%nindices))
 
        ! Allocate general pol_type flag array
@@ -250,8 +257,9 @@ contains
           ! Define the lnl evaluation for each index
           constructor%lnl_type(i)      = dpar%fg_ind_lnl(component,i)
 
-          ! Define MH step siz
+          ! Define MH step size
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
+          constructor%tuned(i) = .not. dpar%fg_spec_tune(component,i)
 
           ! Define prior for likelihood evaluation
           constructor%prior_type(i)    = dpar%fg_prior_type(component,i)
@@ -278,7 +286,9 @@ contains
        allocate(constructor%prior_type(constructor%nindices))
        allocate(constructor%lnl_type(constructor%nindices))
        allocate(constructor%index_mode(constructor%nindices))
+
        allocate(constructor%step_size(constructor%nindices))
+       allocate(constructor%tuned(constructor%nindices))
 
        ! Allocate general pol_type flag array
        allocate(constructor%nflag(constructor%nindices))
@@ -331,8 +341,9 @@ contains
           ! Define the lnl evaluation for each index
           constructor%lnl_type(i)      = dpar%fg_ind_lnl(component,i)
 
-          ! Define MH step siz
+          ! Define MH step size
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
+          constructor%tuned(i) = .not. dpar%fg_spec_tune(component,i)
 
           ! Define prior for likelihood evaluation
           constructor%prior_type(i)    = dpar%fg_prior_type(component,i)
@@ -386,7 +397,9 @@ contains
        allocate(constructor%prior_type(1))
        allocate(constructor%lnl_type(1))
        allocate(constructor%index_mode(1))
+
        allocate(constructor%step_size(1))
+       allocate(constructor%tuned(constructor%nindices))
        
        ! Allocate maps for the components
        allocate(constructor%amplitude(0:npix-1,nmaps))
@@ -418,6 +431,7 @@ contains
        
        ! Define MH step size
        constructor%step_size(1)     = dpar%fg_spec_step(component,1)
+       constructor%tuned(1)         = .not. dpar%fg_spec_tune(component,i)
        
        ! Define prior for likelihood evaluation
        constructor%prior_type(1)    = dpar%fg_prior_type(component,1) 
@@ -439,7 +453,9 @@ contains
        allocate(constructor%prior_type(constructor%nindices))
        allocate(constructor%lnl_type(constructor%nindices))
        allocate(constructor%index_mode(constructor%nindices))
+
        allocate(constructor%step_size(constructor%nindices))
+       allocate(constructor%tuned(constructor%nindices))
 
        ! Allocate general pol_type flag array
        allocate(constructor%nflag(constructor%nindices))
@@ -495,6 +511,7 @@ contains
 
           ! Define MH step size
           constructor%step_size(i) = dpar%fg_spec_step(component,i)
+          constructor%tuned(i)     = .not. dpar%fg_spec_tune(component,i)
 
           ! Define prior for likelihood evaluation
           constructor%prior_type(i)    = dpar%fg_prior_type(component,i) 
@@ -571,6 +588,8 @@ contains
        allocate(constructor%prior_type(1))
        allocate(constructor%lnl_type(1))
        allocate(constructor%index_mode(1))
+
+       allocate(constructor%tuned(constructor%nindices))
        allocate(constructor%step_size(1))
        
        ! Allocate maps for the components
@@ -588,10 +607,6 @@ contains
        constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
        constructor%corr                = dpar%fg_temp_corr(component,:)
        constructor%template_amplitudes = 0.d0
-
-       !HARD CODED
-       constructor%step_size(1) = dpar%fg_spec_step(component,1)
-       !!!!
 
        ! Allocate general pol_type flag array
        allocate(constructor%nflag(1))
@@ -612,6 +627,11 @@ contains
 
           ! Define the lnl evaluation for each index
           constructor%lnl_type(i)      = dpar%fg_ind_lnl(component,i)
+
+
+          ! Define MH step size
+          constructor%step_size(i) = dpar%fg_spec_step(component,1)
+          constructor%tuned(i)     = .not. dpar%fg_spec_tune(component,i)
 
           ! Do we sample this index?
           constructor%sample_index(i)  = dpar%fg_samp_spec(component,i)

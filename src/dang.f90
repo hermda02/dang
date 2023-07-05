@@ -11,7 +11,6 @@ program dang
   use dang_component_mod
   use dang_sample_mod
   use dang_cg_mod
-  use dang_swap_mod
   implicit none
   
   !------------------------------------------------------------------------------------------------------
@@ -68,16 +67,7 @@ program dang
 
   ! Initialize ddata and components
   !----------------------------------------------------------------------------------------------------------
-  call ddata%init_data_maps(dpar)
-  call ddata%read_data_maps(dpar)
-  call ddata%read_band_offsets(dpar)
-  if (dpar%bp_swap) then
-     call swap_bp_maps(ddata,dpar)
-     write(*,*) ''
-     call convert_bp_maps(ddata, dpar)
-     write(*,*) ''
-  end if
-  call ddata%convert_maps(dpar)
+  call ddata%initialize_data_module(dpar)
   write(*,*) ''
   call initialize_components(dpar)
   call initialize_cg_groups(dpar)
@@ -106,14 +96,14 @@ program dang
      ! Sample each CG group for amplitudes
      ! ------------------------------------------------------------------------------------------
      call sample_cg_groups(dpar,ddata)
-     ! ------------------------------------------------------------------------------------------
-     ! Sample each spectral parameter
-     ! ------------------------------------------------------------------------------------------
-     call sample_spectral_parameters(dpar,ddata)
-     ! ------------------------------------------------------------------------------------------
-     ! Sample band calibrators
-     ! ------------------------------------------------------------------------------------------
      if (iter > 1) then
+        ! ------------------------------------------------------------------------------------------
+        ! Sample each spectral parameter
+        ! ------------------------------------------------------------------------------------------
+        call sample_spectral_parameters(dpar,ddata)
+        ! ------------------------------------------------------------------------------------------
+        ! Sample band calibrators
+        ! ------------------------------------------------------------------------------------------
         call sample_calibrators(ddata)
         call ddata%update_sky_model
      end if

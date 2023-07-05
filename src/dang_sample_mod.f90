@@ -115,7 +115,8 @@ contains
     integer(i4b),                intent(in) :: map_n
     type(dang_comps),   pointer             :: c2
     logical(lgt)                            :: sample_it
-    
+    ! logical(lgt)                            :: tuned
+     
     integer(i4b),          dimension(2)     :: map_inds
 
     ! Arrays for the native resolution data/rms
@@ -133,9 +134,15 @@ contains
     ! Metropolis parameters
     real(dp)                                :: lnl, lnl_old, lnl_new
     real(dp)                                :: diff, ratio, num
+    real(dp)                                :: accept ! Count accepted samples for ratio
+
+    real(dp)                                :: t1, t2, t3, t4, t5, t6 ! Timing variables
 
     real(dp), allocatable, dimension(:,:,:) :: model
     real(dp), allocatable, dimension(:)     :: sample, theta
+
+
+    real(dp), dimension(1000)               :: theta_grid, lnl_grid
 
 
     ! This parameter is set in case we want to sample from the prior
@@ -165,9 +172,10 @@ contains
     
     ! Initialize data and model
     do j = 1, nbands
-       data_raw(0:,1,j)   = ddata%sig_map(0:,1,j)/ddata%gain(j)
+       data_raw(0:,1,j)   = (ddata%sig_map(0:,1,j)-ddata%offset(j))/ddata%gain(j)
        if (nmaps > 1) data_raw(0:,2:3,j) = ddata%sig_map(0:,2:3,j)
        rms_raw(0:,:,j)    = ddata%rms_map(0:,:,j)
+       ! if (map_inds(1) == 1) data_raw(0:,1,j) = data_raw(0:,1,j)/ddata%gain(j)
     end do
     mask_raw = ddata%masks
 
@@ -225,13 +233,15 @@ contains
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
 
+       model(:,:,:)        = 0.d0
+
+       ! Init theta
+       lnl = 0.d0
        ! Initialize index map from previous Gibbs iteration
        ! Ensure proper handling of poltypes
        do l = 1, c%nindices
           sample(l) = c%indices(0,map_inds(1),l)
        end do
-
-       ! Init theta
        theta = sample
        
        ! Define the model to toss into the likelihood evaluation
@@ -251,12 +261,24 @@ contains
        
        if (trim(c%prior_type(nind)) == 'gaussian') then
           lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+       else if (trim(c%prior_type(nind)) == 'jeffreys') then
+          lnl_old = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,-1,mask(:,1),sample(nind)))
        else if (trim(c%prior_type(nind)) == 'uniform') then
           lnl_old = lnl
        end if
 
        ! Now we do the real sampling
        if (sample_it) then
+          if (.not. c%tuned(nind)) then
+             write(*,*) 'Tuning!'
+             call tune_spectral_parameter_length(c,nind,sample,data,rms,model,map_inds,mask(:,1))
+          end if
+          do l = 1, c%nindices
+             sample(l) = c%indices(0,map_inds(1),l)
+          end do
+          theta = sample
+          ! The real sampling block
+          !========================
           do l = 1, nsample
              
              ! Update theta with the new sample
@@ -276,6 +298,8 @@ contains
              ! Ensure prior contribution
              if (trim(c%prior_type(nind)) == 'gaussian') then
                 lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+             else if (trim(c%prior_type(nind)) == 'jeffreys') then
+                lnl_new = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,-1,mask(:,1),theta(nind)))
              else if (trim(c%prior_type(nind)) == 'uniform') then
                 lnl_new = lnl
              end if
@@ -297,7 +321,7 @@ contains
                 end if
              end if
           end do
-          ! stop
+          !========================
        end if
 
        ! Cast the final sample back to the dummy index map
@@ -307,6 +331,20 @@ contains
     else if (c%index_mode(nind) == 2) then
        write(*,fmt='(a,i4)') 'Sampling per-pixel at nside ', c%sample_nside(nind)
        ! Pixel-by-pixel
+
+       allocate(sample(c%nindices),theta(c%nindices))
+       allocate(model(0:sample_npix-1,nmaps,nbands))   
+       sample(:) = 0.d0
+       theta(:)  = 0.d0
+       model(:,:,:)        = 0.d0
+       if (.not. c%tuned(nind)) then
+          write(*,*) 'Tuning!'
+          do l = 1, c%nindices
+             sample(l) = sum(c%indices(:,map_inds(1),l))/sum(mask(:,1))
+             call tune_spectral_parameter_length(c,nind,sample,data,rms,model,map_inds,mask(:,1))
+          end do
+       end if
+       deallocate(sample,theta,model)
 
        !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
        allocate(sample(c%nindices),theta(c%nindices))
@@ -350,6 +388,8 @@ contains
           
           if (trim(c%prior_type(nind)) == 'gaussian') then
              lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+          else if (trim(c%prior_type(nind)) == 'jeffreys') then
+             lnl_old = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,i,mask(:,1),sample(nind)))
           else if (trim(c%prior_type(nind)) == 'uniform') then
              lnl_old = lnl
           end if
@@ -373,8 +413,9 @@ contains
                 
                 ! With the prior of course
                 if (trim(c%prior_type(nind)) == 'gaussian') then
-                   lnl_new = lnl + & 
-                        & log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+                   lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+                else if (trim(c%prior_type(nind)) == 'jeffreys') then
+                   lnl_new = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,i,mask(:,1),theta(nind)))
                 else if (trim(c%prior_type(nind)) == 'uniform') then
                    lnl_new = lnl
                 end if
@@ -620,6 +661,7 @@ contains
 
     ! Initialize the result to null
     lnL = 0.d0
+    lnl_local = 0.d0
 
     ! Initialize the inds array to condense the following lines:
     inds(1,:) = map_inds
@@ -632,8 +674,8 @@ contains
        inds(2,1) = lbound(data,DIM=1); inds(2,2) = ubound(data,DIM=1)
     end if
 
-    !!$OMP PARALLEL PRIVATE(i,j,k)
-    !!$OMP DO SCHEDULE(static)
+    !$OMP PARALLEL PRIVATE(i,j,k)
+    !$OMP DO SCHEDULE(static)
     do i = inds(2,1), inds(2,2)
        if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
        do k = inds(1,1), inds(1,2)
@@ -642,11 +684,133 @@ contains
           end do
        end do
     end do
+    !$OMP END DO
+    !$OMP END PARALLEL
     lnL = lnL + lnL_local
-    !!$OMP END DO
-    !!$OMP END PARALLEL
 
   end function evaluate_lnL
+
+  function evaluate_lnL_fullsky(data,rms,model,map_inds,pixel,mask) result(lnL)
+    !==========================================================================
+    ! Inputs:
+    !         data:  array(real(dp)) - data with which we compare the model
+    !         rms:   array(real(dp)) - noise associated with the data
+    !         model: array(real(dp)) - the model to compare to the data
+    !         map_n: integer         - poltype for likelihood evaluation
+    !         pixel: integer         - pixel number for likelihood evaluation
+    !
+    ! Output:
+    !         lnL: real(dp)
+    !
+    ! if pixel < 0,  evaluate full sky, otherwise sample that pixel
+    ! if map_n > 0,  evaluate that poltype
+    ! if map_n = -1, evaluate Q+U jointly
+    ! if map_n = -2, evaluate T+Q+U jointly
+    !==========================================================================
+    implicit none
+
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms, model
+    real(dp), dimension(0:),      intent(in) :: mask
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    integer(i4b),                 intent(in) :: pixel
+    integer(i4b)                             :: i,j,k
+    integer(i4b),   dimension(2,2)           :: inds
+    real(dp)                                 :: lnL, lnL_local
+
+    ! Initialize the result to null
+    lnL = 0.d0
+    lnl_local = 0.d0
+
+    ! Initialize the inds array to condense the following lines:
+    inds(1,:) = map_inds
+
+    if (pixel > -1) then
+       ! For a specific pixel
+       inds(2,:) = pixel
+    else
+       ! For all pixels
+       inds(2,1) = lbound(data,DIM=1); inds(2,2) = ubound(data,DIM=1)
+    end if
+
+    !$OMP PARALLEL PRIVATE(i,j,k)
+    !$OMP DO SCHEDULE(static)
+    do i = inds(2,1), inds(2,2)
+       if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+       do k = inds(1,1), inds(1,2)
+          do j = 1, nbands
+             lnL_local = lnL_local - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
+          end do
+       end do
+    end do
+    !$OMP END DO
+    !$OMP END PARALLEL
+    lnL = lnL + lnL_local
+
+  end function evaluate_lnL_fullsky
+
+  function eval_jeffreys_prior(c,data,rms,model,map_inds,pixel,mask,val) result(prob)
+    !==========================================================================
+    ! Inputs:
+    !         data:  array(real(dp)) - data with which we compare the model
+    !         rms:   array(real(dp)) - noise associated with the data
+    !         model: array(real(dp)) - the model to compare to the data
+    !         map_n: integer         - poltype for likelihood evaluation
+    !         pixel: integer         - pixel number for likelihood evaluation
+    !
+    ! Output:
+    !         lnL: real(dp)
+    !
+    ! if pixel < 0,  evaluate full sky, otherwise sample that pixel
+    ! if map_n > 0,  evaluate that poltype
+    ! if map_n = -1, evaluate Q+U jointly
+    ! if map_n = -2, evaluate T+Q+U jointly
+    !==========================================================================
+    implicit none
+
+    type(dang_comps),    pointer, intent(in) :: c
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms, model
+    real(dp), dimension(0:),      intent(in) :: mask
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    integer(i4b),                 intent(in) :: pixel
+    real(dp),                     intent(in) :: val
+
+    integer(i4b),   dimension(2,2)           :: inds
+    real(dp), dimension(2)                   :: theta
+    real(dp)                                 :: prob, sum, ss
+    integer(i4b)                             :: i, j, k, l
+
+    prob = 0.d0
+    sum = 0.d0
+
+    theta(1) = val
+
+    ! Initialize the inds array to condense the following lines:
+    inds(1,:) = map_inds
+
+    if (pixel > -1) then
+       ! For a specific pixel
+       inds(2,:) = pixel
+    else
+       ! For all pixels
+       inds(2,1) = lbound(data,DIM=1); inds(2,2) = ubound(data,DIM=1)
+    end if
+
+    if (trim(c%label) == 'synch') then
+       ! Is this evaluated for a single pixel?
+       do i = inds(2,1), inds(2,2)
+          if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
+          do k = inds(1,1), inds(1,2)
+             do j = 1, nbands
+                ss  = c%eval_signal(j,i,k,theta)
+                sum = sum + (((1.0/rms(i,k,j))**2)*(ss/c%amplitude(i,k))*&
+                     & log(bp(j)%nu_c/c%nu_ref))**2.0
+             end do
+          end do
+       end do
+    end if
+    prob = sqrt(sum)
+
+  end function eval_jeffreys_prior
   
   subroutine fit_band_gain(ddata, map_n, band)
     
@@ -678,14 +842,14 @@ contains
     
     ! map1 is the map we calibrate against here, being the full sky model.
     map1 = ddata%sky_model(:,map_n,band)
-    
-    map2  = ddata%sig_map(:,map_n,band)-ddata%offset(band)
+    map2 = ddata%res_map(:,map_n,band)+ddata%sky_model(:,map_n,band)
+
     noise = ddata%rms_map(:,map_n,band)
     N_inv = 1.d0/(noise**2)
     
     ! Super simple - find the multiplicative factor by finding the maximum likelihood
     ! solution through a linear fit to the foreground map.
-    gain = sum(mask*map1*map2)/sum(mask*map1*map1)
+    gain = sum(mask*map1*N_inv*map2)/sum(mask*map1*N_inv*map1)
     
     ! Save to data type variable corresponding to the band.
     ddata%gain(band) = gain
@@ -726,5 +890,101 @@ contains
     ddata%offset(band) = offset
     
   end subroutine fit_band_offset
+
+  subroutine tune_spectral_parameter_length(c,nind,theta_init,data,rms,model,map_inds,mask)
+    implicit none
+
+    type(dang_comps),    pointer, intent(in) :: c
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    real(dp), dimension(2),       intent(in) :: theta_init
+    real(dp), dimension(0:,:,:),  intent(inout) :: model 
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms
+    real(dp), dimension(0:),      intent(in) :: mask
+    real(dp), dimension(2)                   :: theta, sample
+    integer(i4b),                 intent(in) :: nind
+    real(dp)                                 :: accept, lnl, lnl_new, lnl_old
+    real(dp)                                 :: diff, ratio, num
+
+    integer(i4b) :: i,l
+
+    lnl = 0.d0
+    lnl_new = 0.d0
+    lnl_old = 0.d0
+
+    ! Initialize the tuner on the input spectral parameters
+    sample = theta_init
+    theta = theta_init
+    ! Define the model to toss into the likelihood evaluation
+    call update_sample_model(model,c,map_inds,sample)
+    
+    ! Evaluate the lnL (already includes the -0.5 out front)
+    if (c%lnl_type(nind) == 'chisq') then
+       lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask)
+    else if (c%lnl_type(nind) == 'marginal') then
+       lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask)
+    else if (c%lnl_type(nind) == 'prior') then
+       sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
+    end if
+    
+    if (trim(c%prior_type(nind)) == 'gaussian') then
+       lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+    else if (trim(c%prior_type(nind)) == 'uniform') then
+       lnl_old = lnl
+    end if
+    do while (.not. c%tuned(nind))
+       accept = 0.d0
+       do l = 1, nsample
+          ! Update theta with the new sample
+          ! Evaluate model for likelihood evaluation
+          theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
+          if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
+          
+          call update_sample_model(model,c,map_inds,theta)
+          
+          ! Evaluate the lnL (already includes the -0.5 out front)
+          if (c%lnl_type(nind) == 'chisq') then
+             lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask)
+          else if (c%lnl_type(nind) == 'marginal') then
+             lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask)
+          end if
+          
+          ! Ensure prior contributes
+          if (trim(c%prior_type(nind)) == 'gaussian') then
+             lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+          else if (trim(c%prior_type(nind)) == 'uniform') then
+             lnl_new = lnl
+          end if
+          
+          ! Accept/reject
+          diff  = lnl_new - lnl_old
+          ratio = exp(diff)
+          
+          if (trim(ml_mode) == 'optimize') then
+             if (ratio > 1.d0) then
+                sample(nind) = theta(nind)
+                lnl_old      = lnl_new
+                accept = accept + 1
+             end if
+          else if (trim(ml_mode) == 'sample') then
+             call RANDOM_NUMBER(num)
+             if (ratio > num) then
+                sample(nind) = theta(nind)
+                lnl_old      = lnl_new
+                accept = accept + 1
+             end if
+          end if
+          lnl = 0.d0
+       end do
+       if (accept/l .lt. 0.4) then
+          c%step_size(nind) = c%step_size(nind) - 0.5*c%step_size(nind)
+       else if (accept/l .gt. 0.6) then
+          c%step_size(nind) = c%step_size(nind) + 0.5*c%step_size(nind)
+       else
+          c%tuned = .true.
+       end if
+       write(*,*) accept/l, c%step_size(nind)
+    end do
+
+  end subroutine tune_spectral_parameter_length
   
 end module dang_sample_mod
