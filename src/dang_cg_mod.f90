@@ -487,7 +487,6 @@ contains
           end do
           !$OMP END DO
           !$OMP END PARALLEL
-          !!$OMP BARRIER
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
              offset = offset + 2*npix
           else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
@@ -499,11 +498,12 @@ contains
           l = 1
           do j = 1, nbands
              if (c%corr(j)) then
+                val_array = 0.d0
                 !$OMP PARALLEL PRIVATE(i)
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   val_array(i) = data(i-1,1,j)/(ddata%rms_map(i-1,1,j)**2.d0)*c%eval_sed(j,i-1,1)
+                   val_array(i) = val_array(i) + data(i-1,1,j)/(ddata%rms_map(i-1,1,j)**2.d0)*c%eval_sed(j,i-1,1)
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -517,26 +517,26 @@ contains
           l = 1
           do j = 1, nbands
              if (c%corr(j)) then
+                val_array = 0.d0
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
+                      val_array(i) = val_array(i) + data(i-1,2,j)/(ddata%rms_map(i-1,2,j)**2.d0)*c%eval_sed(j,i-1,2)
+                      val_array(i) = val_array(i) + data(i-1,3,j)/(ddata%rms_map(i-1,3,j)**2.d0)*c%eval_sed(j,i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,1,j)**2.d0)*&
-                           & data(i-1,1,j)*c%eval_sed(j,i-1,1)
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,2,j)**2.d0)*&
-                           & data(i-1,2,j)*c%eval_sed(j,i-1,2)
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,3,j)**2.d0)*&
-                           & data(i-1,3,j)*c%eval_sed(j,i-1,3)
+                      val_array(i) = val_array(i) + data(i-1,1,j)/(ddata%rms_map(i-1,1,j)**2.d0)*c%eval_sed(j,i-1,1)
+                      val_array(i) = val_array(i) + data(i-1,2,j)/(ddata%rms_map(i-1,2,j)**2.d0)*c%eval_sed(j,i-1,2)
+                      val_array(i) = val_array(i) + data(i-1,3,j)/(ddata%rms_map(i-1,3,j)**2.d0)*c%eval_sed(j,i-1,3)
                    else
-                      b(offset+l) = b(offset+l) + 1.d0/(ddata%rms_map(i-1,map_n,j)**2.d0)*&
-                           & data(i-1,map_n,j)*c%eval_sed(j,i-1,map_n)
+                      val_array(i) = val_array(i) + data(i-1,map_n,j)/(ddata%rms_map(i-1,map_n,j)**2.d0)*c%eval_sed(j,i-1,map_n)
                    end if
                 end do
+                !$OMP END DO
+                !$OMP END PARALLEL
+                b(offset+l) = b(offset+l) + sum(val_array)
                 l = l + 1
              end if
           end do
@@ -586,7 +586,7 @@ contains
     real(dp), allocatable,  dimension(:)  :: temp1, temp2, temp3, res
     type(dang_comps),       pointer       :: c
 
-    real(dp), allocatable, dimension(:)                :: val_array
+    real(dp), allocatable, dimension(:)   :: val_array
 
     integer(i4b)                          :: i, j, k, map_n, comp
     integer(i4b)                          :: l, m, n, offset, pix
@@ -683,12 +683,12 @@ contains
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
-                !!!$OMP BARRIER
+                !!$OMP BARRIER
              end if
           else if (c%type == 'template') then
              if (c%corr(j)) then
-                !!$OMP PARALLEL PRIVATE(i)
-                !!$OMP DO SCHEDULE(static) 
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
@@ -702,8 +702,8 @@ contains
                       temp1(i)        = temp1(i)        + x(offset+l)*c%eval_sed(j,i-1,map_n)
                    end if
                 end do
-                !!$OMP END DO
-                !!$OMP END PARALLEL
+                !$OMP END DO
+                !$OMP END PARALLEL
                 !!$OMP BARRIER
              end if
           end if
@@ -772,11 +772,12 @@ contains
              end if
           else if (c%type == 'hi_fit') then
              if (c%corr(j)) then
+                val_array = 0.d0
                 !$OMP PARALLEL PRIVATE(i)
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   val_array(i) = temp1(i)*c%eval_sed(j,i-1,1)
+                   val_array(i) = val_array(i) + temp1(i)*c%eval_sed(j,i-1,1)
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -786,24 +787,26 @@ contains
              end if
           else if (c%type == 'template') then
              if (c%corr(j)) then
-                !!$OMP PARALLEL PRIVATE(i)
-                !!$OMP DO SCHEDULE(static) 
+                val_array = 0.d0
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      temp3(offset+l) = temp3(offset+l) + temp1(i)*c%eval_sed(j,i-1,2)
-                      temp3(offset+l) = temp3(offset+l) + temp1(npix+i)*c%eval_sed(j,i-1,3)
+                      val_array(i)        = val_array(i)        + temp1(i)*c%eval_sed(j,i-1,2)
+                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*c%eval_sed(j,i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      temp3(offset+l) = temp3(offset+l) + temp1(i)*c%eval_sed(j,i-1,1)
-                      temp3(offset+l) = temp3(offset+l) + temp1(npix+i)*c%eval_sed(j,i-1,2)
-                      temp3(offset+l) = temp3(offset+l) + temp1(2*npix+i)*c%eval_sed(j,i-1,3)
+                      val_array(i)        = val_array(i)        + temp1(i)*c%eval_sed(j,i-1,1)
+                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*c%eval_sed(j,i-1,2)
+                      val_array(2*npix+i) = val_array(2*npix+i) + temp1(2*npix+i)*c%eval_sed(j,i-1,3)
                    else
-                      temp3(offset+l) = temp3(offset+l) + temp1(i)*c%eval_sed(j,i-1,map_n)
+                      val_array(i) = val_array(i) + temp1(i)*c%eval_sed(j,i-1,map_n)
                    end if
                 end do
-                !!$OMP END DO
-                !!$OMP END PARALLEL
+                !$OMP END DO
+                !$OMP END PARALLEL
                 !!$OMP BARRIER
+                temp3(offset+l) = temp3(offset+l) + sum(val_array)
                 l = l + 1
              end if
           end if
@@ -854,6 +857,7 @@ contains
     
     real(dp), allocatable, dimension(:)   :: temp1, temp2, res
     type(dang_comps),       pointer       :: c
+    real(dp), allocatable, dimension(:)   :: val_array
 
     integer(i4b)                          :: i, j, k, map_n, comp
     integer(i4b)                          :: offset, l, m, n
@@ -872,6 +876,8 @@ contains
     m      = size(b)
     offset = 0
     l      = 1
+
+    allocate(val_array(n))
     
     ! Count up the offset for the template handling at the end of the 
     do comp = 1, self%ncg_components                                                     
@@ -946,31 +952,39 @@ contains
              !$OMP END PARALLEL
           else if (c%type == 'hi_fit') then
              if (c%corr(j)) then
+                val_array = 0.d0
                 !$OMP PARALLEL PRIVATE(i)
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp2(offset+l) = temp2(offset+l) + temp1(i)*c%eval_sed(j,i-1,map_n)
+                   val_array(i) = val_array(i) + temp1(i)*c%eval_sed(j,i-1,1)
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
+                temp2(offset+l) = temp2(offset+l) + sum(val_array)
                 l = l + 1
              end if
           else if (c%type == 'template') then
              if (c%corr(j)) then
+                val_array = 0.d0
+                !$OMP PARALLEL PRIVATE(i)
+                !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      temp2(offset+l) = temp2(offset+l) + temp1(i)*c%template(i-1,2)
-                      temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*c%template(i-1,3)
+                      val_array(i)        = val_array(i)        + temp1(i)*c%eval_sed(j,i-1,2)
+                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*c%eval_sed(j,i-1,3)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      temp2(offset+l) = temp2(offset+l) + temp1(i)*c%template(i-1,1)
-                      temp2(offset+l) = temp2(offset+l) + temp1(npix+i)*c%template(i-1,2)
-                      temp2(offset+l) = temp2(offset+l) + temp1(2*npix+i)*c%template(i-1,3)
+                      val_array(i)        = val_array(i)        + temp1(i)*c%eval_sed(j,i-1,1)
+                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*c%eval_sed(j,i-1,2)
+                      val_array(2*npix+i) = val_array(2*npix+i) + temp1(2*npix+i)*c%eval_sed(j,i-1,3)
                    else
-                      temp2(offset+l) = temp2(offset+l) + temp1(i)*c%template(i-1,map_n)
+                      val_array(i) = val_array(i) + temp1(i)*c%eval_sed(j,i-1,map_n)
                    end if
                 end do
+                !$OMP END DO
+                !$OMP END PARALLEL
+                temp2(offset+l) = temp2(offset+l) + sum(val_array)
                 l = l + 1
              end if
           end if
