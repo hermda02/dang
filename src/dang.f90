@@ -67,9 +67,9 @@ program dang
 
   ! Initialize ddata and components
   !----------------------------------------------------------------------------------------------------------
+  call initialize_components(dpar)
   call ddata%initialize_data_module(dpar)
   write(*,*) ''
-  call initialize_components(dpar)
   call initialize_cg_groups(dpar)
   call ddata%update_sky_model
   call write_maps(dpar,ddata)

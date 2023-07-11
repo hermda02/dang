@@ -252,7 +252,12 @@ contains
        end if
     end do
     write(*,*) ''
-    
+    ! Set the loaded monopole values into the monopole component
+    do i = 1, dpar%ncomp
+       if (trim(component_list(i)%p%type) == 'monopole') then
+          component_list(i)%p%template_amplitudes(:,1) =self%offset
+       end if
+    end do
   end subroutine read_band_offsets
 
   subroutine read_band_gains(self,dpar)
@@ -315,6 +320,10 @@ contains
     self%sky_model(:,:,:) = 0.d0
     do l = 1, ncomp
        c => component_list(l)%p
+       if (c%type == 'monopole') then
+          self%offset = c%template_amplitudes(:,1)
+          cycle
+       end if
        !$OMP PARALLEL PRIVATE(i,j,k)
        !$OMP DO SCHEDULE(static)
        do i = 0, npix-1
@@ -554,7 +563,7 @@ contains
           end do
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
           map(:,:)   = ddata%sky_model(:,:,j)/ddata%conversion(j)
-          !$OMP PARALLEL PRIVATE(i,j,k)
+          !$OMP PARALLEL PRIVATE(i)
           !$OMP DO
           do i = 0, npix-1
              if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
@@ -708,10 +717,17 @@ contains
     else
        open(38,file=title,status="new",action="write")
     end if
-    do j = 1, nbands
-       write(38,fmt=fmt) trim(dpar%band_label(j)), ddata%offset(j)/ddata%conversion(j)
+    do n = 1, ncomp
+       c => component_list(n)%p
+       if (trim(c%type) == 'monopole') then
+          do j = 1, nbands
+             write(38,fmt=fmt) trim(dpar%band_label(j)), c%template_amplitudes(j,1)/ddata%conversion(j)
+          end do
+       end if
     end do
     close(38)
+
+
     
   end subroutine write_data
 

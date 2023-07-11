@@ -554,8 +554,10 @@ contains
        call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
        call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i)) 
        call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
-       call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
-       if (trim(par%fg_type(i)) /= 'template' .and. trim(par%fg_type(i)) /= 'hi_fit') then
+       if (trim(par%fg_type(i)) /= 'monopole') then
+          call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
+       end if
+       if (trim(par%fg_type(i)) /= 'template' .and. trim(par%fg_type(i)) /= 'hi_fit' .and. trim(par%fg_type(i)) /= 'monopole') then
           call get_parameter_hashtable(htbl, 'COMP_AMP_SAMPLE'//itext, len_itext=len_itext, par_lgt=par%fg_amp_samp(i))
           call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
           if (par%fg_nu_ref(i) < 1d7) then
@@ -576,6 +578,8 @@ contains
           call read_mbb(par,htbl,i)
        else if (trim(par%fg_type(i)) == 'template') then
           call read_template(par,htbl,i)
+       else if (trim(par%fg_type(i)) == 'monopole') then
+          call read_monopole(par,htbl,i)
        else if (trim(par%fg_type(i)) == 'hi_fit') then
           call read_hi_fit_test(par,htbl,i)
        end if
@@ -743,6 +747,33 @@ contains
     end do
 
   end subroutine read_template
+
+  subroutine read_monopole(par,htbl,comp)
+    implicit none
+    type(hash_tbl_sll),  intent(in)    :: htbl
+    type(dang_params),   intent(inout) :: par
+    integer(i4b),        intent(in)    :: comp
+
+    integer(i4b)     :: len_itext, len_jtext, i, j
+    character(len=2) :: itext
+    character(len=3) :: jtext
+    
+    len_itext = len(trim(itext))
+    len_jtext = len(trim(jtext))
+    
+    call int2string(comp, itext)
+
+    do j = 1, par%numband
+       call int2string(j,jtext)
+       call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
+            len_itext=len_jtext,par_lgt=par%fg_temp_corr(comp,j))
+       if (par%fg_temp_corr(comp,j)) then
+          par%fg_nfit(comp) = par%fg_nfit(comp) + 1
+       end if
+    end do
+
+  end subroutine read_monopole
+
 
   subroutine read_mbb(par,htbl,comp)
     implicit none

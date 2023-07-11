@@ -90,7 +90,7 @@ contains
     constructor%type             = dpar%fg_type(component)
     constructor%cg_group         = dpar%fg_cg_group(component)
 
-    if (trim(constructor%type) /= 'template' .and. trim(constructor%type) /= 'hi_fit') then
+    if (trim(constructor%type) /= 'template' .and. trim(constructor%type) /= 'hi_fit' .and. trim(constructor%type) /= 'monopole') then
        constructor%sample_amplitude = dpar%fg_amp_samp(component)
     else if (trim(constructor%type) == 'T_cmb') then
        constructor%sample_amplitude = .false. ! Treat the CMB monopole as a uniform template
@@ -566,6 +566,24 @@ contains
                constructor%template, npix, nmaps, nullval, anynull, header=header)
        end if
 
+    else if (trim(constructor%type) == 'monopole') then
+
+       constructor%nindices = 0
+      
+       allocate(constructor%corr(nbands))
+       allocate(constructor%amplitude(0:npix-1,nmaps)) ! Amplitude is given by the product of the template at the 
+                                                       ! fit template amplitude (template_amplitudes)
+       allocate(constructor%template_amplitudes(nbands,nmaps))
+       allocate(constructor%template(0:npix-1,nmaps))
+
+       constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
+       constructor%corr                = dpar%fg_temp_corr(component,:)
+       constructor%template_amplitudes = 0.d0
+       ! Set polarized intensity offset map to 0
+       constructor%template            = 0.d0
+       ! Set total intensity offset map to 1
+       constructor%template(:,1)       = 1.d0
+
     else if (trim(constructor%type) == 'hi_fit') then
        !------------------------------------------------------|
        ! Unique component!                                    |
@@ -735,6 +753,8 @@ contains
        eval_signal = self%template_amplitudes(band,map_n)*self%eval_sed(band,pix,map_n,theta)
     else if (trim(self%type) == 'template') then
        eval_signal = self%template_amplitudes(band,map_n)*self%template(pix,map_n)
+    else if (trim(self%type) == 'monopole') then
+       eval_signal = self%template_amplitudes(band,map_n)*self%template(pix,map_n)
     else if (trim(self%type) == 'T_cmb') then
        eval_signal = self%eval_sed(band,pix,map_n,theta)
     else 
@@ -769,6 +789,8 @@ contains
     else if (trim(self%type) == 'T_cmb') then
        spectrum = evaluate_T_cmb(self,band,pix,map_n,theta)
     else if (trim(self%type) == 'template') then
+       spectrum = self%template(pix,map_n)
+    else if (trim(self%type) == 'monopole') then
        spectrum = self%template(pix,map_n)
     else if (trim(self%type) == 'hi_fit') then
        spectrum = self%template(pix,map_n)*evaluate_hi_fit(self, band, pix, map_n, theta)

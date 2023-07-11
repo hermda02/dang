@@ -115,7 +115,6 @@ contains
     integer(i4b),                intent(in) :: map_n
     type(dang_comps),   pointer             :: c2
     logical(lgt)                            :: sample_it
-    ! logical(lgt)                            :: tuned
      
     integer(i4b),          dimension(2)     :: map_inds
 
@@ -469,9 +468,9 @@ contains
        if (ddata%fit_gain(j)) then
           call fit_band_gain(ddata, 1, j)
        end if
-       if (ddata%fit_offset(j)) then
-          call fit_band_offset(ddata, 1, j)
-       end if
+       ! if (ddata%fit_offset(j)) then
+       !    call fit_band_offset(ddata, 1, j)
+       ! end if
     end do
 
   end subroutine sample_calibrators
