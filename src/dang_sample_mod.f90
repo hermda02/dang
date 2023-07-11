@@ -543,7 +543,8 @@ contains
     integer(i4b),            intent(in) :: band
     real(dp), allocatable, dimension(:) :: map1, map2, mask, noise, N_inv
     real(dp)                            :: norm, gain
-    
+    real(dp)                            :: mu, sigma
+ 
     allocate(map1(0:ddata%npix-1))
     allocate(map2(0:ddata%npix-1))
     allocate(mask(0:ddata%npix-1))
@@ -556,6 +557,7 @@ contains
     
     mask = ddata%masks(:,1)
 
+<<<<<<< Updated upstream
     ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
     do i = 0, ddata%npix-1
        if (mask(i) == missval) then
@@ -593,27 +595,39 @@ contains
     allocate(N_inv(0:ddata%npix-1))
     
     mask = ddata%masks(:,1)
+=======
+
+    noise = ddata%rms_map(:,map_n,band)
+    N_inv = 1.d0/(noise**2)
+    ! map1 is the map we calibrate against here, being the full sky model.
+    map1(:) = ddata%sky_model(:,map_n,band)
+    map2(:) = (ddata%res_map(:,map_n,band)+ddata%sky_model(:,map_n,band))
+>>>>>>> Stashed changes
 
     ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
     do i = 0, ddata%npix-1
-       if (mask(i) == missval) then
+       if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) then
           mask(i) = 0.d0
+          map1(i) = 0.d0
+          map2(i) = 0.d0
+          N_inv(i) = 0.d0
        end if
     end do
-    
-    ! map1 is the map we calibrate against here, being the full sky model.
-    map1 = ddata%sky_model(:,map_n,band)
-    map2 = ddata%sig_map(:,map_n,band)
-    
-    noise = ddata%rms_map(:,map_n,band)
-    N_inv = 1.d0/(noise**2)
-    
-    offset = sum(mask(:)*(map2(:) - ddata%gain(band)*map1(:)))/sum(mask(:))
         
-    ddata%offset(band) = offset
-    
-  end subroutine fit_band_offset
+    mu = sum(map2*N_inv*map1)
+    sigma = sum(map1*N_inv*map1)
 
+    mu = mu / sigma
+    sigma = sqrt(1.d0 / sigma)
+
+    write(*,*) trim(ml_mode)
+    if (trim(ml_mode) == 'optimize') then
+       gain = mu
+    else
+       gain = mu + sigma * rand_normal(0.d0,1.d0)
+    end if
+
+<<<<<<< Updated upstream
   ! NEEDS A FULL REWRITE FOR HOW COMPONENTS WORK NOW
   ! function eval_jeffreys_prior(dpar, dat, comp, map_n, ind, val, pixel) result(prob)
   !   implicit none
@@ -626,6 +640,47 @@ contains
   !   integer(i4b), optional, intent(in)    :: pixel
   !   real(dp)                              :: prob, sum, ss
   !   integer(i4b)                          :: i, j, k
+=======
+    ! Save to data type variable corresponding to the band.
+    ddata%gain(band) = gain
+    
+  end subroutine fit_band_gain
+  
+  subroutine tune_spectral_parameter_length(c,nind,theta_init,data,rms,model,map_inds,mask)
+    implicit none
+
+    type(dang_comps),    pointer, intent(in) :: c
+    integer(i4b),   dimension(2), intent(in) :: map_inds
+    real(dp), dimension(2),       intent(in) :: theta_init
+    real(dp), dimension(0:,:,:),  intent(inout) :: model 
+    real(dp), dimension(0:,:,:),  intent(in) :: data, rms
+    real(dp), dimension(0:),      intent(in) :: mask
+    real(dp), dimension(2)                   :: theta, sample
+    integer(i4b),                 intent(in) :: nind
+    real(dp)                                 :: accept, lnl, lnl_new, lnl_old
+    real(dp)                                 :: diff, ratio, num
+
+    integer(i4b) :: i,l
+
+    lnl = 0.d0
+    lnl_new = 0.d0
+    lnl_old = 0.d0
+
+    ! Initialize the tuner on the input spectral parameters
+    sample = theta_init
+    theta = theta_init
+    ! Define the model to toss into the likelihood evaluation
+    call update_sample_model(model,c,map_inds,sample)
+    
+    ! Evaluate the lnL (already includes the -0.5 out front)
+    if (c%lnl_type(nind) == 'chisq') then
+       lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask)
+    else if (c%lnl_type(nind) == 'marginal') then
+       lnl = evaluate_marginal_lnL(data,rms,model,map_inds,-1,mask)
+    else if (c%lnl_type(nind) == 'prior') then
+       sample(nind) = rand_normal(c%gauss_prior(nind,1),c%gauss_prior(nind,2))
+    end if
+>>>>>>> Stashed changes
     
   !   prob = 0.d0
   !   sum = 0.d0
