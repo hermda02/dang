@@ -831,46 +831,6 @@ contains
     map2 = 0.d0
     mask = 0.d0
     
-    mask = ddata%masks(:,1)
-
-    ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
-    do i = 0, ddata%npix-1
-       if (mask(i) == missval) then
-          mask(i) = 0.d0
-       end if
-    end do
-    
-    ! map1 is the map we calibrate against here, being the full sky model.
-    map1 = ddata%sky_model(:,map_n,band)
-    map2 = ddata%res_map(:,map_n,band)+ddata%sky_model(:,map_n,band)
-
-    noise = ddata%rms_map(:,map_n,band)
-    N_inv = 1.d0/(noise**2)
-    
-    ! Super simple - find the multiplicative factor by finding the maximum likelihood
-    ! solution through a linear fit to the foreground map.
-    gain = sum(mask*map1*N_inv*map2)/sum(mask*map1*N_inv*map1)
-    
-    ! Save to data type variable corresponding to the band.
-    ddata%gain(band) = gain
-    
-  end subroutine fit_band_gain
-  
-  subroutine fit_band_offset(ddata, map_n, band)
-    type(dang_data)                     :: ddata
-    integer(i4b),            intent(in) :: map_n
-    integer(i4b),            intent(in) :: band
-    real(dp), allocatable, dimension(:) :: map1, map2, mask, noise, N_inv
-    real(dp)                            :: norm, offset
-    
-    allocate(map1(0:ddata%npix-1))
-    allocate(map2(0:ddata%npix-1))
-    allocate(mask(0:ddata%npix-1))
-    allocate(noise(0:ddata%npix-1))
-    allocate(N_inv(0:ddata%npix-1))
-    
-    mask = ddata%masks(:,1)
-
     noise = ddata%rms_map(:,map_n,band)
     N_inv = 1.d0/(noise**2)
     ! map1 is the map we calibrate against here, being the full sky model.
@@ -893,7 +853,6 @@ contains
     mu = mu / sigma
     sigma = sqrt(1.d0 / sigma)
 
-    write(*,*) trim(ml_mode)
     if (trim(ml_mode) == 'optimize') then
        gain = mu
     else
