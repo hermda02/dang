@@ -819,7 +819,8 @@ contains
     integer(i4b),            intent(in) :: band
     real(dp), allocatable, dimension(:) :: map1, map2, mask, noise, N_inv
     real(dp)                            :: norm, gain
-    
+    real(dp)                            :: mu, sigma
+ 
     allocate(map1(0:ddata%npix-1))
     allocate(map2(0:ddata%npix-1))
     allocate(mask(0:ddata%npix-1))
@@ -870,26 +871,40 @@ contains
     
     mask = ddata%masks(:,1)
 
-    ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
-    do i = 0, ddata%npix-1
-       if (mask(i) == missval) then
-          mask(i) = 0.d0
-       end if
-    end do
-    
-    ! map1 is the map we calibrate against here, being the full sky model.
-    map1 = ddata%sky_model(:,map_n,band)
-    map2 = ddata%sig_map(:,map_n,band)
-    
     noise = ddata%rms_map(:,map_n,band)
     N_inv = 1.d0/(noise**2)
-    
-    offset = sum(mask(:)*(map2(:) - ddata%gain(band)*map1(:)))/sum(mask(:))
-        
-    ddata%offset(band) = offset
-    
-  end subroutine fit_band_offset
+    ! map1 is the map we calibrate against here, being the full sky model.
+    map1(:) = ddata%sky_model(:,map_n,band)
+    map2(:) = (ddata%res_map(:,map_n,band)+ddata%sky_model(:,map_n,band))
 
+    ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
+    do i = 0, ddata%npix-1
+       if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) then
+          mask(i) = 0.d0
+          map1(i) = 0.d0
+          map2(i) = 0.d0
+          N_inv(i) = 0.d0
+       end if
+    end do
+        
+    mu = sum(map2*N_inv*map1)
+    sigma = sum(map1*N_inv*map1)
+
+    mu = mu / sigma
+    sigma = sqrt(1.d0 / sigma)
+
+    write(*,*) trim(ml_mode)
+    if (trim(ml_mode) == 'optimize') then
+       gain = mu
+    else
+       gain = mu + sigma * rand_normal(0.d0,1.d0)
+    end if
+
+    ! Save to data type variable corresponding to the band.
+    ddata%gain(band) = gain
+    
+  end subroutine fit_band_gain
+  
   subroutine tune_spectral_parameter_length(c,nind,theta_init,data,rms,model,map_inds,mask)
     implicit none
 
