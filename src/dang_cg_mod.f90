@@ -273,6 +273,10 @@ contains
 
     deallocate(b)
 
+    ! ! DEBUG
+    ! self%x(:) = 0.d0
+
+
     ! Initial condition parameters
     !-----------------------------
     x_internal = self%x

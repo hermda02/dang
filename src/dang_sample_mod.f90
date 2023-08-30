@@ -78,6 +78,7 @@ contains
 
     if (sampled) then
        call ddata%update_sky_model
+       ! call write_result_map('sky_model.fits',nside,ordering,header,ddata%sky_model(:,:,5))
        call write_stats_to_term(ddata,dpar,iter)
     end if
 
@@ -174,7 +175,6 @@ contains
        data_raw(0:,1,j)   = (ddata%sig_map(0:,1,j)-ddata%offset(j))/ddata%gain(j)
        if (nmaps > 1) data_raw(0:,2:3,j) = ddata%sig_map(0:,2:3,j)
        rms_raw(0:,:,j)    = ddata%rms_map(0:,:,j)
-       ! if (map_inds(1) == 1) data_raw(0:,1,j) = data_raw(0:,1,j)/ddata%gain(j)
     end do
     mask_raw = ddata%masks
 
@@ -271,11 +271,12 @@ contains
           if (.not. c%tuned(nind)) then
              write(*,*) 'Tuning!'
              call tune_spectral_parameter_length(c,nind,sample,data,rms,model,map_inds,mask(:,1))
+             do l = 1, c%nindices
+                sample(l) = c%indices(0,map_inds(1),l)
+             end do
+             theta = sample
           end if
-          do l = 1, c%nindices
-             sample(l) = c%indices(0,map_inds(1),l)
-          end do
-          theta = sample
+
           ! The real sampling block
           !========================
           do l = 1, nsample
@@ -309,6 +310,7 @@ contains
              
              if (trim(ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
+                   write(*,*) sample(nind), -2.0*lnl_old, theta(nind), -2.0*lnl_new
                    sample(nind) = theta(nind)
                    lnl_old      = lnl_new
                 end if
@@ -325,6 +327,8 @@ contains
 
        ! Cast the final sample back to the dummy index map
        index_full_res(:,map_inds(1):map_inds(2)) = sample(nind)
+       ! call write_result_map('model.fits',nside, ordering, header, model(:,:,5))
+       ! call write_result_map('internal_index.fits',nside,ordering,header,index_full_res)
 
     ! Index mode 2 corresponds to per-pixel values for the spectral parameter
     else if (c%index_mode(nind) == 2) then
@@ -333,9 +337,9 @@ contains
 
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
-       sample(:) = 0.d0
-       theta(:)  = 0.d0
-       model(:,:,:)        = 0.d0
+       sample(:)    = 0.d0
+       theta(:)     = 0.d0
+       model(:,:,:) = 0.d0
        if (.not. c%tuned(nind)) then
           write(*,*) 'Tuning!'
           do l = 1, c%nindices
@@ -468,9 +472,6 @@ contains
        if (ddata%fit_gain(j)) then
           call fit_band_gain(ddata, 1, j)
        end if
-       ! if (ddata%fit_offset(j)) then
-       !    call fit_band_offset(ddata, 1, j)
-       ! end if
     end do
 
   end subroutine sample_calibrators
@@ -510,8 +511,8 @@ contains
           end do
        end do
     else
-       !!$OMP PARALLEL PRIVATE(i,j,k)
-       !!$OMP DO SCHEDULE(static)
+       !$OMP PARALLEL PRIVATE(i,j,k)
+       !$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
           do k = map_inds(1), map_inds(2)
              do j = 1, nbands
@@ -519,8 +520,8 @@ contains
              end do
           end do
        end do
-       !!$OMP END DO
-       !!$OMP END PARALLEL
+       !$OMP END DO
+       !$OMP END PARALLEL
     end if
 
   end subroutine update_sample_model
@@ -673,8 +674,8 @@ contains
        inds(2,1) = lbound(data,DIM=1); inds(2,2) = ubound(data,DIM=1)
     end if
 
-    !$OMP PARALLEL PRIVATE(i,j,k)
-    !$OMP DO SCHEDULE(static)
+    !!$OMP PARALLEL PRIVATE(i,j,k)
+    !!$OMP DO SCHEDULE(static)
     do i = inds(2,1), inds(2,2)
        if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
        do k = inds(1,1), inds(1,2)
@@ -683,8 +684,8 @@ contains
           end do
        end do
     end do
-    !$OMP END DO
-    !$OMP END PARALLEL
+    !!$OMP END DO
+    !!$OMP END PARALLEL
     lnL = lnL + lnL_local
 
   end function evaluate_lnL
