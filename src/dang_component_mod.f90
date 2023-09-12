@@ -126,7 +126,7 @@ contains
 
        allocate(constructor%ind_label(constructor%nindices))
 
-       constructor%ind_label = ['BETA', 'T']
+       constructor%ind_label = ['BETA ', 'T    ']
 
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 
@@ -467,7 +467,7 @@ contains
 
        allocate(constructor%ind_label(constructor%nindices))
 
-       constructor%ind_label = ['nu_p', 'w_ame']
+       constructor%ind_label = ['nu_p ', 'w_ame']
 
        ! Reference frequency
        constructor%nu_ref           = dpar%fg_nu_ref(component) 

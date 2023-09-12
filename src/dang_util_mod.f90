@@ -373,7 +373,7 @@ contains
 
   end subroutine udgrade_mask
 
-  subroutine apply_mask(map,mask,missing)
+  subroutine apply_map_mask(map,mask,missing)
     implicit none
 
     real(dp), dimension(:,:), intent(inout) :: map
@@ -406,6 +406,6 @@ contains
     !$OMP END DO
     !$OMP END PARALLEL
     !$OMP BARRIER
-  end subroutine apply_mask
+  end subroutine apply_map_mask
   
 end module dang_util_mod
