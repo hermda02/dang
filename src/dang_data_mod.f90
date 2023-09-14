@@ -442,23 +442,24 @@ contains
     implicit none
     type(dang_data),                              intent(inout) :: self
     type(dang_params)                                           :: dpar
-    real(dp)                                                    :: s, signal
+    real(dp)                                                    :: s, signal, my_chisq, chisq
     integer(i4b)                                                :: i, j, k
 
     self%chisq = 0.d0
-    !$OMP PARALLEL PRIVATE(i,j,k)
+    self%chi_map(:,:) = 0.d0
+    !$OMP PARALLEL PRIVATE(i,j,k,my_chisq)
     !$OMP DO SCHEDULE(static)
     do i = 0, npix-1
        if (self%masks(i,1) == missval .or. self%masks(i,1) == 0.d0) cycle
        do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
           if (k == 1) then
              do j = 1, nbands
-                self%chisq = self%chisq + ((self%sig_map(i,k,j)-self%offset(j))/self%gain(j) - & 
+                self%chi_map(i,k) = self%chi_map(i,k) + ((self%sig_map(i,k,j)-self%offset(j))/self%gain(j) - & 
                      self%sky_model(i,k,j))**2.d0/(self%rms_map(i,k,j)**2.d0)
              end do
           else
              do j = 1, nbands
-                self%chisq = self%chisq + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
+                self%chi_map(i,k) = self%chi_map(i,k) + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
                      & (self%rms_map(i,k,j)**2.d0)
              end do
           end if
@@ -466,6 +467,8 @@ contains
     end do
     !$OMP END DO
     !$OMP END PARALLEL
+    self%chisq = self%chisq + sum(self%chi_map)
+    self%chi_map(:,:) = self%chi_map(:,:)/nbands
     
   end subroutine compute_chisq
 
