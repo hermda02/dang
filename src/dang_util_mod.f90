@@ -309,6 +309,9 @@ contains
     character(len=*), intent(in)                :: string, delimiter
     character(len=*), dimension(:), intent(out) :: list
     integer(i4b)                                :: i, j, k
+
+    write(*,*) len(list)
+    if (len(list) == 0) return
     
     j = 1
     k = 1
@@ -373,7 +376,7 @@ contains
 
   end subroutine udgrade_mask
 
-  subroutine apply_mask(map,mask,missing)
+  subroutine apply_dang_mask(map,mask,missing)
     implicit none
 
     real(dp), dimension(:,:), intent(inout) :: map
@@ -406,6 +409,6 @@ contains
     !$OMP END DO
     !$OMP END PARALLEL
     !$OMP BARRIER
-  end subroutine apply_mask
+  end subroutine apply_dang_mask
   
 end module dang_util_mod

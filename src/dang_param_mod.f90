@@ -55,7 +55,7 @@ module dang_param_mod
      character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
      character(len=10),  allocatable, dimension(:)     :: temp_polfit    ! Which poltypes are fit jointly for the template? ex. 'T', 'QU'
      logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates fit
-     integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
+     ! integer(i4b),       allocatable, dimension(:)     :: temp_nfit      ! Number of bands fit for template i
      logical(lgt),       allocatable, dimension(:)     :: temp_sample    ! Storing which bands should have templates fit
      
      character(len=512), allocatable, dimension(:,:)   :: fg_amp_file    ! Fg amplitude input map
@@ -381,9 +381,11 @@ contains
     call get_parameter_hashtable(htbl, 'BP_CHAINS_LIST',par_string=par%bp_chains)
     call get_parameter_hashtable(htbl, 'BP_NUM_CHAINS',par_int=par%num_chains)
     
-    allocate(par%bp_chain_list(par%num_chains))
+    if (par%num_chains /= 0) then
+       allocate(par%bp_chain_list(par%num_chains))
     
-    call delimit_string(par%bp_chains,',',par%bp_chain_list)
+       call delimit_string(par%bp_chains,',',par%bp_chain_list)
+    end if
     
     ! Surely an inefficient way to decide which maps to use (T -> 1, Q -> 2, U -> 3), but it works
     pol_count = 0
@@ -532,7 +534,7 @@ contains
     
     allocate(par%temp_file(par%ntemp))
     
-    par%temp_nfit = 0
+    ! par%temp_nfit = 0
     par%fg_nfit   = 0
     
     ! Load the CG group specific parameters
