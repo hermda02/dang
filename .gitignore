@@ -1,0 +1,6 @@
+# ignore all module and .o files
+*.mod
+*.o
+
+# ignore the dang executable
+src/dang

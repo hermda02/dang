@@ -1,27 +1,5 @@
-# New Makefile attempt for super-dope optimized sickness
+# Compile the dang objects into executable
 
-# GNU Fortran
-F90       = gfortran
-MPF90     = mpif90
-F90FLAGS  = -g -C -fbounds-check
-
-LOCAL=/home/daniel/local
-
-LAPACK_LINK     = -L/usr/lib -llapack
-BLAS_LINK       = -L/usr/lib -lblas
-
-#CFITSIO
-CFITSIO_INCLUDE =
-CFITSIO_LINK    = -L$(LOCAL)/lib -lcfitsio
-
-# HEALPIX
-HEALPIX         = /home/daniel/libraries/Healpix_3.82
-HEALPIX_INCLUDE = -I$(HEALPIX)/include
-HEALPIX_LINK    = -L$(HEALPIX)/lib -lhealpix
-
-#Combine them
-F90COMP         = $(F90FLAGS) $(LAPACK_INCLUDE) $(CFITSIO_INCLUDE) $(HEALPIX_INCLUDE)
-LINK            = $(HEALPIX_LINK) $(CFITSIO_LINK) $(LAPACK_LINK)
 OBJS            = math_tools.o locate_mod.o spline_1D_mod.o dang_util_mod.o hashtbl.o dang_param_mod.o dang_bp_mod.o  dang_linalg_mod.o dang_component_mod.o dang_data_mod.o dang_cg_mod.o dang_sample_mod.o dang.o
 OUTPUT          = dang
 
