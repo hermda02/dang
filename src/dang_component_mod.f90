@@ -90,7 +90,8 @@ contains
     constructor%type             = dpar%fg_type(component)
     constructor%cg_group         = dpar%fg_cg_group(component)
 
-    if (trim(constructor%type) /= 'template' .and. trim(constructor%type) /= 'hi_fit' .and. trim(constructor%type) /= 'monopole') then
+    if (trim(constructor%type) /= 'template' .and. trim(constructor%type) /= 'hi_fit' &
+      & .and. trim(constructor%type) /= 'monopole') then
        constructor%sample_amplitude = dpar%fg_amp_samp(component)
     else if (trim(constructor%type) == 'T_cmb') then
        constructor%sample_amplitude = .false. ! Treat the CMB monopole as a uniform template

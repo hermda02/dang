@@ -48,6 +48,10 @@ module dang_data_mod
     procedure :: mask_hi_threshold
     procedure :: read_band_offsets
     procedure :: read_band_gains
+    procedure :: swap_bp_maps
+    procedure :: convert_bp_maps
+    procedure :: write_data
+    procedure :: write_maps
   end type dang_data
 
   private :: i, j, k, l
@@ -65,9 +69,9 @@ contains
     call self%read_band_offsets(dpar)
     call self%read_band_gains(dpar)
     if (dpar%bp_swap) then
-       call swap_bp_maps(self,dpar)
+       call self%swap_bp_maps(dpar)
        write(*,*) ''
-       call convert_bp_maps(self, dpar)
+       call self%convert_bp_maps(dpar)
        write(*,*) ''
     end if
     call self%convert_maps(dpar)
@@ -152,9 +156,9 @@ contains
     deallocate(map,rms)
   end subroutine read_data_maps
 
-  subroutine swap_bp_maps(dat,dpar)
+  subroutine swap_bp_maps(self,dpar)
     type(dang_params)                               :: dpar
-    class(dang_data),                  intent(inout) :: dat
+    class(dang_data),                 intent(inout) :: self
     character(len=512)                              :: chain_c
     character(len=300), allocatable, dimension(:,:) :: bp_maps
     integer(i4b)                                    :: i, j, iter_i, chain_i
@@ -193,12 +197,10 @@ contains
           bp_maps(j,2) = trim(dpar%bp_dir) // trim(dpar%band_label(j))//'_rms_'//trim(chain_c)//&
                '_n0064_60arcmin_k'//trim(iter_str) // '.fits'
           write(*,'(a,a,a)') 'Swapping band ', trim(dpar%band_label(j)), '.'
-          call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header)
-          dat%sig_map(:,:,j) = map
-          call read_bintab(trim(bp_maps(j,2)),rms,dat%npix,3,nullval,anynull,header=header)
-          dat%rms_map(:,:,j) = rms
-
-
+          call read_bintab(trim(bp_maps(j,1)),map,self%npix,3,nullval,anynull,header=header)
+          self%sig_map(:,:,j) = map
+          call read_bintab(trim(bp_maps(j,2)),rms,self%npix,3,nullval,anynull,header=header)
+          self%rms_map(:,:,j) = rms
        end if
     end do
 
@@ -252,12 +254,7 @@ contains
        end if
     end do
     write(*,*) ''
-    ! Set the loaded monopole values into the monopole component
-    do i = 1, dpar%ncomp
-       if (trim(component_list(i)%p%type) == 'monopole') then
-          component_list(i)%p%template_amplitudes(:,1) =self%offset
-       end if
-    end do
+
   end subroutine read_band_offsets
 
   subroutine read_band_gains(self,dpar)
@@ -411,6 +408,12 @@ contains
           self%sig_map(:,:,j) = self%sig_map(:,:,j)*self%conversion(j)
           self%rms_map(:,:,j) = self%rms_map(:,:,j)*self%conversion(j)
           self%offset(j)      = self%offset(j)*self%conversion(j)
+          ! Set the loaded monopole values into the monopole component
+         do i = 1, dpar%ncomp
+            if (trim(component_list(i)%p%type) == 'monopole') then
+               component_list(i)%p%template_amplitudes(:,1) =self%offset
+            end if
+         end do
        end if
     end do
 
@@ -418,7 +421,7 @@ contains
   
   subroutine convert_bp_maps(self,dpar)
     implicit none
-    type(dang_data),   intent(inout) :: self
+    class(dang_data),   intent(inout) :: self
     type(dang_params), intent(inout) :: dpar
     integer(i4b)                     :: j
     
@@ -527,11 +530,11 @@ contains
   end subroutine write_stats_to_term
 
   ! Data output routines
-  subroutine write_maps(dpar,ddata)
+  subroutine write_maps(self,dpar)
     implicit none
     
     type(dang_params)                   :: dpar
-    type(dang_data)                     :: ddata
+    class(dang_data)                     :: self
     type(dang_comps),         pointer   :: c
     real(dp), dimension(0:npix-1,nmaps) :: map
     real(dp)                            :: s, signal
@@ -554,22 +557,22 @@ contains
              !$OMP DO
              do i = 0, npix-1
                 do k = 1, nmaps
-                   map(i,k) = c%eval_signal(j,i,k)/ddata%conversion(j)
+                   map(i,k) = c%eval_signal(j,i,k)/self%conversion(j)
                 end do
              end do
              !$OMP END DO
              !$OMP END PARALLEL
              !$OMP BARRIER
              ! Mask it!
-             call apply_dang_mask(map,ddata%masks(:,1),missing=.true.)
+             call apply_dang_mask(map,self%masks(:,1),missing=.true.)
              call write_result_map(trim(title), nside, ordering, header, map)
           end do
           title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_sky_model_k' // trim(iter_str) // '.fits'
-          map(:,:)   = ddata%sky_model(:,:,j)/ddata%conversion(j)
+          map(:,:)   = self%sky_model(:,:,j)/self%conversion(j)
           !$OMP PARALLEL PRIVATE(i)
           !$OMP DO
           do i = 0, npix-1
-             if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) then
+             if (self%masks(i,1) == 0.d0 .or. self%masks(i,1) == missval) then
                 map(i,:) = missval
              end if
           end do
@@ -582,9 +585,9 @@ contains
     ! Write residual and sky model for each band (output in native band units)
     do j = 1, nbands
        title = trim(dpar%outdir) // trim(dpar%band_label(j)) // '_residual_k' // trim(iter_str) // '.fits'
-       map(:,:)   = ddata%res_map(:,:,j)/ddata%conversion(j)
+       map(:,:)   = self%res_map(:,:,j)/self%conversion(j)
        ! Mask it!
-       call apply_dang_mask(map,ddata%masks(:,1),missing=.true.)
+       call apply_dang_mask(map,self%masks(:,1),missing=.true.)
        call write_result_map(trim(title), nside, ordering, header, map)
     end do
 
@@ -595,7 +598,7 @@ contains
        title = trim(dpar%outdir) // trim(c%label) // '_c001_k' // trim(iter_str) // '.fits'
        map(:,:)   = c%amplitude
        ! Mask it!
-       call apply_dang_mask(map,ddata%masks(:,1),missing=.true.)
+       call apply_dang_mask(map,self%masks(:,1),missing=.true.)
        call write_result_map(trim(title), nside, ordering, header, map)
 
        do l = 1, c%nindices
@@ -603,40 +606,24 @@ contains
                '_' // trim(c%ind_label(l))//'_k' // trim(iter_str) // '.fits'
           map(:,:) = c%indices(:,:,l)
           ! Mask it!
-          call apply_dang_mask(map,ddata%masks(:,1),missing=.true.)
+          call apply_dang_mask(map,self%masks(:,1),missing=.true.)
           call write_result_map(trim(title),nside,ordering,header,map)
        end do
     end do
     ! Write the chisquare map
-    !$OMP PARALLEL PRIVATE(i,j,k)
-    !$OMP DO
-    do k = 1, nmaps
-       ddata%chi_map(:,k) = 0.d0
-       !$OMP PARALLEL PRIVATE(i,j)
-       !$OMP DO
-       do i = 0, npix-1
-          do j = 1, nbands
-             ddata%chi_map(i,k) = ddata%chi_map(i,k) + ddata%masks(i,1)*(ddata%res_map(i,k,j)**2)/ddata%rms_map(i,k,j)**2.d0
-          end do
-       end do
-       !$OMP END DO
-       !$OMP END PARALLEL
-    end do
-    !$OMP END DO
-    !$OMP END PARALLEL
-    ddata%chi_map(:,:) = ddata%chi_map(:,:)/(nbands)
+    call compute_chisq(self, dpar)
     title = trim(dpar%outdir) // 'chisq_k'// trim(iter_str) // '.fits'
-    map(:,:)   = ddata%chi_map(:,:)
+    map(:,:)   = self%chi_map(:,:)
     ! Mask it!
-    call apply_dang_mask(map,ddata%masks(:,1),missing=.true.)
+    call apply_dang_mask(map,self%masks(:,1),missing=.true.)
     call write_result_map(trim(title), nside, ordering, header, map)
     
   end subroutine write_maps
   
-  subroutine write_data(dpar,ddata,map_n)
+  subroutine write_data(self,dpar,map_n)
     implicit none
     type(dang_params)                   :: dpar
-    type(dang_data)                     :: ddata
+    class(dang_data)                     :: self
     type(dang_comps),         pointer   :: c
     integer(i4b),            intent(in) :: map_n
     integer(i4b)                        :: i, j, n, unit
@@ -661,8 +648,8 @@ contains
     else
        open(33,file=title, status="new", action="write")
     endif
-    call compute_chisq(ddata,dpar)
-    write(33,*) ddata%chisq
+    call compute_chisq(self, dpar)
+    write(33,*) self%chisq
     close(33)
 
     ! Output template amplitudes - if applicable
@@ -693,7 +680,7 @@ contains
              else
                 open(unit,file=title,status="new",action="write")
              end if
-             write(unit,fmt=fmt) mask_avg(c%indices(:,map_n,j),ddata%masks(:,1))
+             write(unit,fmt=fmt) mask_avg(c%indices(:,map_n,j),self%masks(:,1))
           end if
        end do
     end do
@@ -709,7 +696,7 @@ contains
        open(37,file=title,status="new",action="write")
     end if
     do j = 1, nbands
-       write(37,fmt=fmt) trim(dpar%band_label(j)), ddata%gain(j)
+       write(37,fmt=fmt) trim(dpar%band_label(j)), self%gain(j)
     end do
     close(37)
     
@@ -724,14 +711,12 @@ contains
        c => component_list(n)%p
        if (trim(c%type) == 'monopole') then
           do j = 1, nbands
-             write(38,fmt=fmt) trim(dpar%band_label(j)), c%template_amplitudes(j,1)/ddata%conversion(j)
+             write(38,fmt=fmt) trim(dpar%band_label(j)), c%template_amplitudes(j,1)/self%conversion(j)
           end do
        end if
     end do
     close(38)
 
-
-    
   end subroutine write_data
 
 end module dang_data_mod
