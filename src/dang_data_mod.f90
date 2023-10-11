@@ -669,6 +669,8 @@ contains
           write(unit,fmt='('//trim(nband_str)//'(E17.8))') c%template_amplitudes(:,map_n)
           close(unit)
        end if
+       
+       ! Output mean spectral index values
        do j = 1, c%nindices
           if (c%sample_index(j)) then
              fmt = '('//nmaps_str//'(f12.8))'

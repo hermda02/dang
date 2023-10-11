@@ -72,7 +72,7 @@ program dang
   write(*,*) ''
   call initialize_cg_groups(dpar)
   call ddata%update_sky_model
-  call write_maps(dpar,ddata)
+  call write_maps(ddata,dpar)
   if (mask_hi) call ddata%mask_hi_threshold(dpar)
   write(*,*) '---------------------------'
   write(*,*) ' Starting main Gibbs Chain '
@@ -87,7 +87,7 @@ program dang
      ! -- Swap in a different BeyondPlanck map each iteration -- |
      !-----------------------------------------------------------|
      if (dpar%bp_swap .and. iter .ne. 1) then
-        call swap_bp_maps(ddata,dpar)
+        call swap_bp_maps(ddata, dpar)
         write(*,*) ''
         call convert_bp_maps(ddata, dpar)
         write(*,*) ''
@@ -112,10 +112,10 @@ program dang
      ! Write out the data
      ! ------------------------------------------------------------------------------------------
      do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
-        call write_data(dpar,ddata,k)
+        call ddata%write_data(dpar, k)
      end do
      if (mod(iter,dpar%iter_out) .EQ. 0) then
-        call write_maps(dpar,ddata)
+        call ddata%write_maps(dpar)
      end if
      write(*,*) ''
      ! ------------------------------------------------------------------------------------------
