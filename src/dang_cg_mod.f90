@@ -33,6 +33,7 @@ module dang_cg_mod
      procedure :: compute_rhs
      procedure :: compute_sample_vector
      procedure :: cg_search
+     procedure :: initialize_x
      procedure :: unpack_amplitudes
 
   end type dang_cg_group
@@ -92,7 +93,7 @@ contains
     ! Handle the error before we try to allocate
     if (constructor_cg%ncg_components == 0) then
        write(*,*) "Woah there, number of CG components = 0"
-       write(*,*) "for CG group ", cg_group
+       write(*,fmt='(a,i4)') "for CG group ", cg_group
        stop
     end if
 
@@ -126,7 +127,7 @@ contains
     type(dang_params)             :: dpar
     integer(i4b)                  :: i, count
 
-    write(*,*) 'Initializing CG groups'
+    write(*,fmt='(a)') 'Initializing CG groups'
 
     allocate(cg_groups(dpar%ncggroup))
     count = 0
@@ -158,7 +159,7 @@ contains
 
     do i = 1, ncg_groups
        if (cg_groups(i)%p%sample) then
-          write(*,*) "Computing a CG search of CG group ", i
+          write(*,fmt='(a,i4)') "Computing a CG search of CG group ", i
           do f = 1, cg_groups(i)%p%nflag
              call cg_groups(i)%p%compute_rhs(ddata,b,f)
              call cg_groups(i)%p%cg_search(dpar,ddata,b,f)
@@ -227,27 +228,7 @@ contains
        ! Initialize on foreground amplitude maps
        write(*,*) 'Initialize on foreground amplitude maps'
        self%x(:) = 0.d0
-       ! do k = 1, self%ncg_components
-       !    c => self%cg_component(k)%p
-       !    if (.not. c%sample_amplitude) cycle
-       !    write(*,*) 'Foreground: ', trim(c%label)
-       !    if (c%type /= 'template' .and. c%type /= 'hi_fit' .and. c%type /= 'monopole') then
-       !       do i = 0, npix-1
-       !          self%x(i+offset+1) = c%amplitude(i,1)
-       !       end do
-       !       if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-       !          offset = offset + 2*npix
-       !       else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-       !          offset = offset + 3*npix
-       !       else
-       !          offset = offset + npix
-       !       end if
-       !    else if (c%type == 'hi_fit') then
-       !       offset = offset + c%nfit
-       !    else if (c%type == 'template') then
-       !       offset = offset + c%nfit
-       !    end if
-       ! end do
+       call self%initialize_x(flag_n)
     end if
 
     allocate(eta(m))
@@ -1077,6 +1058,123 @@ contains
     end do
  end function compute_sample_vector
 
+ subroutine initialize_x(self, flag_n)
+   ! =========================================================== |
+   !  This routine walks through the resulting amplitude vector, |                                
+   !  storing the amplitude results in the correct foregrounds.  | 
+   !                                                             |                                
+   ! ----------------------------------------------------------- |                                
+   !                                                             |                                
+   ! Inputs:                                                     |                                
+   !   self: class(dang_cg_group) - the cg_group being sampled   |
+   !   dpar: class(dang_params)   - access to the param object   |
+   !   ddata: class(dang_data)    - access to the data object    |
+   !   flag_n: integer            - poltype flag number          |
+   !                                                             |                                
+   ! =========================================================== |
+   implicit none
+   class(dang_cg_group)               :: self
+   integer(i4b),        intent(in)    :: flag_n
+   type(dang_comps),    pointer       :: c
+   
+   integer(i4b)                       :: offset, i, j, k, l
+   integer(i4b)                       :: map_n, comp
+
+   ! Initialize CG group stuff based off of pol_flags
+   if (iand(self%pol_flag(flag_n),1) .ne. 0) then
+      map_n = 1
+   else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
+      map_n = 2
+   else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
+      map_n = 3
+   end if
+
+   offset = 0
+
+   ! write(*,*) self%x(:)
+   ! stop
+
+   ! Let's unravel self%x such that the foreground amplitudes
+   ! are properly stored
+   do comp = 1, self%ncg_components
+      c => self%cg_component(comp)%p
+
+      ! Cycle if we don't want to fit a components amplitudes
+      if (.not. c%sample_amplitude) cycle
+
+      if (c%type /= 'template' .and. c%type /= 'hi_fit' .and. c%type /= 'monopole') then
+         ! Unravel according to polarization flags
+         if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+            do i = 1, npix
+               self%x(offset+i) = c%amplitude(i-1,2)
+            end do
+            offset = offset + npix
+            do i = 1, npix
+               self%x(offset+i) = c%amplitude(i-1,3)
+            end do
+            offset = offset + npix
+         else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+            do i = 1, npix
+               self%x(offset+i) = c%amplitude(i-1,1)
+            end do
+            offset = offset + npix
+            do i = 1, npix
+               self%x(offset+i) = c%amplitude(i-1,2)
+            end do
+            offset = offset + npix
+            do i = 1, npix
+               self%x(offset+i) = c%amplitude(i-1,3)
+            end do
+            offset = offset + npix
+         else
+            do i = 1, npix
+               self%x(offset+i) = c%amplitude(i-1,map_n)
+            end do
+            offset = offset + npix
+         end if
+      else if (c%type == 'hi_fit') then
+         l = 1
+         do while (l .le. c%nfit)
+            do j = 1, nbands
+               if (c%corr(j)) then
+                  self%x(offset+l) = c%template_amplitudes(j,map_n)
+                  l = l + 1
+               end if
+            end do
+         end do
+         offset = offset + l - 1
+      else if (c%type == 'monopole') then
+         l = 1
+         do while (l .le. c%nfit)
+            do j = 1, nbands
+               if (c%corr(j)) then
+                  self%x(offset+l) = c%template_amplitudes(j,map_n)
+                  l = l + 1
+               end if
+            end do
+         end do
+         offset = offset + l - 1
+      else if (c%type == 'template') then
+         l = 1
+         do while (l .le. c%nfit)
+            do j = 1, nbands
+               if (c%corr(j)) then
+                  if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                     self%x(offset+l) = c%template_amplitudes(j,2)
+                  else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                     self%x(offset+l) = c%template_amplitudes(j,1)
+                  else
+                     self%x(offset+l) = c%template_amplitudes(j,map_n)
+                  end if
+                  l = l + 1
+               end if
+            end do
+         end do
+         offset = offset + l - 1
+      end if
+   end do
+ end subroutine initialize_x
+
  subroutine unpack_amplitudes(self, flag_n)
     ! =========================================================== |
     !  This routine walks through the resulting amplitude vector, |                                
@@ -1109,9 +1207,6 @@ contains
     end if
 
     offset = 0
-
-    ! write(*,*) self%x(:)
-    ! stop
 
     ! Let's unravel self%x such that the foreground amplitudes
     ! are properly stored

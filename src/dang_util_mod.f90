@@ -310,7 +310,6 @@ contains
     character(len=*), dimension(:), intent(out) :: list
     integer(i4b)                                :: i, j, k
 
-    write(*,*) len(list)
     if (len(list) == 0) return
     
     j = 1
@@ -357,7 +356,6 @@ contains
 
   subroutine udgrade_mask(data_in, nside_in, data_out, nside_out,threshold)
     implicit none
-
 
     real(dp), dimension(:,:) :: data_in
     real(dp), dimension(:,:) :: data_out

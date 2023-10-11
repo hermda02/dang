@@ -676,7 +676,6 @@ contains
           if (trim(dpar%fg_spec_file(component,i)) == 'none') then
              constructor%indices(:,:,i)   = dpar%fg_init(component,i)
           else
-             write(*,*) component, i
              write(*,*) trim(dpar%fg_spec_file(component,i))
              call read_bintab(trim(dpar%datadir)//trim(dpar%fg_spec_file(component,i)),&
                   constructor%indices(:,:,i), npix, nmaps, nullval, anynull, header=header)
