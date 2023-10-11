@@ -1091,9 +1091,6 @@ contains
 
    offset = 0
 
-   ! write(*,*) self%x(:)
-   ! stop
-
    ! Let's unravel self%x such that the foreground amplitudes
    ! are properly stored
    do comp = 1, self%ncg_components
