@@ -400,11 +400,10 @@ contains
     end do
   end subroutine mask_hi_threshold
 
-  subroutine convert_maps(self)!,dpar)
+  subroutine convert_maps(self)
     ! We want to run everything in uK_RJ (at least for compsep), yeah?
     implicit none
     class(dang_data)                 :: self
-   !  type(dang_params), intent(inout) :: dpar
     integer(i4b)                :: j
     
     do j = 1, nbands
@@ -470,7 +469,6 @@ contains
     use healpix_types
     implicit none
     type(dang_data),                              intent(inout) :: self
-   !  type(dang_params)                                           :: dpar
     real(dp)                                                    :: s, signal, chisq
     integer(i4b)                                                :: i, j, k
 
@@ -686,7 +684,7 @@ contains
                   position="append", action="write")
           else
              open(unit,file=title, status="new", action="write")
-             write(unit,fmt='('//trim(nband_str)//'(A17))') dpar%band_label
+             write(unit,fmt='('//trim(nband_str)//'(A17))') self%label
           endif
           write(unit,fmt='('//trim(nband_str)//'(E17.8))') c%template_amplitudes(:,map_n)
           close(unit)
