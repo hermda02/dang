@@ -587,25 +587,21 @@ contains
              call apply_dang_mask(map,self%masks(:,1),missing=.true.)
              call write_result_map(trim(title), nside, ordering, header, map)
           end do
-          title = trim(dpar%outdir) // trim(self%label(j)) // '_sky_model_k' // trim(iter_str) // suffix
-          map(:,:)   = self%sky_model(:,:,j)/self%conversion(j)
-          !$OMP PARALLEL PRIVATE(i)
-          !$OMP DO
-          do i = 0, npix-1
-             if (self%masks(i,1) == 0.d0 .or. self%masks(i,1) == missval) then
-                map(i,:) = missval
-             end if
-          end do
-          !$OMP END DO
-          !$OMP END PARALLEL
-          call write_result_map(trim(title), nside, ordering, header, map)
        end do
     end if
 
     ! Write residual and sky model for each band (output in native band units)
     do j = 1, nbands
+       ! Residuals 
        title = trim(dpar%outdir) // trim(self%label(j)) // '_residual_k' // trim(iter_str) // suffix
        map(:,:)   = self%res_map(:,:,j)/self%conversion(j)
+       ! Mask it!
+       call apply_dang_mask(map,self%masks(:,1),missing=.true.)
+       call write_result_map(trim(title), nside, ordering, header, map) 
+
+       ! And the sky model
+       title = trim(dpar%outdir) // trim(self%label(j)) // '_sky_model_k' // trim(iter_str) // suffix
+       map(:,:)   = self%sky_model(:,:,j)/self%conversion(j)
        ! Mask it!
        call apply_dang_mask(map,self%masks(:,1),missing=.true.)
        call write_result_map(trim(title), nside, ordering, header, map)
@@ -630,6 +626,7 @@ contains
           call write_result_map(trim(title),nside,ordering,header,map)
        end do
     end do
+
     ! Write the chisquare map
     call compute_chisq(self)
     title = trim(dpar%outdir) // 'chisq_k'// trim(iter_str) // suffix
@@ -703,6 +700,7 @@ contains
                 open(unit,file=title,status="new",action="write")
              end if
              write(unit,fmt=fmt) mask_avg(c%indices(:,map_n,j),self%masks(:,1))
+             close(unit)
           end if
        end do
     end do
