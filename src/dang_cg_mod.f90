@@ -167,7 +167,7 @@ contains
              if (allocated(b)) deallocate(b)
           end do
           call ddata%update_sky_model
-          call write_stats_to_term(ddata,dpar,iter)
+          call write_stats_to_term(ddata,iter)
        end if
     end do
 
@@ -548,7 +548,7 @@ contains
           end do
           offset = offset + c%nfit
        else
-          write(*,*) 'Error in compute RHS - unrecognized components type'
+          write(*,*) 'Error in compute RHS - unrecognized component type'
           stop
        end if
     end do

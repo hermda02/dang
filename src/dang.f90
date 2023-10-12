@@ -71,9 +71,9 @@ program dang
   call ddata%initialize_data_module(dpar)
   write(*,*) ''
   call initialize_cg_groups(dpar)
+  if (mask_hi) call ddata%mask_hi_threshold(dpar)
   call ddata%update_sky_model
   call write_maps(ddata,dpar)
-  if (mask_hi) call ddata%mask_hi_threshold(dpar)
   write(*,*) '---------------------------'
   write(*,*) ' Starting main Gibbs Chain '
   write(*,*) '---------------------------'
@@ -89,13 +89,14 @@ program dang
      if (dpar%bp_swap .and. iter .ne. 1) then
         call swap_bp_maps(ddata, dpar)
         write(*,*) ''
-        call convert_bp_maps(ddata, dpar)
+        call convert_bp_maps(ddata)
         write(*,*) ''
      end if
      ! ------------------------------------------------------------------------------------------
      ! Sample each CG group for amplitudes
      ! ------------------------------------------------------------------------------------------
      call sample_cg_groups(dpar,ddata)
+     call ddata%write_maps(dpar,'post_cg')
      if (iter > 1) then
         ! ------------------------------------------------------------------------------------------
         ! Sample each spectral parameter

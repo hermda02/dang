@@ -1,6 +1,6 @@
 # Compile the dang objects into executable
 
-OBJS            = math_tools.o locate_mod.o spline_1D_mod.o dang_util_mod.o hashtbl.o dang_param_mod.o dang_bp_mod.o  dang_linalg_mod.o dang_component_mod.o dang_data_mod.o dang_cg_mod.o dang_sample_mod.o dang.o
+OBJS            = math_tools.o locate_mod.o spline_1D_mod.o dang_util_mod.o hashtbl.o dang_param_mod.o dang_bp_mod.o  dang_linalg_mod.o dang_component_mod.o dang_data_mod.o dang_cg_mod.o dang_lnl_mod.o dang_sample_mod.o dang.o
 OUTPUT          = dang
 
 # Executable
@@ -14,7 +14,8 @@ dang_component_mod.o   : dang_util_mod.o dang_param_mod.o dang_bp_mod.o
 dang_bp_mod.o          : dang_util_mod.o dang_param_mod.o
 dang_data_mod.o        : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_component_mod.o
 dang_linalg_mod.o      : spline_1D_mod.o dang_util_mod.o dang_param_mod.o dang_data_mod.o dang_component_mod.o
-dang_sample_mod.o      : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_data_mod.o dang_component_mod.o dang_linalg_mod.o dang_cg_mod.o  
+dang_lnl_mod.o         : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_data_mod.o dang_component_mod.o dang_linalg_mod.o dang_cg_mod.o  
+dang_sample_mod.o      : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_data_mod.o dang_component_mod.o dang_linalg_mod.o dang_cg_mod.o  dang_lnl_mod.o
 dang_cg_mod.o          : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_data_mod.o dang_component_mod.o 
 dang.o : dang_util_mod.o dang_param_mod.o dang_bp_mod.o dang_linalg_mod.o dang_sample_mod.o dang_data_mod.o
 
