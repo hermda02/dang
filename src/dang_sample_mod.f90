@@ -257,12 +257,14 @@ contains
        end if
        
        if (trim(c%prior_type(nind)) == 'gaussian') then
-          lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+          lnl_prior = log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
        else if (trim(c%prior_type(nind)) == 'jeffreys') then
-          lnl_old = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,-1,mask(:,1),sample(nind)))
+          lnl_prior = log(eval_jeffreys_prior(c,data,rms,model,map_inds,-1,mask(:,1),sample(nind)))
        else if (trim(c%prior_type(nind)) == 'uniform') then
-          lnl_old = lnl
+          lnl_prior = 0.d0
        end if
+
+       lnl_old = lnl + lnl_prior
 
        ! Now we do the real sampling
        if (sample_it) then
@@ -294,12 +296,13 @@ contains
 
              ! Ensure prior contribution
              if (trim(c%prior_type(nind)) == 'gaussian') then
-                lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
+                lnl_prior = log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
              else if (trim(c%prior_type(nind)) == 'jeffreys') then
-                lnl_new = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,-1,mask(:,1),theta(nind)))
+                lnl_prior = log(eval_jeffreys_prior(c,data,rms,model,map_inds,-1,mask(:,1),theta(nind)))
              else if (trim(c%prior_type(nind)) == 'uniform') then
-                lnl_new = lnl
+                lnl_prior = 0.d0
              end if
+             lnl_new = lnl + lnl_prior
 
              ! Accept/reject
              diff  = lnl_new - lnl_old
@@ -385,10 +388,8 @@ contains
           
           if (trim(c%prior_type(nind)) == 'gaussian') then
              lnl_prior = log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
-            !  lnl_old = lnl + log(eval_normal_prior(sample(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
           else if (trim(c%prior_type(nind)) == 'jeffreys') then
             lnl_prior = log(eval_jeffreys_prior(c,data,rms,model,map_inds,i,mask(:,1),sample(nind)))
-            ! lnl_old = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,i,mask(:,1),sample(nind)))
           else if (trim(c%prior_type(nind)) == 'uniform') then
             lnl_prior = 0.d0
             ! lnl_old = lnl
@@ -416,10 +417,8 @@ contains
                 ! With the prior of course
                 if (trim(c%prior_type(nind)) == 'gaussian') then
                   lnl_prior = log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
-                  !  lnl_new = lnl + log(eval_normal_prior(theta(nind),c%gauss_prior(nind,1),c%gauss_prior(nind,2)))
                 else if (trim(c%prior_type(nind)) == 'jeffreys') then
                   lnl_prior = log(eval_jeffreys_prior(c,data,rms,model,map_inds,i,mask(:,1),theta(nind)))
-                  !  lnl_new = lnl + log(eval_jeffreys_prior(c,data,rms,model,map_inds,i,mask(:,1),theta(nind)))
                 else if (trim(c%prior_type(nind)) == 'uniform') then
                   lnl_prior = 0.d0
                 end if
