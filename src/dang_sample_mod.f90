@@ -142,14 +142,6 @@ contains
     real(dp), allocatable, dimension(:)     :: sample, theta
 
     real(dp), dimension(1000)               :: theta_grid, lnl_grid
-
-   !  ! Testing 
-   !  real(dp), allocatable, dimension(:,:)   :: chisq_mask
-   !  real(dp), allocatable, dimension(:,:,:) :: test_model
-   !  real(dp), allocatable, dimension(:,:,:) :: test_resid
-   !  real(dp), allocatable, dimension(:,:)   :: test_chisq
-    
-   !  real(dp)                                :: lnl_mask
     
     ! This parameter is set in case we want to sample from the prior
     ! If we do, we turn this to false so we don't get into the sampling loop
@@ -351,37 +343,16 @@ contains
        end if
        deallocate(sample,theta,model)
 
-      !  ! Testing
-      !  allocate(test_model(0:sample_npix-1,nmaps,nbands))
-      !  test_model = 0.d0
-      !  allocate(test_resid(0:sample_npix-1,nmaps,nbands))
-      !  test_resid = 0.d0
-      !  allocate(test_chisq(0:sample_npix-1,nmaps))
-      !  test_chisq = 0.d0
-
-
        !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
        sample(:)    = 0.d0
        theta(:)     = 0.d0
        model(:,:,:) = 0.d0
-       
-      !  ! Testing 
-      !  allocate(chisq_mask(0:sample_npix-1, nmaps))
-      !  chisq_mask(:,:) = 0.d0
-       
 
        !$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
           sample_it = .true.
-
-         !  ! Testing 
-         !  if (mask(i,1) == 0.d0 .or. mask(i,1) == missval) then
-         !    chisq_mask(i,1) = missval
-         !    test_model(i,1,:) = missval
-         !    cycle
-         !  end if 
 
           ! Initialize the MH chain
           lnl      = 0.d0
@@ -425,9 +396,6 @@ contains
 
           lnl_old = lnl + lnl_prior
 
-         !  ! Testing 
-         !  lnl_mask = lnl_old
-          
           ! Now we do the real sampling
           if (sample_it) then
              do l = 1, nsample
@@ -479,19 +447,6 @@ contains
           ! Cast the final sample back to the component index map
           index_map(i,map_inds(1):map_inds(2)) = sample(nind)
 
-         ! !  if (lnl_old < lnl_mask) chisq_mask(i,:) = -2*lnl_old
-         !  chisq_mask(i,:) = -2*lnl_old
-
-         !  inquire(file='lnl_pixs.dat',exist=exist)
-         !  if (exist) then
-         !     open(55,file='lnl_pixs.dat',status="old",position="append",action="write") 
-         !     write(55,fmt='(i6,4(E14.5))') i, lnl_new, lnl_old, lnl_mask, sample(nind)
-         !  else
-         !    open(55,file='lnl_pixs.dat',status="new",action="write")
-         !  end if
-         !  close(55)
-
-         !  call update_sample_model(test_model,c,map_inds,sample,i)
        end do
        !$OMP END DO 
        deallocate(sample,theta,model)
@@ -501,26 +456,6 @@ contains
     end if
     ! Broadcast the result to the appropriate object
     c%indices(:,map_inds(1):map_inds(2),nind) = index_full_res(:,map_inds(1):map_inds(2))
-
-   !  ! Testing
-   !  do j = 1, nbands
-   !     test_model(:,:,j) = test_model(:,:,j)/ddata%conversion(j)
-   !     data(:,:,j) = data(:,:,j)/ddata%conversion(j)
-   !     test_resid(:,:,j) = data(:,:,j) - test_model(:,:,j)
-   !     do i = 0, npix-1
-   !        test_chisq(i,1) = test_chisq(i,1) + (data(i,1,j) - test_model(i,1,j))**2/(rms(i,1,j)/ddata%conversion(j))**2
-   !     end do
-   !  end do   
-   !  call apply_dang_mask(test_model(:,:,1), ddata%masks(:,1), .true.)
-   !  call apply_dang_mask(data(:,:,1), ddata%masks(:,1), .true.)
-   !  call apply_dang_mask(test_resid(:,:,1), ddata%masks(:,1), .true.)
-   !  call apply_dang_mask(test_chisq(:,:), ddata%masks(:,1), .true.)
-
-   !  call write_result_map('chisq_mask.fits', nside, ordering, header, chisq_mask)
-   !  call write_result_map('inside_model.fits', nside, ordering, header, test_model(:,:,1))
-   !  call write_result_map('inside_data.fits', nside, ordering, header, data(:,:,1))
-   !  call write_result_map('inside_resid.fits', nside, ordering, header, test_resid(:,:,1))
-   !  call write_result_map('inside_chisq.fits', nside, ordering, header, test_chisq(:,:))
 
   end subroutine sample_index_mh
 
@@ -541,9 +476,6 @@ contains
        if (ddata%fit_gain(j)) then
           call fit_band_gain(ddata, 1, j)
        end if
-       ! if (ddata%fit_offset(j)) then
-       !    call fit_band_offset(ddata, 1, j)
-       ! end if
     end do
     call ddata%update_sky_model
     call write_stats_to_term(ddata,iter)
