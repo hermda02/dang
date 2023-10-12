@@ -494,8 +494,8 @@ contains
     end do
     !$OMP END DO
     !$OMP END PARALLEL
-    self%chisq = self%chisq + sum(self%chi_map)/nump
     self%chi_map(:,:) = self%chi_map(:,:)/nbands
+    self%chisq = self%chisq + sum(self%chi_map)/nump
     
   end subroutine compute_chisq
 

@@ -96,7 +96,6 @@ program dang
      ! Sample each CG group for amplitudes
      ! ------------------------------------------------------------------------------------------
      call sample_cg_groups(dpar,ddata)
-     call ddata%write_maps(dpar,'post_cg')
      if (iter > 1) then
         ! ------------------------------------------------------------------------------------------
         ! Sample each spectral parameter
