@@ -204,7 +204,6 @@ contains
     integer(i4b)                           :: offset
     real(dp)                               :: alpha, beta, delta_0
     real(dp)                               :: delta_old, delta_new
-    real(dp)                               :: t3, t4, t5, t6
 
     t1         = mpi_wtime()
     ! How big is the input RHS vector?

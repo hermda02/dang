@@ -53,8 +53,8 @@ module dang_data_mod
     procedure :: mask_hi_threshold
     procedure :: read_band_offsets
     procedure :: read_band_gains
-    procedure :: swap_bp_maps
-    procedure :: convert_bp_maps
+    procedure :: swap_cg_maps
+    procedure :: convert_cg_maps
     procedure :: write_data
     procedure :: write_maps
   end type dang_data
@@ -64,7 +64,7 @@ module dang_data_mod
 
 contains
 
-  subroutine initialize_data_module(self,dpar)
+  subroutine initialize_data_module(self, dpar)
     implicit none
     class(dang_data),       intent(inout) :: self
     type(dang_params)                     :: dpar
@@ -73,17 +73,17 @@ contains
     call self%read_data_maps(dpar)
     call self%read_band_offsets(dpar)
     call self%read_band_gains(dpar)
-    if (dpar%bp_swap) then
-       call self%swap_bp_maps(dpar)
+    if (dpar%cg_swap) then
+       call self%swap_cg_maps(dpar)
        write(*,*) ''
-       call self%convert_bp_maps
+       call self%convert_cg_maps
        write(*,*) ''
     end if
     call self%convert_maps
     
   end subroutine initialize_data_module
 
-  subroutine init_data_maps(self,dpar)
+  subroutine init_data_maps(self, dpar)
    ! Allocate and intialize arrays - pass dpar info into ddata objects
     implicit none
     class(dang_data),       intent(inout) :: self
@@ -132,7 +132,7 @@ contains
 
     self%label  = dpar%band_label
     self%unit   = dpar%band_unit
-    self%cg_map = dpar%bp_map
+    self%cg_map = dpar%cg_map
 
   end subroutine init_data_maps
 
@@ -160,7 +160,7 @@ contains
     
     ! Read maps in
     do j = 1, nbands
-       ! If not supposed to be swapped BP maps, load that map
+       ! If not supposed to be swapped cg maps, load that map
        if (.not. self%cg_map(j)) then
           call read_bintab(trim(dpar%datadir) // trim(dpar%band_noisefile(j)), &
                rms,npix,nmaps,nullval,anynull,header=header)
@@ -174,11 +174,11 @@ contains
     deallocate(map,rms)
   end subroutine read_data_maps
 
-  subroutine swap_bp_maps(self,dpar)
+  subroutine swap_cg_maps(self, dpar)
     type(dang_params)                               :: dpar
     class(dang_data),                 intent(inout) :: self
     character(len=512)                              :: chain_c
-    character(len=300), allocatable, dimension(:,:) :: bp_maps
+    character(len=300), allocatable, dimension(:,:) :: cg_maps
     integer(i4b)                                    :: i, j, iter_i, chain_i
     character(len=6)                                :: iter_str
     real(dp), allocatable, dimension(:,:)           :: map, rms
@@ -187,7 +187,7 @@ contains
 
     allocate(map(0:npix-1,3))
     allocate(rms(0:npix-1,3))
-    allocate(bp_maps(dpar%numband,2))
+    allocate(cg_maps(dpar%numband,2))
 
     do j = 1, dpar%numband
        if (self%cg_map(j)) then
@@ -197,37 +197,38 @@ contains
           
           norm    = temp(1)*dpar%num_chains
           chain_i = int(norm)+1
-          chain_c = dpar%bp_chain_list(chain_i)
+          chain_c = dpar%cg_chain_list(chain_i)
           
           call RANDOM_SEED()
           call RANDOM_NUMBER(temp)
           
-          norm    = temp(1)*(dpar%bp_max-dpar%bp_burnin)
-          iter_i  = int(norm)+1+dpar%bp_burnin
+          norm    = temp(1)*(dpar%cg_max-dpar%cg_burnin)
+          iter_i  = int(norm)+1+dpar%cg_burnin
           
           write(iter_str,'(i0.6)') iter_i
 
-          ! Normal BP switching here
-          bp_maps(j,1) = trim(dpar%bp_dir) // trim(self%label(j))//'_map_'//trim(chain_c)//&
+          ! Normal cg switching here
+          cg_maps(j,1) = trim(dpar%cg_dir) // trim(self%label(j))//'_map_'//trim(chain_c)//&
                '_n0064_60arcmin_k'//trim(iter_str) // '.fits'
 
           ! This is for switching to the 'plus_cmb' maps:
-          bp_maps(j,2) = trim(dpar%bp_dir) // trim(self%label(j))//'_rms_'//trim(chain_c)//&
+          cg_maps(j,2) = trim(dpar%cg_dir) // trim(self%label(j))//'_rms_'//trim(chain_c)//&
                '_n0064_60arcmin_k'//trim(iter_str) // '.fits'
           write(*,'(a,a,a)') 'Swapping band ', trim(self%label(j)), '.'
-          call read_bintab(trim(bp_maps(j,1)),map,self%npix,3,nullval,anynull,header=header)
+          call read_bintab(trim(cg_maps(j,1)),map,self%npix,3,nullval,anynull,header=header)
           self%sig_map(:,:,j) = map
-          call read_bintab(trim(bp_maps(j,2)),rms,self%npix,3,nullval,anynull,header=header)
+          call read_bintab(trim(cg_maps(j,2)),rms,self%npix,3,nullval,anynull,header=header)
           self%rms_map(:,:,j) = rms
        end if
     end do
 
-  end subroutine swap_bp_maps
+  end subroutine swap_cg_maps
 
-  subroutine read_band_offsets(self,dpar)
+  subroutine read_band_offsets(self, dpar)
     implicit none
     class(dang_data),       intent(inout) :: self
     type(dang_params),      intent(in)    :: dpar
+    type(dang_comps),         pointer     :: c
     character(len=512)                    :: file
     character(len=128)                    :: fmt, nband_str, band
 
@@ -271,11 +272,18 @@ contains
           write(*,*) trim(self%label(j))//' offset not loaded -- set to 0'
        end if
     end do
+    do l = 1, ncomp
+      c => component_list(l)%p
+      if (c%type == 'monopole') then
+         c%template_amplitudes(:,1) = self%offset 
+         cycle
+      end if
+    end do
     write(*,*) ''
 
   end subroutine read_band_offsets
 
-  subroutine read_band_gains(self,dpar)
+  subroutine read_band_gains(self, dpar)
     implicit none
     class(dang_data),       intent(inout) :: self
     type(dang_params),      intent(in)    :: dpar
@@ -327,16 +335,26 @@ contains
   end subroutine read_band_gains
 
   subroutine update_sky_model(self)
+   !  """
+   !  Subroutine made to update the sky model after changes.
+   !  This sets up for writing of residual and component maps
+   !  and model evaluation.
+
+   !  self: dang_data - holds all of our data objects 
+
+   !  """
     implicit none
     class(dang_data),  intent(inout) :: self
     type(dang_comps),  pointer       :: c
     integer(i4b)                     :: i, j, k, l
 
+    ! Reset sky model to zero
     self%sky_model(:,:,:) = 0.d0
     do l = 1, ncomp
        c => component_list(l)%p
        if (c%type == 'monopole') then
           self%offset = c%template_amplitudes(:,1)
+          ! Don't add the band monopoles as part of the sky model
           cycle
        end if
        !$OMP PARALLEL PRIVATE(i,j,k)
@@ -436,7 +454,7 @@ contains
 
   end subroutine convert_maps
   
-  subroutine convert_bp_maps(self)
+  subroutine convert_cg_maps(self)
     implicit none
     class(dang_data),   intent(inout) :: self
     integer(i4b)                     :: j
@@ -463,7 +481,7 @@ contains
        end if
     end do
     
-  end subroutine convert_bp_maps
+  end subroutine convert_cg_maps
 
   subroutine compute_chisq(self)
     use healpix_types
@@ -544,7 +562,7 @@ contains
   end subroutine write_stats_to_term
 
   ! Data output routines
-  subroutine write_maps(self,dpar,suff)
+  subroutine write_maps(self, dpar, suff)
     implicit none
     
     type(dang_params)                   :: dpar
@@ -637,7 +655,7 @@ contains
     
   end subroutine write_maps
   
-  subroutine write_data(self,dpar,map_n)
+  subroutine write_data(self, dpar, map_n)
     implicit none
     type(dang_params)                   :: dpar
     class(dang_data)                    :: self
@@ -727,13 +745,8 @@ contains
     else
        open(38,file=title,status="new",action="write")
     end if
-    do n = 1, ncomp
-       c => component_list(n)%p
-       if (trim(c%type) == 'monopole') then
-          do j = 1, nbands
-             write(38,fmt=fmt) trim(self%label(j)), c%template_amplitudes(j,1)/self%conversion(j)
-          end do
-       end if
+    do j = 1, nbands
+      write(38,fmt=fmt) trim(self%label(j)), self%offset(j)/self%conversion(j)!c%template_amplitudes(j,1)/self%conversion(j)
     end do
     close(38)
 

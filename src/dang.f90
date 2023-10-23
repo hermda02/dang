@@ -81,15 +81,15 @@ program dang
   !--------------------------------------------------------------|
   !                   Computation portion                        |               
   !--------------------------------------------------------------|
-   
   do iter = 1, dpar%ngibbs
+      t0 = mpi_wtime()
      !--------------------- BP SWAP CHUNK -----------------------|
      ! -- Swap in a different BeyondPlanck map each iteration -- |
      !-----------------------------------------------------------|
-     if (dpar%bp_swap .and. iter .ne. 1) then
-        call swap_bp_maps(ddata, dpar)
+     if (dpar%cg_swap .and. iter .ne. 1) then
+        call swap_cg_maps(ddata, dpar)
         write(*,*) ''
-        call convert_bp_maps(ddata)
+        call convert_cg_maps(ddata)
         write(*,*) ''
      end if
      ! ------------------------------------------------------------------------------------------
@@ -117,6 +117,8 @@ program dang
         call ddata%write_maps(dpar)
      end if
      write(*,*) ''
+     t00 = mpi_wtime()
+     write(*,fmt='(a,f12.5)') 'Total CPU time = ',t00-t0
      ! ------------------------------------------------------------------------------------------
   end do
   call mpi_finalize(ierr)

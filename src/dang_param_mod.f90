@@ -9,26 +9,26 @@ module dang_param_mod
      integer(i4b)                                  :: ngibbs           ! Number of Gibbs iterations
      integer(i4b)                                  :: nsample          ! For internal samplers (MH)
      integer(i4b)                                  :: iter_out         ! Out put maps every <- iterations
-     integer(i4b)                                  :: bp_burnin        ! Number of burn in samples for BP chains
-     integer(i4b)                                  :: bp_max           ! Maximum number of maps from BP chains
-     integer(i4b)                                  :: num_chains       ! Number of bp chains used
-     logical(lgt)                                  :: bp_swap          ! Do the BP map swapping?
+     integer(i4b)                                  :: cg_burnin        ! Number of burn in samples for cg chains
+     integer(i4b)                                  :: cg_max           ! Maximum number of maps from cg chains
+     integer(i4b)                                  :: num_chains       ! Number of cg chains used
+     logical(lgt)                                  :: cg_swap          ! Do the cg map swapping?
      logical(lgt)                                  :: output_fg        ! Do we output the foregrounds at each frequency?
      character(len=512)                            :: outdir           ! Output directory
-     character(len=512)                            :: bp_chains        ! bp chains, read as a string, moved to a 'list'
+     character(len=512)                            :: cg_chains        ! cg chains, read as a string, moved to a 'list'
      character(len=16)                             :: ml_mode          ! 'sample' or 'optimize'
      character(len=16)                             :: solver           ! Linear system solver type 
      character(len=16)                             :: mode             ! 'dang' mode ('comp_sep', 'HI_fit')
      character(len=5)                              :: tqu              ! Which pol_type to sample
-     real(dp)                                      :: cg_converge      ! CG convergence criterion 
+     real(dp)                                      :: cg_converge      ! cg convergence criterion 
      integer(i4b), allocatable, dimension(:)       :: pol_type         ! Points above to map number
-     character(len=512), allocatable, dimension(:) :: bp_chain_list    ! This is where the bp_chains string goes
+     character(len=512), allocatable, dimension(:) :: cg_chain_list    ! This is where the cg_chains string goes
      
      ! Data parameters
      integer(i4b)                                    :: numband        ! Number of bands total in parameter file
      integer(i4b)                                    :: numinc         ! Number of bands to include in the fit
      character(len=512)                              :: datadir        ! Directory to look for bandfiles in
-     character(len=512)                              :: bp_dir         ! Directory for BP swap maps
+     character(len=512)                              :: cg_dir         ! Directory for cg swap maps
      character(len=512)                              :: mask_file      ! Mask filename
      character(len=512)                              :: offset_file    ! Offset init     
      character(len=512)                              :: gain_file      ! Gain init     
@@ -42,7 +42,7 @@ module dang_param_mod
      real(dp),           allocatable, dimension(:)   :: band_nu        ! Band frequency (in GHz)
      real(dp),           allocatable, dimension(:)   :: init_gain      ! initial gain value for each band
      real(dp),           allocatable, dimension(:)   :: init_offset    ! initial offset value for each band
-     logical(lgt),       allocatable, dimension(:)   :: bp_map         ! True false (know when to swap)
+     logical(lgt),       allocatable, dimension(:)   :: cg_map         ! True false (know when to swap)
      logical(lgt),       allocatable, dimension(:)   :: fit_gain       ! Do we fit the gain for this band?
      logical(lgt),       allocatable, dimension(:)   :: fit_offs       ! Do we fit the offset for this band?
      logical(lgt),       allocatable, dimension(:)   :: band_inc       ! Is this band included?
@@ -91,7 +91,7 @@ module dang_param_mod
      real(dp)                                          :: HI_Td_std      ! HI Temperature prior std
      real(dp)                                          :: HI_Td_step     ! Td sampling step size
 
-     ! CG group parameters
+     ! cg group parameters
      integer(i4b)                                      :: ncggroup       ! How many CG groups do we expect to read?
      logical(lgt),       allocatable, dimension(:)     :: cg_group_sample ! Do we sample that cg group?
      integer(i4b),       allocatable, dimension(:)     :: cg_max_iter    ! What is the maximum # of CG iterations we perform?
@@ -374,17 +374,19 @@ contains
     call get_parameter_hashtable(htbl, 'SOLVER_TYPE', par_string=par%solver)
     call get_parameter_hashtable(htbl, 'ML_MODE', par_string=par%ml_mode)
     call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
-    call get_parameter_hashtable(htbl, 'BP_SWAP',par_lgt=par%bp_swap)
-    call get_parameter_hashtable(htbl, 'BP_BURN_IN',par_int=par%bp_burnin)
-    call get_parameter_hashtable(htbl, 'BP_MAX_ITER',par_int=par%bp_max)
-    call get_parameter_hashtable(htbl, 'BP_DIRECTORY',par_string=par%bp_dir)
-    call get_parameter_hashtable(htbl, 'BP_CHAINS_LIST',par_string=par%bp_chains)
-    call get_parameter_hashtable(htbl, 'BP_NUM_CHAINS',par_int=par%num_chains)
-    
+    call get_parameter_hashtable(htbl, 'CG_SWAP',par_lgt=par%cg_swap)
+    if (par%cg_swap) then
+         call get_parameter_hashtable(htbl, 'CG_BURN_IN',par_int=par%cg_burnin)
+         call get_parameter_hashtable(htbl, 'CG_MAX_ITER',par_int=par%cg_max)
+         call get_parameter_hashtable(htbl, 'CG_DIRECTORY',par_string=par%cg_dir)
+         call get_parameter_hashtable(htbl, 'CG_CHAINS_LIST',par_string=par%cg_chains)
+         call get_parameter_hashtable(htbl, 'CG_NUM_CHAINS',par_int=par%num_chains)
+    end if
+
     if (par%num_chains /= 0) then
-       allocate(par%bp_chain_list(par%num_chains))
+       allocate(par%cg_chain_list(par%num_chains))
     
-       call delimit_string(par%bp_chains,',',par%bp_chain_list)
+       call delimit_string(par%cg_chains,',',par%cg_chain_list)
     end if
     
     ! Surely an inefficient way to decide which maps to use (T -> 1, Q -> 2, U -> 3), but it works
@@ -449,7 +451,7 @@ contains
     allocate(par%band_calibrator(n2))
     allocate(par%bp_id(n2),par%bp_file(n2))
     allocate(par%band_unit(n2))
-    allocate(par%bp_map(n2))
+    allocate(par%cg_map(n2))
     
     allocate(par%init_gain(n2))
     allocate(par%init_offset(n2))
@@ -482,7 +484,7 @@ contains
        call get_parameter_hashtable(htbl, 'BAND_UNIT'//itext, len_itext=len_itext, par_string=par%band_unit(j))
        call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(j))
        ! call get_parameter_hashtable(htbl, 'BAND_FIT_OFFSET'//itext, len_itext=len_itext, par_lgt=par%fit_offs(j))
-       call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(j))
+       call get_parameter_hashtable(htbl, 'BAND_CG'//itext, len_itext=len_itext, par_lgt=par%cg_map(j))
     end do
   end subroutine read_data_params
   
@@ -583,7 +585,7 @@ contains
        else if (trim(par%fg_type(i)) == 'monopole') then
           call read_monopole(par,htbl,i)
        else if (trim(par%fg_type(i)) == 'hi_fit') then
-          call read_hi_fit_test(par,htbl,i)
+          call read_hi_fit(par,htbl,i)
        end if
     end do
     
@@ -917,7 +919,7 @@ contains
 
   end subroutine read_lognormal
 
-  subroutine read_hi_fit_test(par,htbl,comp)
+  subroutine read_hi_fit(par,htbl,comp)
     implicit none
     type(hash_tbl_sll),  intent(in)    :: htbl
     type(dang_params),   intent(inout) :: par
@@ -981,122 +983,7 @@ contains
     call get_parameter_hashtable(htbl, 'COMP_T_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
          par_lgt=par%fg_spec_tune(comp,1))
 
-  end subroutine read_hi_fit_test
-
-  ! subroutine read_hi_fit(par,htbl)
-  !   implicit none
-  !   type(hash_tbl_sll),  intent(in)    :: htbl
-  !   type(dang_params),   intent(inout) :: par
-
-  !   integer(i4b)                       :: n, n2
-  !   integer(i4b)                       :: i, j
-
-  !   integer(i4b)     :: len_itext, len_jtext
-  !   character(len=2) :: itext
-  !   character(len=3) :: jtext
-    
-  !   len_itext = len(trim(itext))
-  !   len_jtext = len(trim(jtext))
-
-  !   call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
-  !   call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
-  !   call get_parameter_hashtable(htbl, 'NUM_CG_GROUPS', par_int=par%ncggroup)
-  !   call get_parameter_hashtable(htbl, 'HI_THRESH', par_dp=par%thresh)
-  !   call get_parameter_hashtable(htbl, 'HI_FILE',par_string=par%HI_file)
-  !   call get_parameter_hashtable(htbl, 'T_MAP_INIT',par_string=par%HI_Td_init)
-  !   call get_parameter_hashtable(htbl, 'T_MEAN',par_dp=par%HI_Td_mean)
-  !   call get_parameter_hashtable(htbl, 'T_STD',par_dp=par%HI_Td_std)
-  !   call get_parameter_hashtable(htbl, 'T_STEP',par_dp=par%HI_Td_step)
-       
-  !   n  = par%ncomp
-  !   n2 = par%ncggroup
-    
-  !   !Component stuff for allocation
-  !   allocate(par%fg_filename(n))
-  !   allocate(par%fg_label(n),par%fg_type(n),par%fg_nu_ref(n))
-  !   allocate(par%fg_spec_poltype(n,2))
-  !   allocate(par%fg_gauss(n,2,2),par%fg_uni(n,2,2))
-  !   allocate(par%fg_samp_nside(n,2),par%fg_samp_spec(n,2))
-  !   allocate(par%fg_spec_file(n,2))
-  !   allocate(par%fg_spec_step(n,2))
-  !   allocate(par%fg_ind_region(n,2))
-  !   allocate(par%fg_ind_lnl(n,2))
-  !   allocate(par%fg_prior_type(n,2))
-  !   allocate(par%fg_init(n,2))
-  !   allocate(par%fg_cg_group(n))
-  !   allocate(par%fg_temp_corr(n,par%numband))
-  !   allocate(par%fg_nfit(n))
-   
-  !   ! CG Group stuff
-  !   allocate(par%cg_group_sample(n2))
-  !   allocate(par%cg_max_iter(n2))
-  !   allocate(par%cg_convergence(n2))
-  !   allocate(par%cg_poltype(n2))
-    
-    
-  !   do i = 1, n
-  !      call int2string(i, itext)
-  !      call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
-  !      call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i))
-  !      call get_parameter_hashtable(htbl, 'COMP_REF_FREQ'//itext, len_itext=len_itext, par_dp=par%fg_nu_ref(i))
-  !      if (par%fg_nu_ref(i) < 1d7) then
-  !         par%fg_nu_ref(i) = par%fg_nu_ref(i)*1d9
-  !      end if
-  !      call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
-  !      call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
-  !      do j = 1, par%numband
-  !         call int2string(j,jtext)
-  !         call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
-  !              len_itext=len_jtext,par_lgt=par%fg_temp_corr(i,j))
-  !         if (par%fg_temp_corr(i,j)) then
-  !            par%fg_nfit(i) = par%fg_nfit(i) + 1
-  !         end if
-  !      end do
-  !      call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
-  !           par_string=par%fg_spec_poltype(i,1))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&
-  !           par_dp=par%fg_gauss(i,1,1))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_STD'//itext, len_itext=len_itext,&
-  !           par_dp=par%fg_gauss(i,1,2))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_UNI_LOW'//itext, len_itext=len_itext,&
-  !           par_dp=par%fg_uni(i,1,1))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_UNI_HIGH'//itext, len_itext=len_itext,&
-  !           par_dp=par%fg_uni(i,1,2))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_POLTYPE'//itext, len_itext=len_itext,&
-  !           par_string=par%fg_spec_poltype(i,1))
-  !      call get_parameter_hashtable(htbl, 'COMP_T'//itext, len_itext=len_itext, par_dp=par%fg_init(i,1))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_SAMP_NSIDE'//itext, len_itext=len_itext,&
-  !           par_int=par%fg_samp_nside(i,1))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
-  !           par_lgt=par%fg_samp_spec(i,1))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
-  !           par_string=par%fg_spec_file(i,1))       
-  !      call get_parameter_hashtable(htbl, 'COMP_T_REGION'//itext, len_itext=len_itext,&
-  !           par_string=par%fg_ind_region(i,1))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_LNL_TYPE'//itext, len_itext=len_itext,&
-  !           par_string=par%fg_ind_lnl(i,1))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_PRIOR'//itext, len_itext=len_itext,&
-  !           par_string=par%fg_prior_type(i,1))
-  !      call get_parameter_hashtable(htbl, 'COMP_T_STEPSIZE'//itext,len_itext=len_itext,&
-  !           par_dp=par%fg_spec_step(i,1))
-  !   end do
-       
-  !   ! Load the CG group specific parameters
-  !   do i = 1, n2
-  !      call int2string(i, itext)
-  !      call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, &
-  !           par_lgt=par%cg_group_sample(i))
-  !      call get_parameter_hashtable(htbl, 'CG_GROUP_MAX_ITER'//itext, len_itext=len_itext, &
-  !           par_int=par%cg_max_iter(i))
-  !      call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, &
-  !           par_dp=par%cg_convergence(i))
-  !      call get_parameter_hashtable(htbl, 'CG_POLTYPE'//itext, len_itext=len_itext, &
-  !           par_string=par%cg_poltype(i))
-  !   end do
-       
-  !   par%temp_corr(1,:) = .true.
-    
-  ! end subroutine read_hi_fit
+  end subroutine read_hi_fit
     
   function get_token(string, sep, num, group, allow_empty) result(res)
     implicit none

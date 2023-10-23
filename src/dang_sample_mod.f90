@@ -277,7 +277,7 @@ contains
           end do
           theta = sample
           ! The real sampling block
-          !========================
+          ! =======================
           do l = 1, nsample
              
              ! Update theta with the new sample
@@ -469,16 +469,26 @@ contains
     
     type(dang_data), intent(inout) :: ddata
     integer(i4b)                   :: j
+    
+    logical(lgt)                 :: sampled
 
-    if (any(ddata%fit_gain(:)) .or. any(ddata%fit_offset(:))) write(*,*) "Sampling band calibrators"
+    sampled = .false.
+
+    if (any(ddata%fit_gain(:)) .or. any(ddata%fit_offset(:))) then
+      write(*,*) "Sampling band calibrators"
+      sampled = .true.
+    end if
     do j = 1, nbands
        if (ddata%fit_gain(j)) then
           call fit_band_gain(ddata, 1, j)
        end if
     end do
-    call ddata%update_sky_model
-    call write_stats_to_term(ddata,iter)
-
+    
+    if (sampled) then
+       call ddata%update_sky_model
+       call write_stats_to_term(ddata,iter)
+    end if
+    
   end subroutine sample_calibrators
 
   subroutine update_sample_model(model,c,map_inds,sample,pixel)

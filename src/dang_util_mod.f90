@@ -14,6 +14,7 @@ module dang_util_mod
   real(dp)           :: c       = 2.99792458d8
   real(dp)           :: T_CMB   = 2.7255d0
   real(dp)           :: t1, t2, t3, t4, t5, t6
+  real(dp)           :: t0, t00
   real(dp)           :: nullval
   real(dp)           :: missval = -1.6375d30
   integer(i4b)       :: ierr, rank, numprocs
