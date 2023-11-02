@@ -14,7 +14,6 @@ module dang_bp_mod
   integer(i4b)                              :: numband
   type(bandinfo), allocatable, dimension(:) :: bp
   
-
 contains
 
   subroutine init_bp_mod(dpar)
@@ -195,6 +194,7 @@ contains
        end if
     else
        do i = 1, bp%n
+          if (bp%nu0(i) == 0.d0) cycle 
           if (bp%nu0(i) > 1e7) then
              sum = sum + bp%tau0(i)*compute_bnu_prime_RJ(bp%nu0(i))
           else
@@ -225,6 +225,7 @@ contains
        sum = (exp(y)-1.d0)**2/(y**2*exp(y))
     else
        do i = 1, bp%n
+          if (bp%nu0(i) == 0.d0) cycle 
           if (bp%nu0(i) > 1e7) then
              y = (h*bp%nu0(i))/(k_B*T_CMB)
              sum = sum + bp%tau0(i)*(exp(y)-1.d0)**2/(y**2*exp(y))
@@ -257,6 +258,7 @@ contains
        end if
     else
        do i = 1, bp%n 
+          if (bp%nu0(i) == 0.d0) cycle 
           if (bp%nu0(i) > 1e7) then
              sum = sum + bp%tau0(i)/(compute_bnu_prime(bp%nu0(i)))*1.0d-14
           else

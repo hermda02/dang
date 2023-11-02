@@ -725,6 +725,7 @@ contains
     else
        planck = 0.d0
        do i = 1, bp%n
+         if (bp%nu0(i) == 0.d0) cycle 
           planck = planck + bp%tau0(i)*((2.d0*h*(bp%nu0(i))**3.d0)/(c**2.d0))*(1.d0/(exp((h*(bp%nu0(i)))/(k_B*T))-1))
        end do
     end if
@@ -825,6 +826,7 @@ contains
        spectrum = B_nu(bp(band)%nu_c,T)/compute_bnu_prime_RJ(bp(band)%nu_c)
     else
        do i = 1, bp(band)%n
+         if (bp(band)%nu0(i) == 0.d0) cycle 
           spectrum = spectrum + bp(band)%tau0(i)*B_nu(bp(band)%nu0(i),T)/&
                & compute_bnu_prime_RJ(bp(band)%nu0(i))
        end do
@@ -859,6 +861,7 @@ contains
        spectrum = B_nu(bp(band)%nu_c,td)/compute_bnu_prime_RJ(bp(band)%nu_c)
     else
        do i = 1, bp(band)%n
+         if (bp(band)%nu0(i) == 0.d0) cycle 
           spectrum = spectrum + bp(band)%tau0(i)*B_nu(bp(band)%nu0(i),td)/&
                & compute_bnu_prime_RJ(bp(band)%nu0(i))
        end do
@@ -894,6 +897,7 @@ contains
           spectrum = (bp(band)%nu_c/self%nu_ref)**beta
     else
        do i = 1, bp(band)%n
+         if (bp(band)%nu0(i) == 0.d0) cycle 
           spectrum = spectrum + bp(band)%tau0(i)*(bp(band)%nu0(i)/self%nu_ref)**beta
        end do
     end if
@@ -933,6 +937,7 @@ contains
             & (exp(z*bp(band)%nu_c)-1.d0) * (bp(band)%nu_c/(self%nu_ref))**(beta+1.d0)
     else
        do i = 1, bp(band)%n
+         if (bp(band)%nu0(i) == 0.d0) cycle 
           spectrum = spectrum + bp(band)%tau0(i)*(exp(z*self%nu_ref)-1.d0) / &
                (exp(z*bp(band)%nu0(i))-1.d0) * (bp(band)%nu0(i)/(self%nu_ref))**(beta+1.d0)
        end do
@@ -972,6 +977,7 @@ contains
        spectrum = exp(-0.5*(log(bp(band)%nu_c/(nu_p*1e9))/w_ame)**2)*(self%nu_ref/bp(band)%nu_c)**2
     else
        do i = 1, bp(band)%n
+         if (bp(band)%nu0(i) == 0.d0) cycle 
           spectrum = spectrum + bp(band)%tau0(i)*&
                & exp(-0.5*(log(bp(band)%nu0(i)/(nu_p*1e9))/w_ame)**2)*(self%nu_ref/bp(band)%nu0(i))**2
        end do
@@ -1010,6 +1016,7 @@ contains
                & S_ref*(bp(band)%nu_c/self%nu_ref)**(-2)
     else
        do i = 1, bp(band)%n
+         if (bp(band)%nu0(i) == 0.d0) cycle 
           spectrum = spectrum + bp(band)%tau0(i)*&
                & log(exp(5.960d0 - sqrt(3.d0)/pi * log(1.d0*bp(band)%nu0(i)/1.d9 * (T_e/1.d4)**(-1.5d0))) + 2.71828d0)/&
                & S_ref*(bp(band)%nu0(i)/self%nu_ref)**(-2)

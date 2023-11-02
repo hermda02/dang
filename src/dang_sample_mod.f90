@@ -474,7 +474,7 @@ contains
 
     sampled = .false.
 
-    if (any(ddata%fit_gain(:)) .or. any(ddata%fit_offset(:))) then
+    if (any(ddata%fit_gain(:))) then
       write(*,*) "Sampling band calibrators"
       sampled = .true.
     end if

@@ -69,11 +69,13 @@ program dang
   !----------------------------------------------------------------------------------------------------------
   call initialize_components(dpar)
   call ddata%initialize_data_module(dpar)
-  write(*,*) ''
   call initialize_cg_groups(dpar)
   if (mask_hi) call ddata%mask_hi_threshold(dpar)
   call ddata%update_sky_model
-  call write_maps(ddata,dpar)
+  call write_maps(ddata,dpar)     
+  do k = dpar%pol_type(1), dpar%pol_type(size(dpar%pol_type))
+     call ddata%write_data(dpar, k)
+  end do
   write(*,*) '---------------------------'
   write(*,*) ' Starting main Gibbs Chain '
   write(*,*) '---------------------------'

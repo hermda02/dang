@@ -270,6 +270,7 @@ contains
     do j = 1, nbands
        if (.not. loaded(j)) then
           write(*,*) trim(self%label(j))//' offset not loaded -- set to 0'
+          self%offset(:) = 0.d0
        end if
     end do
     do l = 1, ncomp
@@ -328,6 +329,7 @@ contains
     do j = 1, nbands
        if (.not. loaded(j)) then
           write(*,*) trim(self%label(j))//' gain not loaded -- set to 1.0'
+          self%gain(:) = 1.d0
        end if
     end do
     write(*,*) ''
@@ -421,7 +423,7 @@ contains
   subroutine convert_maps(self)
     ! We want to run everything in uK_RJ (at least for compsep), yeah?
     implicit none
-    class(dang_data)                 :: self
+    class(dang_data)            :: self
     integer(i4b)                :: j
     
     do j = 1, nbands
@@ -595,7 +597,7 @@ contains
              !$OMP DO
              do i = 0, npix-1
                 do k = 1, nmaps
-                   map(i,k) = c%eval_signal(j,i,k)/self%conversion(j)
+                   map(i,k) = c%eval_signal(j,i,k)!/self%conversion(j)
                 end do
              end do
              !$OMP END DO

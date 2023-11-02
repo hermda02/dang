@@ -346,7 +346,7 @@ contains
     do k = 1, nmaps
        if (k == 1) then
           do j = 1, nbands
-             data(0:,k,j) = (ddata%sig_map(0:,k,j)-ddata%offset(j))/ddata%gain(j)
+             data(0:,k,j) = ddata%sig_map(0:,k,j)/ddata%gain(j)
           end do
        else
           do j = 1, nbands
