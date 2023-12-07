@@ -1,0 +1,22 @@
+# GNU Fortran
+export F90       := ifornt
+export MPF90     := mpiifort
+export F90FLAGS  := -g -C -qopenmp -parallel -traceback -O3
+#export F90FLAGS  := -O0 -g -C -traceback -assume byterecl -heap-arrays 16384 -qopenmp -parallel -fpe0 -check noarg_temp_created -ftrapuv
+
+export LOCAL := /mn/stornext/u3/hke/owl/local
+
+# Export library locations
+#LAPACK
+export MKLPATH  := $(MKLROOT)
+export LAPACK_LINK := -shared-intel -Wl,-rpath,$(MKLPATH) -L$(MKLPATH)  -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lpthread
+
+#CFITSIO
+export CFITSIO_INCLUDE :=
+export CFITSIO_LINK    := -L$(LOCAL)/lib -lcfitsio
+
+# HEALPIX
+export HEALPIX         := /mn/stornext/u3/hke/owl/local/src/dagsshealpix
+
+export HEALPIX_INCLUDE := -I$(HEALPIX)/include
+export HEALPIX_LINK    := -L$(HEALPIX)/lib -lhealpix

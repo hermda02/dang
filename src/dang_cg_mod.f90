@@ -1259,7 +1259,6 @@ contains
              do j = 1, nbands
                 if (c%corr(j)) then
                    c%template_amplitudes(j,map_n) = self%x(offset+l)
-                   ! write(*,*) c%template_amplitudes(j,map_n), self%x(offset+l)
                    l = l + 1
                 end if
              end do

@@ -51,6 +51,7 @@ module dang_data_mod
     procedure :: update_sky_model
     procedure :: convert_maps
     procedure :: mask_hi_threshold
+    procedure :: read_template_amplitudes
     procedure :: read_band_offsets
     procedure :: read_band_gains
     procedure :: swap_cg_maps
@@ -73,6 +74,7 @@ contains
     call self%read_data_maps(dpar)
     call self%read_band_offsets(dpar)
     call self%read_band_gains(dpar)
+    call self%read_template_amplitudes(dpar)
     if (dpar%cg_swap) then
        call self%swap_cg_maps(dpar)
        write(*,*) ''
@@ -349,7 +351,7 @@ contains
     class(dang_data),  intent(inout) :: self
     type(dang_comps),  pointer       :: c
     integer(i4b)                     :: i, j, k, l
-
+    
     ! Reset sky model to zero
     self%sky_model(:,:,:) = 0.d0
     do l = 1, ncomp
@@ -372,7 +374,7 @@ contains
        !$OMP END PARALLEL
     end do
     !$OMP BARRIER
-
+    
     ! Calculate the residual
     !$OMP PARALLEL PRIVATE(i,j,k)
     !$OMP DO SCHEDULE(static)
@@ -448,7 +450,7 @@ contains
           ! Set the loaded monopole values into the monopole component
          do i = 1, size(component_list)
             if (trim(component_list(i)%p%type) == 'monopole') then
-               component_list(i)%p%template_amplitudes(:,1) =self%offset
+               component_list(i)%p%template_amplitudes(:,1) = self%offset
             end if
          end do
        end if
@@ -754,4 +756,67 @@ contains
 
   end subroutine write_data
 
+  subroutine read_template_amplitudes(self, dpar)
+    implicit none
+    class(dang_data),       intent(inout) :: self
+    type(dang_params),      intent(in)    :: dpar
+    type(dang_comps),         pointer     :: c
+    character(len=512)                    :: file
+    character(len=128)                    :: fmt, nband_str, band
+
+    real(dp)                              :: offset
+
+    real(dp), allocatable, dimension(:)   :: amplitudes
+    
+    logical(lgt)                          :: exist
+    logical(lgt), allocatable, dimension(:) :: loaded
+
+    integer(i4b)                          :: i, j, k
+    integer(i4b)                          :: unit, ios, ierror
+
+    allocate(loaded(nbands))
+    allocate(amplitudes(nbands))
+    
+    write(nband_str, '(i4)') nbands
+    do l = 1, ncomp
+      c => component_list(l)%p
+      if (c%type == 'hi_fit') then
+         loaded(:)     = .false.
+         amplitudes(:) = 0.d0
+
+         file = trim(dpar%datadir)//trim(c%amplitude_file)
+
+         unit = getlun()
+         ierror  = 0
+         fmt  = '('//trim(nband_str)//'(E17.8))'
+         
+         if (trim(file) == '') then
+            write(*,*) 'No COMP_TEMP_AMPS file -- setting all amplitudues to 0'
+            amplitudes(:) = 0.d0
+         else
+            open(unit,file=file)
+            do while (ierror .eq. 0) 
+               read(unit=unit,fmt=*,iostat=ierror) band, offset
+               do j = 1, nbands
+                  if (trim(band) == trim(self%label(j))) then
+                     amplitudes(j) = offset
+                     loaded(j) = .true.
+                  end if
+               end do
+            end do
+         end if
+         do j = 1, nbands
+            if (.not. loaded(j)) then
+               write(*,*) trim(self%label(j))//' offset not loaded -- set to 0'
+               amplitudes(:) = 0.d0
+            end if
+         end do
+         do j = 1, nbands
+            c%template_amplitudes(j,:) = amplitudes(j)
+         end do
+      end if
+    end do
+
+  end subroutine read_template_amplitudes
+  
 end module dang_data_mod

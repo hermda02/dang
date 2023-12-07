@@ -34,6 +34,8 @@ module dang_component_mod
      integer(i4b),      allocatable, dimension(:)     :: index_mode          ! Fullsky/per-pixel
      real(dp),          allocatable, dimension(:,:,:) :: indices             ! Indices maps
 
+     character(len=256)                               :: amplitude_file   ! File that holds the template amplitudes
+     
      ! Prior information
      character(len=16), allocatable, dimension(:)     :: lnl_type
      character(len=16), allocatable, dimension(:)     :: prior_type
@@ -627,6 +629,8 @@ contains
        constructor%corr                = dpar%fg_temp_corr(component,:)
        constructor%template_amplitudes = 0.d0
 
+       constructor%amplitude_file = trim(dpar%temp_amps(component))
+       
        ! Allocate general pol_type flag array
        allocate(constructor%nflag(1))
        allocate(constructor%pol_flag(1,3)) ! The three is here because that's the max number of poltypes we can handle

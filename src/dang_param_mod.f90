@@ -52,6 +52,7 @@ module dang_param_mod
      integer(i4b)                                      :: ntemp          ! # of templates 
      
      character(len=512), allocatable, dimension(:)     :: temp_file      ! Template Filename
+     character(len=100), allocatable, dimension(:)     :: temp_amps      ! Band filename
      character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
      character(len=10),  allocatable, dimension(:)     :: temp_polfit    ! Which poltypes are fit jointly for the template? ex. 'T', 'QU'
      logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates fit
@@ -375,6 +376,32 @@ contains
     call get_parameter_hashtable(htbl, 'ML_MODE', par_string=par%ml_mode)
     call get_parameter_hashtable(htbl, 'TQU', par_string=par%tqu)
     call get_parameter_hashtable(htbl, 'CG_SWAP',par_lgt=par%cg_swap)
+
+    ! Gather parameters for conjugate gradient solver
+    call get_parameter_hashtable(htbl, 'NUM_CG_GROUPS', par_int=par%ncggroup) 
+    n = par%ncggroup
+
+    allocate(par%cg_group_sample(n))
+    allocate(par%cg_max_iter(n))
+    allocate(par%cg_convergence(n))
+    allocate(par%cg_poltype(n))
+
+    ! Load the CG group specific parameters
+    do i = 1, n
+       call int2string(i, itext)
+       call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, &
+            par_lgt=par%cg_group_sample(i))
+       call get_parameter_hashtable(htbl, 'CG_GROUP_MAX_ITER'//itext, len_itext=len_itext, &
+            par_int=par%cg_max_iter(i))
+       call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, &
+            par_dp=par%cg_convergence(i))
+       call get_parameter_hashtable(htbl, 'CG_POLTYPE'//itext, len_itext=len_itext, &
+            par_string=par%cg_poltype(i))
+    end do
+
+    write(*,*) size(par%cg_poltype), par%cg_convergence(1), par%cg_poltype(1)
+    
+
     if (par%cg_swap) then
          call get_parameter_hashtable(htbl, 'CG_BURN_IN',par_int=par%cg_burnin)
          call get_parameter_hashtable(htbl, 'CG_MAX_ITER',par_int=par%cg_max)
@@ -417,6 +444,8 @@ contains
     end if
     
     par%outdir = trim(par%outdir) // '/'
+    
+    write(*,*) size(par%cg_poltype), par%cg_convergence(1), par%cg_poltype(1)
     
   end subroutine read_global_params
   
@@ -506,10 +535,8 @@ contains
 
     call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
     call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
-    call get_parameter_hashtable(htbl, 'NUM_CG_GROUPS', par_int=par%ncggroup)
-    
+   
     n  = par%ncomp
-    n2 = par%ncggroup
     
     allocate(par%fg_amp_file(n,1))
     allocate(par%fg_amp_samp(n))
@@ -528,29 +555,12 @@ contains
     allocate(par%fg_spec_step(n,2))
     allocate(par%fg_spec_tune(n,2))
     allocate(par%fg_temp_corr(n,par%numband))
-    
-    allocate(par%cg_group_sample(n2))
-    allocate(par%cg_max_iter(n2))
-    allocate(par%cg_convergence(n2))
-    allocate(par%cg_poltype(n2))
-    
+        
     allocate(par%temp_file(par%ntemp))
+    allocate(par%temp_amps(par%ntemp))
     
     ! par%temp_nfit = 0
     par%fg_nfit   = 0
-    
-    ! Load the CG group specific parameters
-    do i = 1, n2
-       call int2string(i, itext)
-       call get_parameter_hashtable(htbl, 'CG_GROUP_SAMPLE'//itext, len_itext=len_itext, &
-            par_lgt=par%cg_group_sample(i))
-       call get_parameter_hashtable(htbl, 'CG_GROUP_MAX_ITER'//itext, len_itext=len_itext, &
-            par_int=par%cg_max_iter(i))
-       call get_parameter_hashtable(htbl, 'CG_CONVERGE_THRESH'//itext, len_itext=len_itext, &
-            par_dp=par%cg_convergence(i))
-       call get_parameter_hashtable(htbl, 'CG_POLTYPE'//itext, len_itext=len_itext, &
-            par_string=par%cg_poltype(i))
-    end do
     
     ! Loop over and load all component information
     do i = 1, n
@@ -720,7 +730,6 @@ contains
 
   end subroutine read_freefree
 
-
   subroutine read_template(par,htbl,comp)
     implicit none
     type(hash_tbl_sll),  intent(in)    :: htbl
@@ -736,11 +745,12 @@ contains
     
     call int2string(comp, itext)
 
-    do i = 1, par%ntemp
-       call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext,par_string=par%temp_file(i))
-       call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
-            par_string=par%fg_spec_poltype(comp,1))
-    end do
+    ! do i = 1, par%ntemp
+    call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, par_string=par%temp_file(comp))
+    call get_parameter_hashtable(htbl, 'COMP_AMP_FILE'//itext, par_string=par%temp_amps(comp))
+    call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
+         par_string=par%fg_spec_poltype(comp,1))
+    ! end do
     do j = 1, par%numband
        call int2string(j,jtext)
        call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
@@ -945,6 +955,7 @@ contains
     end if
     call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(comp))
     call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(comp))
+    call get_parameter_hashtable(htbl, 'COMP_AMP_FILE'//itext, par_string=par%temp_amps(comp))
     do j = 1, par%numband
        call int2string(j,jtext)
        call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
