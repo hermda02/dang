@@ -22,7 +22,7 @@ module dang_util_mod
   integer(i4b)       :: npixpar, nglobalpar
   integer(i4b)       :: ncomp, ncg_groups, nsample
   integer(i4b)       :: iter, niter, ordering, nlheader
-  integer(i4b)       :: proc_per_band
+  integer(i4b)       :: proc_per_band, verbosity
   integer(i4b)       :: master      = 0 
   integer(i4b)       :: from_master = 1
   integer(i4b)       :: from_worker = 2
@@ -40,7 +40,7 @@ module dang_util_mod
   public    :: ncomp, ncg_groups, nsample, nump
   public    :: npixpar, nglobalpar, title
   public    :: iter, iter_str, exist, tqu
-  public    :: ml_mode, mask_hi
+  public    :: ml_mode, mask_hi, verbosity
   public    :: t1, t2, t3, t4, t5, t6
 
 contains 

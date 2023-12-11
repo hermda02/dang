@@ -397,10 +397,7 @@ contains
             par_dp=par%cg_convergence(i))
        call get_parameter_hashtable(htbl, 'CG_POLTYPE'//itext, len_itext=len_itext, &
             par_string=par%cg_poltype(i))
-    end do
-
-    write(*,*) size(par%cg_poltype), par%cg_convergence(1), par%cg_poltype(1)
-    
+    end do    
 
     if (par%cg_swap) then
          call get_parameter_hashtable(htbl, 'CG_BURN_IN',par_int=par%cg_burnin)
@@ -445,8 +442,6 @@ contains
     
     par%outdir = trim(par%outdir) // '/'
     
-    write(*,*) size(par%cg_poltype), par%cg_convergence(1), par%cg_poltype(1)
-    
   end subroutine read_global_params
   
   subroutine read_data_params(htbl,par)
@@ -475,6 +470,7 @@ contains
     n2 = par%numinc
     
     allocate(par%band_inc(n))
+
     allocate(par%band_mapfile(n2),par%band_label(n2))
     allocate(par%band_noisefile(n2),par%band_nu(n2))
     allocate(par%band_calibrator(n2))
@@ -554,7 +550,7 @@ contains
     allocate(par%fg_spec_poltype(n,2))
     allocate(par%fg_spec_step(n,2))
     allocate(par%fg_spec_tune(n,2))
-    allocate(par%fg_temp_corr(n,par%numband))
+    allocate(par%fg_temp_corr(n,par%numinc))
         
     allocate(par%temp_file(par%ntemp))
     allocate(par%temp_amps(par%ntemp))
@@ -751,14 +747,19 @@ contains
     call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
          par_string=par%fg_spec_poltype(comp,1))
     ! end do
+    i = 0
     do j = 1, par%numband
+       if (.not. par%band_inc(j)) then
+          cycle
+       else
+          i = i + 1
+       end if
        call int2string(j,jtext)
        call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
-            len_itext=len_jtext,par_lgt=par%fg_temp_corr(comp,j))
-       if (par%fg_temp_corr(comp,j)) then
-          par%fg_nfit(comp) = par%fg_nfit(comp) + 1
-       end if
+            len_itext=len_jtext,par_lgt=par%fg_temp_corr(comp,i))
+       write(*,*) i, j, 'COMP'//trim(itext)//'_FIT'//jtext, par%fg_temp_corr(comp,i)
     end do
+    par%fg_nfit(comp) = count(par%fg_temp_corr(comp,:))
 
   end subroutine read_template
 
@@ -777,14 +778,28 @@ contains
     
     call int2string(comp, itext)
 
+    i = 0
     do j = 1, par%numband
+       if (.not. par%band_inc(j)) then
+          cycle
+       else
+          i = i + 1
+       end if
        call int2string(j,jtext)
        call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
-            len_itext=len_jtext,par_lgt=par%fg_temp_corr(comp,j))
-       if (par%fg_temp_corr(comp,j)) then
-          par%fg_nfit(comp) = par%fg_nfit(comp) + 1
-       end if
+            len_itext=len_jtext,par_lgt=par%fg_temp_corr(comp,i))
     end do
+    par%fg_nfit(comp) = count(par%fg_temp_corr(comp,:))
+    ! do j = 1, par%numband
+    !    call int2string(j,jtext)
+    !    call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
+    !         len_itext=len_jtext,par_lgt=par%fg_temp_corr(comp,j))
+    !    if (par%fg_temp_corr(comp,j) .and. par%band_inc(j)) then
+    !       par%fg_nfit(comp) = par%fg_nfit(comp) + 1
+    !    else
+    !       par%fg_temp_corr(comp,j) = .false.
+    !    end if
+    ! end do
 
   end subroutine read_monopole
 
@@ -935,7 +950,7 @@ contains
     type(dang_params),   intent(inout) :: par
     integer(i4b),        intent(in)    :: comp
 
-    integer(i4b)     :: len_itext, len_jtext, j
+    integer(i4b)     :: len_itext, len_jtext, i, j
     character(len=2) :: itext
     character(len=3) :: jtext
     
@@ -956,14 +971,18 @@ contains
     call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(comp))
     call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(comp))
     call get_parameter_hashtable(htbl, 'COMP_AMP_FILE'//itext, par_string=par%temp_amps(comp))
+    i = 0
     do j = 1, par%numband
+       if (.not. par%band_inc(j)) then
+          cycle
+       else
+          i = i + 1
+       end if
        call int2string(j,jtext)
        call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
-            len_itext=len_jtext,par_lgt=par%fg_temp_corr(comp,j))
-       if (par%fg_temp_corr(comp,j)) then
-          par%fg_nfit(comp) = par%fg_nfit(comp) + 1
-       end if
+            len_itext=len_jtext,par_lgt=par%fg_temp_corr(comp,i))
     end do
+    par%fg_nfit(comp) = count(par%fg_temp_corr(comp,:))
     call get_parameter_hashtable(htbl, 'COMP_POLTYPE'//itext, len_itext=len_itext,&
          par_string=par%fg_spec_poltype(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_T_PRIOR_GAUSS_MEAN'//itext, len_itext=len_itext,&

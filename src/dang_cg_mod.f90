@@ -26,6 +26,8 @@ module dang_cg_mod
      type(component_pointer), allocatable, dimension(:) :: cg_component
 
      real(dp), allocatable, dimension(:) :: x ! The amplitude vector for this CG group
+     real(dp), allocatable, dimension(:) :: sInv ! vector for the monopole prior variance
+     real(dp), allocatable, dimension(:) :: m ! vector for the monopole mean
 
    contains
 
@@ -33,6 +35,7 @@ module dang_cg_mod
      procedure :: compute_rhs
      procedure :: compute_sample_vector
      procedure :: cg_search
+     procedure :: initialize_sInv
      procedure :: initialize_x
      procedure :: unpack_amplitudes
 
@@ -197,7 +200,7 @@ contains
     integer(i4b),            intent(in)    :: flag_n
     real(dp), allocatable, dimension(:),  intent(inout)    :: b
 
-    real(dp), allocatable, dimension(:)    :: r, q, d, b2, eta
+    real(dp), allocatable, dimension(:)    :: r, q, d, b2, eta, eta2
     real(dp), allocatable, dimension(:)    :: x_internal
 
     integer(i4b)                           :: i, j, k, l, m, n
@@ -223,18 +226,30 @@ contains
     ! To ensure that we only allocate the CG group amplitude vector once
     if (iter == 1) then
        allocate(self%x(n))
+       allocate(self%sInv(n))
+       allocate(self%m(n))
 
        ! Initialize on foreground amplitude maps
        write(*,*) 'Initialize on foreground amplitude maps'
+       self%sInv(:) = 0.d0
        self%x(:) = 0.d0
+       self%m(:) = 0.d0
+       call self%initialize_sInv(flag_n)
        call self%initialize_x(flag_n)
     end if
 
     allocate(eta(m))
+    allocate(eta2(n))
     allocate(b2(n))
     allocate(x_internal(n))
     allocate(r(n))
 
+    eta(:)        = 0.d0
+    eta2(:)       = 0.d0
+    b2(:)         = 0.d0
+    x_internal(:) = 0.d0
+    r(:)          = 0.d0
+    
     ! Check mode
     if (trim(dpar%ml_mode) == 'sample') then
        ! First draw a univariate for sampling if in sampling mode
@@ -251,6 +266,12 @@ contains
        b2 = b
     end if
 
+    do i = 1, n
+       b2(i) = b2(i) + self%sInv(i)*self%m(i) + sqrt(self%sInv(i))*eta2(i)
+       ! write(*,*) self%sInv(i), self%m(i), self%sInv(i)*self%m(i)
+    end do
+    ! stop
+    
     deallocate(b)
 
     ! Initial condition parameters
@@ -285,9 +306,9 @@ contains
        t4        = mpi_wtime()
        i         = i + 1
 
-       write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+       if (verbosity > 1) write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
        if (delta_new .lt. self%converge) then
-          write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
+          if (verbosity > 0) write(*,fmt='(a,i4,a,e12.5,a,e12.5,a)') 'Final CG Iter: ', i, ' | delta: ', delta_new, ' | time: ', t4-t3, 's.'
        end if
     end do
     t2         = mpi_wtime()
@@ -326,7 +347,7 @@ contains
     real(dp), allocatable, dimension(:,:,:)            :: data
     integer(i4b),                        intent(in)    :: flag_n
 
-    real(dp), allocatable, dimension(:)                :: val_array
+    real(dp), allocatable, dimension(:)                :: val_array, s_inv
 
     integer(i4b)                            :: i, j, k, l, m, n
     integer(i4b)                            :: offset
@@ -418,6 +439,23 @@ contains
           end do
           !$OMP END DO
           !$OMP END PARALLEL
+       end if
+       ! Still subtract templates which exist but may not be fit here
+       if (c%type == 'template' .or. c%type == 'monopole') then
+          do j = 1, nbands
+             if (.not. c%corr(j)) then
+                !$OMP PARALLEL PRIVATE(i,k)
+                !$OMP DO SCHEDULE(static) 
+                do i = 0, npix-1
+                   if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) cycle
+                   do k = 1, nmaps
+                      data(i,k,j) = data(i,k,j) - c%eval_signal(j,i,k)
+                   end do
+                end do
+                !$OMP END DO
+                !$OMP END PARALLEL
+             end if
+          end do
        end if
     end do
 
@@ -590,7 +628,7 @@ contains
     integer(i4b),           intent(in)    :: nbands, flag_n
     real(dp), allocatable,  dimension(:)  :: temp1, temp2, temp3, res
     type(dang_comps),       pointer       :: c
-
+    
     real(dp), allocatable, dimension(:)   :: val_array
 
     integer(i4b), allocatable, dimension(:) :: l ! counting template fitting ticks per template
@@ -629,20 +667,12 @@ contains
     allocate(res(n))
 
     allocate(val_array(m))
-
+    
     val_array(:) = 0.d0
 
     res = 0.d0
 
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !!! BIG WARNING !!!!!!!!!!!!
-    !!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    ! I think that because we loop over bands
-    ! followed by looping over components within that loop
-    ! will cause multi-template computations to 
-    ! be very wrong
-
+    ! Sum over bands
     do j = 1, nbands
        temp1 = 0.d0
        temp3 = 0.d0
@@ -734,7 +764,7 @@ contains
              end if
              l_ind = l_ind + 1
              offset = offset + c%nfit
-          end if
+          end if          
        end do
        t6         = mpi_wtime()
        ! write(*,fmt='(a,e12.5,a)') 'First Ax step: ', t6-t5, 's.'
@@ -861,11 +891,22 @@ contains
              offset = offset + c%nfit
           end if
        end do
+       ! write(*,*) 'band', j
+       ! do i = 1, n
+       !    write(*,*) self%x(i), temp1(1), temp3(i)
+       ! end do
+       ! write(*,*) '----------'
+
        t6         = mpi_wtime()
        ! write(*,fmt='(a,e12.5,a)') 'Last Ax step: ', t6-t5, 's.'
        ! write(*,*)
        res = res + temp3
     end do
+    ! Add the prior term
+    do i = 1, n
+       res(i) = res(i) + self%sInv(i)*self%x(i)
+    end do
+
   end function compute_Ax
 
   function compute_sample_vector(self, ddata, eta, nbands, b, flag_n) result(res)
@@ -1057,6 +1098,77 @@ contains
     end do
  end function compute_sample_vector
 
+ subroutine initialize_sInv(self, flag_n)
+   ! =========================================================== |
+   !  This routine walks through the resulting amplitude vector, |                                
+   !  storing the amplitude results in the correct foregrounds.  | 
+   !                                                             |                                
+   ! ----------------------------------------------------------- |                                
+   !                                                             |                                
+   ! Inputs:                                                     |                                
+   !   self: class(dang_cg_group) - the cg_group being sampled   |
+   !   dpar: class(dang_params)   - access to the param object   |
+   !   ddata: class(dang_data)    - access to the data object    |
+   !   flag_n: integer            - poltype flag number          |
+   !                                                             |                                
+   ! =========================================================== |
+   implicit none
+   class(dang_cg_group)               :: self
+   integer(i4b),        intent(in)    :: flag_n
+   type(dang_comps),    pointer       :: c
+   
+   integer(i4b)                       :: offset, i, j, k, l
+   integer(i4b)                       :: map_n, comp
+
+   ! Initialize CG group stuff based off of pol_flags
+   if (iand(self%pol_flag(flag_n),1) .ne. 0) then
+      map_n = 1
+   else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
+      map_n = 2
+   else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
+      map_n = 3
+   end if
+
+   offset = 0
+
+   ! Hard code to only create a covariance matrix for monopole priors
+   do comp = 1, self%ncg_components
+      c => self%cg_component(comp)%p
+
+      ! Cycle if we don't want to fit a components amplitudes
+      if (.not. c%sample_amplitude) cycle
+
+      if (c%type /= 'template' .and. c%type /= 'hi_fit' .and. c%type /= 'monopole') then
+         ! Unravel according to polarization flags
+         if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+            offset = offset + npix
+            offset = offset + npix
+         else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+            offset = offset + npix
+            offset = offset + npix
+            offset = offset + npix
+         else
+            offset = offset + npix
+         end if
+      else if (c%type == 'hi_fit') then
+         offset = offset + c%nfit
+      else if (c%type == 'monopole') then
+         l = 0
+         do j = 1, nbands
+            if (c%corr(j)) then
+               l = l + 1
+               self%sInv(offset+l) = 0.d0!1.d0/sqrt(0.10*c%template_amplitudes(j,map_n))
+               self%m(offset+l)    = 0.d0!c%template_amplitudes(j,map_n)
+            end if
+            if (l .ge. c%nfit) exit
+         end do
+         offset = offset + l
+      else if (c%type == 'template') then
+         offset = offset + c%nfit
+      end if
+   end do
+ end subroutine initialize_sInv
+
  subroutine initialize_x(self, flag_n)
    ! =========================================================== |
    !  This routine walks through the resulting amplitude vector, |                                
@@ -1129,44 +1241,41 @@ contains
             offset = offset + npix
          end if
       else if (c%type == 'hi_fit') then
-         l = 1
-         do while (l .le. c%nfit)
-            do j = 1, nbands
-               if (c%corr(j)) then
-                  self%x(offset+l) = c%template_amplitudes(j,map_n)
-                  l = l + 1
-               end if
-            end do
+         l = 0
+         do j = 1, nbands
+            if (c%corr(j)) then
+               l = l + 1
+               self%x(offset+l) = c%template_amplitudes(j,map_n)
+            end if
+            if (l .ge. c%nfit) exit
          end do
-         offset = offset + l - 1
+         offset = offset + l
       else if (c%type == 'monopole') then
-         l = 1
-         do while (l .le. c%nfit)
-            do j = 1, nbands
-               if (c%corr(j)) then
-                  self%x(offset+l) = c%template_amplitudes(j,map_n)
-                  l = l + 1
-               end if
-            end do
+         l = 0
+         do j = 1, nbands
+            if (c%corr(j)) then
+               l = l + 1
+               self%x(offset+l) = c%template_amplitudes(j,map_n)
+            end if
+            if (l .ge. c%nfit) exit
          end do
-         offset = offset + l - 1
+         offset = offset + l
       else if (c%type == 'template') then
-         l = 1
-         do while (l .le. c%nfit)
-            do j = 1, nbands
-               if (c%corr(j)) then
-                  if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                     self%x(offset+l) = c%template_amplitudes(j,2)
-                  else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                     self%x(offset+l) = c%template_amplitudes(j,1)
-                  else
-                     self%x(offset+l) = c%template_amplitudes(j,map_n)
-                  end if
-                  l = l + 1
+         l = 0
+         do j = 1, nbands
+            if (c%corr(j)) then
+               l = l + 1
+               if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                  self%x(offset+l) = c%template_amplitudes(j,2)
+               else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                  self%x(offset+l) = c%template_amplitudes(j,1)
+               else
+                  self%x(offset+l) = c%template_amplitudes(j,map_n)
                end if
-            end do
+            end if
+            if (l .ge. c%nfit) exit
          end do
-         offset = offset + l - 1
+         offset = offset + l 
       end if
    end do
  end subroutine initialize_x
@@ -1243,47 +1352,44 @@ contains
              offset = offset + npix
           end if
        else if (c%type == 'hi_fit') then
-          l = 1
-          do while (l .le. c%nfit)
-             do j = 1, nbands
-                if (c%corr(j)) then
-                   c%template_amplitudes(j,map_n) = self%x(offset+l)
-                   l = l + 1
-                end if
-             end do
+          l = 0
+          do j = 1, nbands
+             if (c%corr(j)) then
+                l = l + 1
+                c%template_amplitudes(j,map_n) = self%x(offset+l)
+             end if
+             if (l .ge. c%nfit) exit
           end do
-          offset = offset + l - 1
+          offset = offset + l
        else if (c%type == 'monopole') then
-          l = 1
-          do while (l .le. c%nfit)
-             do j = 1, nbands
-                if (c%corr(j)) then
-                   c%template_amplitudes(j,map_n) = self%x(offset+l)
-                   l = l + 1
-                end if
-             end do
+          l = 0
+          do j = 1, nbands
+             if (c%corr(j)) then
+                l = l + 1
+                c%template_amplitudes(j,map_n) = self%x(offset+l)
+             end if
+             if (l .ge. c%nfit) exit
           end do
-          offset = offset + l - 1
+          offset = offset + l
        else if (c%type == 'template') then
-          l = 1
-          do while (l .le. c%nfit)
-             do j = 1, nbands
-                if (c%corr(j)) then
-                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      c%template_amplitudes(j,2)     = self%x(offset+l)
-                      c%template_amplitudes(j,3)     = self%x(offset+l)
-                   else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      c%template_amplitudes(j,1)     = self%x(offset+l)
-                      c%template_amplitudes(j,2)     = self%x(offset+l)
-                      c%template_amplitudes(j,3)     = self%x(offset+l)
-                   else
-                      c%template_amplitudes(j,map_n) = self%x(offset+l)
-                   end if
-                   l = l + 1
+          l = 0
+          do j = 1, nbands
+             if (c%corr(j)) then
+                l = l + 1
+                if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                   c%template_amplitudes(j,2)     = self%x(offset+l)
+                   c%template_amplitudes(j,3)     = self%x(offset+l)
+                else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
+                   c%template_amplitudes(j,1)     = self%x(offset+l)
+                   c%template_amplitudes(j,2)     = self%x(offset+l)
+                   c%template_amplitudes(j,3)     = self%x(offset+l)
+                else
+                   c%template_amplitudes(j,map_n) = self%x(offset+l)
                 end if
-             end do
+             end if
+             if (l .ge. c%nfit) exit
           end do
-          offset = offset + l - 1
+          offset = offset + l
        end if
     end do
   end subroutine unpack_amplitudes

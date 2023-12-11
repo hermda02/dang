@@ -271,7 +271,7 @@ contains
     end if
     do j = 1, nbands
        if (.not. loaded(j)) then
-          write(*,*) trim(self%label(j))//' offset not loaded -- set to 0'
+          if (verbosity > 1) write(*,*) trim(self%label(j))//' offset not loaded -- set to 0'
           self%offset(:) = 0.d0
        end if
     end do
@@ -402,12 +402,16 @@ contains
     class(dang_data),            intent(inout) :: self
     type(dang_params)                          :: dpar
     type(dang_comps),   pointer                :: c
-    integer(i4b)                               :: i, j
+    integer(i4b)                               :: i, j, k
 
     do i = 1, ncomp
        if (component_list(i)%p%type == 'hi_fit') then
           c => component_list(i)%p
        end if
+    end do
+    do k = 1, nmaps
+       c%temp_norm(k) = dpar%thresh
+       c%template(:,k) = c%template(:,k)/c%temp_norm(k)
     end do
     do i = 0, npix-1
        if (c%template(i,1) > dpar%thresh) then
@@ -705,7 +709,7 @@ contains
              open(unit,file=title, status="new", action="write")
              write(unit,fmt='('//trim(nband_str)//'(A17))') self%label
           endif
-          write(unit,fmt='('//trim(nband_str)//'(E17.8))') c%template_amplitudes(:,map_n)
+          write(unit,fmt='('//trim(nband_str)//'(E17.8))') c%template_amplitudes(:,map_n)*c%temp_norm(map_n)
           close(unit)
        end if
        
@@ -807,7 +811,7 @@ contains
          end if
          do j = 1, nbands
             if (.not. loaded(j)) then
-               write(*,*) trim(self%label(j))//' offset not loaded -- set to 0'
+               write(*,*) trim(self%label(j))//' amplitude not loaded -- set to 0'
                amplitudes(:) = 0.d0
             end if
          end do
@@ -816,7 +820,6 @@ contains
          end do
       end if
     end do
-
   end subroutine read_template_amplitudes
   
 end module dang_data_mod

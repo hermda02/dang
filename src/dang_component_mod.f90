@@ -29,6 +29,7 @@ module dang_component_mod
      ! Sky/template information
      real(dp),          allocatable, dimension(:,:)   :: amplitude           ! Amplitude maps
      real(dp),          allocatable, dimension(:,:)   :: template            ! Template map
+     real(dp),          allocatable, dimension(:)     :: temp_norm           ! Template normalization factor
      real(dp),          allocatable, dimension(:,:)   :: template_amplitudes ! Template amplitudes
 
      integer(i4b),      allocatable, dimension(:)     :: index_mode          ! Fullsky/per-pixel
@@ -540,7 +541,8 @@ contains
                                                        ! fit template amplitude (template_amplitudes)
        allocate(constructor%template_amplitudes(nbands,nmaps))
        allocate(constructor%template(0:npix-1,nmaps))
-
+       allocate(constructor%temp_norm(nmaps))
+       
        ! Allocate general pol_type flag array
        allocate(constructor%nflag(1))
        allocate(constructor%pol_flag(1,3)) ! The three is here because that's the max number of poltypes we can handle
@@ -569,6 +571,11 @@ contains
                constructor%template, npix, nmaps, nullval, anynull, header=header)
        end if
 
+       do k = 1, nmaps
+          constructor%temp_norm(k) = maxval(constructor%template(:,k))
+          constructor%template(:,k) = constructor%template(:,k)/constructor%temp_norm(k)
+       end do
+          
     else if (trim(constructor%type) == 'monopole') then
 
        constructor%nindices = 0
@@ -616,6 +623,7 @@ contains
        ! Allocate maps for the components
        allocate(constructor%template_amplitudes(nbands,nmaps))
        allocate(constructor%template(0:npix-1,nmaps))
+       allocate(constructor%temp_norm(nmaps))
        allocate(constructor%amplitude(0:npix-1,nmaps))
        allocate(constructor%indices(0:npix-1,nmaps,1))
        allocate(constructor%ind_label(constructor%nindices))
@@ -694,7 +702,7 @@ contains
           call read_bintab(trim(dpar%datadir)//trim(dpar%fg_filename(component)),&
                constructor%template, npix, nmaps, nullval, anynull, header=header)
        end if
-
+       
     ! Some error handling
     else
        write(*,*) "Warning - unrecognized component type detected"
