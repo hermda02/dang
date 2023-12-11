@@ -282,7 +282,6 @@ contains
          cycle
       end if
     end do
-    write(*,*) ''
 
   end subroutine read_band_offsets
 
@@ -330,11 +329,10 @@ contains
     end if
     do j = 1, nbands
        if (.not. loaded(j)) then
-          write(*,*) trim(self%label(j))//' gain not loaded -- set to 1.0'
+          if (verbosity > 1) write(*,*) trim(self%label(j))//' gain not loaded -- set to 1.0'
           self%gain(:) = 1.d0
        end if
     end do
-    write(*,*) ''
     
   end subroutine read_band_gains
 
@@ -438,11 +436,11 @@ contains
              self%conversion(j)  = 1.0
           else if (trim(self%unit(j)) == 'uK_cmb') then
              ! uK_cmb -> uK_RJ
-             write(*,*) 'Putting band ', trim(self%label(j)), ' from uK_cmb to uK_RJ.'
+             if (verbosity > 1) write(*,*) 'Putting band ', trim(self%label(j)), ' from uK_cmb to uK_RJ.'
              self%conversion(j)  = 1.0/a2t(bp(j))
           else if (trim(self%unit(j)) == 'MJy/sr') then
              ! MJy/sr -> uK_RJ
-             write(*,*) 'Putting band ', trim(self%label(j)), ' from MJy/sr to uK_RJ.'
+             if (verbosity > 1) write(*,*) 'Putting band ', trim(self%label(j)), ' from MJy/sr to uK_RJ.'
              self%conversion(j)  = 1.0/a2f(bp(j))
           else
              write(*,*) 'Not a unit, dumbass! '//self%unit(j)
@@ -473,11 +471,11 @@ contains
              self%conversion(j)  = 1.0
           else if (trim(self%unit(j)) == 'uK_cmb') then
              ! uK_cmb -> uK_RJ
-             write(*,*) 'Putting band ', trim(self%label(j)), ' from uK_cmb to uK_RJ.'
+             if (verbosity > 1) write(*,*) 'Putting band ', trim(self%label(j)), ' from uK_cmb to uK_RJ.'
              self%conversion(j)  = 1.0/a2t(bp(j))
           else if (trim(self%unit(j)) == 'MJy/sr') then
              ! MJy/sr -> uK_RJ
-             write(*,*) 'Putting band ', trim(self%label(j)), ' from MJy/sr to uK_RJ'
+             if (verbosity > 1) write(*,*) 'Putting band ', trim(self%label(j)), ' from MJy/sr to uK_RJ'
              self%conversion(j)  = 1.0/a2f(bp(j))
           else
              write(*,*) 'Not a unit, dumbass! '//self%unit(j)
@@ -811,7 +809,7 @@ contains
          end if
          do j = 1, nbands
             if (.not. loaded(j)) then
-               write(*,*) trim(self%label(j))//' amplitude not loaded -- set to 0'
+               if (verbosity > 1) write(*,*) trim(self%label(j))//' amplitude not loaded -- set to 0'
                amplitudes(:) = 0.d0
             end if
          end do

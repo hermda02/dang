@@ -130,7 +130,7 @@ contains
     type(dang_params)             :: dpar
     integer(i4b)                  :: i, count
 
-    write(*,fmt='(a)') 'Initializing CG groups'
+    write(*,*) "Initializing CG groups"
 
     allocate(cg_groups(dpar%ncggroup))
     count = 0
@@ -266,10 +266,10 @@ contains
        b2 = b
     end if
 
-    do i = 1, n
-       b2(i) = b2(i) + self%sInv(i)*self%m(i) + sqrt(self%sInv(i))*eta2(i)
-       ! write(*,*) self%sInv(i), self%m(i), self%sInv(i)*self%m(i)
-    end do
+    ! do i = 1, n
+    !    b2(i) = b2(i) + self%sInv(i)*self%m(i) + sqrt(self%sInv(i))*eta2(i)
+    !    ! write(*,*) self%sInv(i), self%m(i), self%sInv(i)*self%m(i)
+    ! end do
     ! stop
     
     deallocate(b)
@@ -903,9 +903,9 @@ contains
        res = res + temp3
     end do
     ! Add the prior term
-    do i = 1, n
-       res(i) = res(i) + self%sInv(i)*self%x(i)
-    end do
+    ! do i = 1, n
+    !    res(i) = res(i) + self%sInv(i)*self%x(i)
+    ! end do
 
   end function compute_Ax
 
