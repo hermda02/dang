@@ -38,6 +38,7 @@ contains
     ! Loop over all foregrounds and sample for indices
     do i = 1, ncomp
        c => component_list(i)%p
+       write(*,*) c%sample_index(:)
        ! if there are no indices, don't even look
        if (c%nindices == 0) cycle
        ! if none get sampled, don't even look
@@ -346,6 +347,9 @@ contains
        end if
        deallocate(sample,theta,model)
 
+       ! open(35,file='old_lnl.dat')
+       ! open(36,file='new_lnl.dat')
+
        !$OMP PARALLEL PRIVATE(i,j,k,l,lnl,sample,theta,lnl_old,lnl_new,diff,ratio,model,num,sample_it) SHARED(index_map)
        allocate(sample(c%nindices),theta(c%nindices))
        allocate(model(0:sample_npix-1,nmaps,nbands))   
@@ -355,6 +359,7 @@ contains
 
        !$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
+          if (ddata%masks(i,1) == missval .or. ddata%masks(i,1) == 0.d0) cycle
           sample_it = .true.
 
           ! Initialize the MH chain
@@ -392,11 +397,14 @@ contains
             lnl_prior = log(eval_jeffreys_prior(c,data,rms,model,map_inds,i,mask(:,1),sample(nind)))
           else if (trim(c%prior_type(nind)) == 'uniform') then
             lnl_prior = 0.d0
-            ! lnl_old = lnl
           end if
 
           lnl_old = lnl + lnl_prior
 
+          ! if (iter > 5) then
+          !    write(35,fmt='(i6,E14.5)') i, lnl_old
+          ! end if
+          
           ! Now we do the real sampling
           if (sample_it) then
              do l = 1, nsample
@@ -406,7 +414,7 @@ contains
                 theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
                 if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
                 call update_sample_model(model,c,map_inds,theta,i)
-
+                
                 ! Evaluate likelihood of sample
                 if (c%lnl_type(nind) == 'chisq') then
                    lnl = evaluate_lnL(data,rms,model,map_inds,i,mask(:,1))
@@ -427,30 +435,48 @@ contains
 
                 ! Accept/reject
                 diff  = lnl_new - lnl_old
-                ratio = exp(diff)
+                ! write(*,fmt='(2(E12.4))') theta(nind), sample(nind)
+                ! write(*,fmt='(2(E12.4))') lnl_new, lnl_old
+                ! write(*,fmt='(1(E12.4))') diff
+                ! write(*,*) '-----------------'
+                ! ratio = exp(diff)
                 if (trim(ml_mode) == 'optimize') then
-                   if (ratio > 1.d0) then
+                   if (diff > 0.d0) then
                       sample(nind) = theta(nind)
                       lnl_old      = lnl_new
                    end if
                 else if (trim(ml_mode) == 'sample') then
                    call RANDOM_NUMBER(num)
-                   if (ratio > num) then
+                   if (diff > log(num)) then
                       sample(nind) = theta(nind)
                       lnl_old      = lnl_new
                    end if
                 end if
              end do
           end if
+          
+          ! if (iter > 5) then
+          !    write(36,fmt='(i6,E14.5)') i, lnl_old
+          ! end if
+
+
           ! Ensure proper handling of poltypes
           ! Cast the final sample back to the component index map
           index_map(i,map_inds(1):map_inds(2)) = sample(nind)
-
+          
        end do
        !$OMP END DO 
        deallocate(sample,theta,model)
        !$OMP END PARALLEL
-       !!$OMP BARRIER
+       !$OMP BARRIER
+
+       ! if (iter > 5) then
+       !    close(35)
+       !    close(36)
+       !    stop
+       ! end if
+
+       
        call udgrade_ring(index_map,c%sample_nside(nind),index_full_res,nside)
     end if
     ! Broadcast the result to the appropriate object
@@ -540,7 +566,6 @@ contains
     end if
 
   end subroutine update_sample_model
-
   
   subroutine fit_band_gain(ddata, map_n, band)
     

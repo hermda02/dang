@@ -636,7 +636,7 @@ contains
        constructor%nfit                = dpar%fg_nfit(component) ! Also currently hardcoded
        constructor%corr                = dpar%fg_temp_corr(component,:)
        constructor%template_amplitudes = 0.d0
-
+       
        constructor%amplitude_file = trim(dpar%temp_amps(component))
        
        ! Allocate general pol_type flag array
@@ -688,7 +688,6 @@ contains
           if (trim(dpar%fg_spec_file(component,i)) == 'none') then
              constructor%indices(:,:,i)   = dpar%fg_init(component,i)
           else
-             write(*,*) trim(dpar%fg_spec_file(component,i))
              call read_bintab(trim(dpar%datadir)//trim(dpar%fg_spec_file(component,i)),&
                   constructor%indices(:,:,i), npix, nmaps, nullval, anynull, header=header)
           end if

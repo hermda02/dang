@@ -407,10 +407,6 @@ contains
           c => component_list(i)%p
        end if
     end do
-    do k = 1, nmaps
-       c%temp_norm(k) = dpar%thresh
-       c%template(:,k) = c%template(:,k)/c%temp_norm(k)
-    end do
     do i = 0, npix-1
        if (c%template(i,1) > dpar%thresh) then
           self%masks(i,1) = 0.d0
@@ -422,6 +418,12 @@ contains
           self%masks(i,1) = 1.d0
        end if
     end do
+
+    do k = 1, nmaps
+       c%temp_norm(k)  = dpar%thresh
+       c%template(:,k) = c%template(:,k)/c%temp_norm(k)
+    end do
+    
   end subroutine mask_hi_threshold
 
   subroutine convert_maps(self)
@@ -707,7 +709,7 @@ contains
              open(unit,file=title, status="new", action="write")
              write(unit,fmt='('//trim(nband_str)//'(A17))') self%label
           endif
-          write(unit,fmt='('//trim(nband_str)//'(E17.8))') c%template_amplitudes(:,map_n)*c%temp_norm(map_n)
+          write(unit,fmt='('//trim(nband_str)//'(E17.8))') c%template_amplitudes(:,map_n)/c%temp_norm(map_n)
           close(unit)
        end if
        
@@ -768,18 +770,20 @@ contains
 
     real(dp)                              :: offset
 
+    character(len=64), allocatable, dimension(:) :: bands
+    real(dp),          allocatable, dimension(:) :: values
+
     real(dp), allocatable, dimension(:)   :: amplitudes
     
     logical(lgt)                          :: exist
     logical(lgt), allocatable, dimension(:) :: loaded
 
-    integer(i4b)                          :: i, j, k
+    integer(i4b)                          :: i, j, k, n
     integer(i4b)                          :: unit, ios, ierror
 
     allocate(loaded(nbands))
     allocate(amplitudes(nbands))
-    
-    write(nband_str, '(i4)') nbands
+
     do l = 1, ncomp
       c => component_list(l)%p
       if (c%type == 'hi_fit') then
@@ -790,11 +794,10 @@ contains
 
          unit = getlun()
          ierror  = 0
-         fmt  = '('//trim(nband_str)//'(E17.8))'
          
          if (trim(file) == '') then
-            write(*,*) 'No COMP_TEMP_AMPS file -- setting all amplitudues to 0'
-            amplitudes(:) = 0.d0
+            write(*,*) 'No BAND_OFFSET_FILE -- setting all offsets to 0'
+            self%offset(:) = 0.d0
          else
             open(unit,file=file)
             do while (ierror .eq. 0) 
@@ -806,10 +809,12 @@ contains
                   end if
                end do
             end do
+            close(unit)
          end if
          do j = 1, nbands
             if (.not. loaded(j)) then
-               if (verbosity > 1) write(*,*) trim(self%label(j))//' amplitude not loaded -- set to 0'
+               !if (verbosity > 1)
+               write(*,*) trim(self%label(j))//' amplitude not loaded -- set to 0'
                amplitudes(:) = 0.d0
             end if
          end do
@@ -819,5 +824,44 @@ contains
       end if
     end do
   end subroutine read_template_amplitudes
+
+  subroutine read_file_array(file,bands,values)
+    implicit none
+
+    character(len=256), intent(in)           :: file
+    character(len=256)                       :: line
+
+    character(len=64), allocatable, dimension(:), intent(inout) :: bands
+    real(dp),          allocatable, dimension(:), intent(inout) :: values
+    
+
+    integer(i4b)                 :: unit, ios, ierror
+    integer(i4b)                 :: n
+    
+    unit = getlun()
+    ierror  = 0
+    n = 0
+
+    write(*,*) 'reading from file ', file
+    
+    open(unit,file=file)
+
+    do
+       read(unit, '(A)', iostat=ios) line
+       if (ios /= 0) exit
+       n = n + 1
+    end do
+
+    rewind(unit)
+    
+    allocate(bands(n),values(n))
+    
+    do i = 1, n 
+       read(unit=unit,fmt=*) bands(i), values(i)
+       write(*,*) bands(i), values(i)
+    end do
+    close(unit)
+
+  end subroutine read_file_array
   
 end module dang_data_mod

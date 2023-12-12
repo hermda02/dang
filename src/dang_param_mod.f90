@@ -52,7 +52,7 @@ module dang_param_mod
      integer(i4b)                                      :: ntemp          ! # of templates 
      
      character(len=512), allocatable, dimension(:)     :: temp_file      ! Template Filename
-     character(len=100), allocatable, dimension(:)     :: temp_amps      ! Band filename
+     character(len=512), allocatable, dimension(:)     :: temp_amps      ! Template amplitude file
      character(len=512), allocatable, dimension(:)     :: temp_label     ! Template label
      character(len=10),  allocatable, dimension(:)     :: temp_polfit    ! Which poltypes are fit jointly for the template? ex. 'T', 'QU'
      logical(lgt),       allocatable, dimension(:,:)   :: temp_corr      ! Storing which bands should have templates fit
@@ -554,6 +554,8 @@ contains
         
     allocate(par%temp_file(par%ntemp))
     allocate(par%temp_amps(par%ntemp))
+
+    par%temp_amps(:) = ''
     
     ! par%temp_nfit = 0
     par%fg_nfit   = 0
@@ -563,7 +565,6 @@ contains
        call int2string(i, itext)
        call get_parameter_hashtable(htbl, 'COMP_LABEL'//itext, len_itext=len_itext, par_string=par%fg_label(i))
        call get_parameter_hashtable(htbl, 'COMP_TYPE'//itext, len_itext=len_itext, par_string=par%fg_type(i)) 
-       call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
        if (trim(par%fg_type(i)) /= 'monopole') then
           call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(i))
        end if
@@ -593,6 +594,7 @@ contains
        else if (trim(par%fg_type(i)) == 'hi_fit') then
           call read_hi_fit(par,htbl,i)
        end if
+       call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(i))
     end do
     
   end subroutine read_comp_params
@@ -790,16 +792,6 @@ contains
             len_itext=len_jtext,par_lgt=par%fg_temp_corr(comp,i))
     end do
     par%fg_nfit(comp) = count(par%fg_temp_corr(comp,:))
-    ! do j = 1, par%numband
-    !    call int2string(j,jtext)
-    !    call get_parameter_hashtable(htbl, 'COMP'//trim(itext)//'_FIT'//jtext,&
-    !         len_itext=len_jtext,par_lgt=par%fg_temp_corr(comp,j))
-    !    if (par%fg_temp_corr(comp,j) .and. par%band_inc(j)) then
-    !       par%fg_nfit(comp) = par%fg_nfit(comp) + 1
-    !    else
-    !       par%fg_temp_corr(comp,j) = .false.
-    !    end if
-    ! end do
 
   end subroutine read_monopole
 
@@ -968,9 +960,9 @@ contains
     if (par%fg_nu_ref(comp) < 1d7) then
        par%fg_nu_ref(comp) = par%fg_nu_ref(comp)*1d9
     end if
-    call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(comp))
+    ! call get_parameter_hashtable(htbl, 'COMP_CG_GROUP'//itext, len_itext=len_itext, par_int=par%fg_cg_group(comp))
     call get_parameter_hashtable(htbl, 'COMP_FILENAME'//itext, len_itext=len_itext, par_string=par%fg_filename(comp))
-    call get_parameter_hashtable(htbl, 'COMP_AMP_FILE'//itext, par_string=par%temp_amps(comp))
+    
     i = 0
     do j = 1, par%numband
        if (.not. par%band_inc(j)) then
@@ -1000,6 +992,7 @@ contains
          par_int=par%fg_samp_nside(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
          par_lgt=par%fg_samp_spec(comp,1))
+    write(*,*) par%fg_samp_spec(comp,1)
     call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
          par_string=par%fg_spec_file(comp,1))       
     call get_parameter_hashtable(htbl, 'COMP_T_REGION'//itext, len_itext=len_itext,&
@@ -1013,6 +1006,9 @@ contains
     call get_parameter_hashtable(htbl, 'COMP_T_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
          par_lgt=par%fg_spec_tune(comp,1))
 
+    call get_parameter_hashtable(htbl, 'COMP_AMP_FILE'//itext, len_itext=len_itext, par_string=par%temp_amps(comp))
+    write(*,*) par%fg_samp_spec(comp,1)
+    
   end subroutine read_hi_fit
     
   function get_token(string, sep, num, group, allow_empty) result(res)
