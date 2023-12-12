@@ -530,9 +530,11 @@ contains
     len_jtext = len(trim(jtext))
 
     call get_parameter_hashtable(htbl, 'NUMCOMPS', par_int=par%ncomp)
-    call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
-   
+    ! call get_parameter_hashtable(htbl, 'NUMTEMPS', par_int=par%ntemp)
+
     n  = par%ncomp
+    par%ntemp = 0
+    
     
     allocate(par%fg_amp_file(n,1))
     allocate(par%fg_amp_samp(n))
@@ -551,12 +553,7 @@ contains
     allocate(par%fg_spec_step(n,2))
     allocate(par%fg_spec_tune(n,2))
     allocate(par%fg_temp_corr(n,par%numinc))
-        
-    allocate(par%temp_file(par%ntemp))
-    allocate(par%temp_amps(par%ntemp))
-
-    par%temp_amps(:) = ''
-    
+            
     ! par%temp_nfit = 0
     par%fg_nfit   = 0
     
@@ -575,6 +572,14 @@ contains
              par%fg_nu_ref(i) = par%fg_nu_ref(i)*1d9
           end if
        end if
+       if (trim(par%fg_type(i)) == 'hi_fit' .or. trim(par%fg_type(i)) == 'template') par%ntemp = par%ntemp + 1
+    end do
+
+    write (*,*) par%ntemp
+    
+    allocate(par%temp_file(par%ntemp))
+    allocate(par%temp_amps(par%ntemp))
+    do i = 1, n
        if (trim(par%fg_type(i)) == 'power-law') then
           call read_power_law(par,htbl,i)
        else if (trim(par%fg_type(i)) == 'cmb') then

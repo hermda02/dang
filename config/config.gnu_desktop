@@ -1,7 +1,7 @@
 # GNU Fortran
 export F90       := gfortran
 export MPF90     := mpif90
-export F90FLAGS  := -g -C -fbounds-check -fopenmp -parallel
+export F90FLAGS  := -g -C -fbounds-check -fopenmp
 
 export LOCAL := /home/daniher/local
 
