@@ -44,6 +44,8 @@ contains
          threshold = 0.d0
        else if (trim(dpar%bp_id(i)) == 'HFI_cmb') then
          threshold = 1.d-7
+       else if (trim(dpar%bp_id(i)) == 'HFI_submm') then
+         threshold = 1.d-7
        else if (trim(dpar%bp_id(i)) == 'DIRBE') then
          threshold = 0.d0
        end if
