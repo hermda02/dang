@@ -574,8 +574,6 @@ contains
        end if
        if (trim(par%fg_type(i)) == 'hi_fit' .or. trim(par%fg_type(i)) == 'template') par%ntemp = par%ntemp + 1
     end do
-
-    write (*,*) par%ntemp
     
     allocate(par%temp_file(par%ntemp))
     allocate(par%temp_amps(par%ntemp))
@@ -997,7 +995,6 @@ contains
          par_int=par%fg_samp_nside(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_T_SAMPLE'//itext, len_itext=len_itext,&
          par_lgt=par%fg_samp_spec(comp,1))
-    write(*,*) par%fg_samp_spec(comp,1)
     call get_parameter_hashtable(htbl, 'COMP_T_INPUT_MAP'//itext, len_itext=len_itext,&
          par_string=par%fg_spec_file(comp,1))       
     call get_parameter_hashtable(htbl, 'COMP_T_REGION'//itext, len_itext=len_itext,&
@@ -1010,9 +1007,7 @@ contains
          par_dp=par%fg_spec_step(comp,1))
     call get_parameter_hashtable(htbl, 'COMP_T_TUNE_STEPSIZE'//itext,len_itext=len_itext,&
          par_lgt=par%fg_spec_tune(comp,1))
-
     call get_parameter_hashtable(htbl, 'COMP_AMP_FILE'//itext, len_itext=len_itext, par_string=par%temp_amps(comp))
-    write(*,*) par%fg_samp_spec(comp,1)
     
   end subroutine read_hi_fit
     
