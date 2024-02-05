@@ -9,6 +9,8 @@ module dang_bp_mod
      integer(i4b)      :: n
      real(dp)          :: nu_c
      real(dp), allocatable, dimension(:) :: nu0, nu, tau0, tau
+   contains
+     procedure :: integrate => integratedSignal
   end type bandinfo
 
   integer(i4b)                              :: numband
@@ -59,6 +61,17 @@ contains
 
   end subroutine init_bp_mod
 
+  function integratedSignal(self, signal)
+    implicit none
+
+    class(bandinfo),            intent(in) :: self
+    real(dp),     dimension(:), intent(in) :: signal
+    real(dp)                               :: integratedSignal
+
+    integratedSignal = tsum(self%nu0, self%tau0 * signal)
+
+  end function integratedSignal
+  
   function normalize_bandpass(tau_in) result(tau_out)
     implicit none
     
@@ -242,6 +255,24 @@ contains
 
   end function a2t
 
+  function a2t_nu(nu)
+    ! [uK_cmb/uK_RJ]
+    ! Assume that nu is in Hz
+    implicit none
+    real(dp), intent(in) :: nu
+    real(dp)                   :: a2t_nu, y, sum 
+    integer(i4b)               :: i
+    
+    sum = 0.d0
+
+    y = (h*nu)/(k_B*T_CMB)
+    sum = (exp(y)-1.d0)**2/(y**2*exp(y))
+
+    a2t_nu = sum
+
+  end function a2t_nu
+
+  
   function f2t(bp)
     ! [uK_cmb/MJysr-1]
     ! Assume that nu is in Hz

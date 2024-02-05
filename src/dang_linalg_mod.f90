@@ -11,84 +11,84 @@ module dang_linalg_mod
 
 contains
 
-    subroutine invert_matrix_dp(matrix, cholesky, status, ln_det)
-      implicit none
+    ! subroutine invert_matrix_dp(matrix, cholesky, status, ln_det)
+    !   implicit none
       
-      real(dp), dimension(1:,1:), intent(inout)         :: matrix
-      logical(lgt),               intent(in),  optional :: cholesky
-      integer(i4b),               intent(out), optional :: status
-      real(dp),                   intent(out), optional :: ln_det
+    !   real(dp), dimension(1:,1:), intent(inout)         :: matrix
+    !   logical(lgt),               intent(in),  optional :: cholesky
+    !   integer(i4b),               intent(out), optional :: status
+    !   real(dp),                   intent(out), optional :: ln_det
       
-      integer(i4b)     :: i, j, n, lda, info, lwork
-      logical(lgt)     :: use_cholesky
-      character(len=1) :: uplo
-      integer(i4b), allocatable, dimension(:)   :: ipiv
-      real(dp),     allocatable, dimension(:)   :: work
+    !   integer(i4b)     :: i, j, n, lda, info, lwork
+    !   logical(lgt)     :: use_cholesky
+    !   character(len=1) :: uplo
+    !   integer(i4b), allocatable, dimension(:)   :: ipiv
+    !   real(dp),     allocatable, dimension(:)   :: work
       
-      if(present(status)) status = 0
-      use_cholesky = .false.; if (present(cholesky)) use_cholesky = cholesky
-      n     = size(matrix(1,:))
-      lda   = n
-      lwork = n
-      info  = 0
-      uplo  = 'l'
-      allocate(ipiv(n))
-      allocate(work(n))
+    !   if(present(status)) status = 0
+    !   use_cholesky = .false.; if (present(cholesky)) use_cholesky = cholesky
+    !   n     = size(matrix(1,:))
+    !   lda   = n
+    !   lwork = n
+    !   info  = 0
+    !   uplo  = 'l'
+    !   allocate(ipiv(n))
+    !   allocate(work(n))
       
-      if (use_cholesky) then
-         call DPOTRF(uplo, n, matrix, lda, info)
-         if (present(ln_det)) then
-            ln_det = 0.d0
-            do i = 1, n
-               if (matrix(i,i) > 0.d0) then
-                  ln_det = ln_det + 2.d0*log(matrix(i,i))
-               else
-                  ln_det = -1.d30
-                  exit
-               end if
-            end do
-         end if
-      else
-         call DGETRF(n, n, matrix, lda, ipiv, info)
-      end if
-      if (info /= 0) then
-         if(present(status)) then
-            status = info
-            return
-         end if
-         write(*,*) 'DGETRF: Factorization failed. Info = ', info
-         stop
-      else
+    !   if (use_cholesky) then
+    !      call DPOTRF(uplo, n, matrix, lda, info)
+    !      if (present(ln_det)) then
+    !         ln_det = 0.d0
+    !         do i = 1, n
+    !            if (matrix(i,i) > 0.d0) then
+    !               ln_det = ln_det + 2.d0*log(matrix(i,i))
+    !            else
+    !               ln_det = -1.d30
+    !               exit
+    !            end if
+    !         end do
+    !      end if
+    !   else
+    !      call DGETRF(n, n, matrix, lda, ipiv, info)
+    !   end if
+    !   if (info /= 0) then
+    !      if(present(status)) then
+    !         status = info
+    !         return
+    !      end if
+    !      write(*,*) 'DGETRF: Factorization failed. Info = ', info
+    !      stop
+    !   else
          
-         if (use_cholesky) then
-            call DPOTRI(uplo, n, matrix, lda, info)
-         else
-            call DGETRI(n, matrix, lda, ipiv, work, lwork, info)
-         end if
+    !      if (use_cholesky) then
+    !         call DPOTRI(uplo, n, matrix, lda, info)
+    !      else
+    !         call DGETRI(n, matrix, lda, ipiv, work, lwork, info)
+    !      end if
          
-         if (info /= 0) then
-            if(present(status)) then
-               status = info
-               return
-            end if
-            write(*,*) 'DGETRI: Inversion failed. Info = ', info
-            stop
-         end if
+    !      if (info /= 0) then
+    !         if(present(status)) then
+    !            status = info
+    !            return
+    !         end if
+    !         write(*,*) 'DGETRI: Inversion failed. Info = ', info
+    !         stop
+    !      end if
          
-      end if
+    !   end if
 
-      if (use_cholesky) then
-         do i = 1, n
-            do j = i+1, n
-               matrix(i,j) = matrix(j,i)
-            end do
-         end do
-      end if
+    !   if (use_cholesky) then
+    !      do i = 1, n
+    !         do j = i+1, n
+    !            matrix(i,j) = matrix(j,i)
+    !         end do
+    !      end do
+    !   end if
       
-      deallocate(work)
-      deallocate(ipiv)
+    !   deallocate(work)
+    !   deallocate(ipiv)
 
-    end subroutine invert_matrix_dp
+    ! end subroutine invert_matrix_dp
 
     subroutine invert_tri(tri,uplo,inv)
       implicit none

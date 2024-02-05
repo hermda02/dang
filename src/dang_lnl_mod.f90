@@ -19,7 +19,7 @@ contains
 
   function evaluate_model_lnL(c,data,rms,model,map_inds,pixel,mask,sample,nind) result(lnL_out)
     implicit none
-    type(dang_comps),    pointer, intent(in) :: c
+    class(dang_comp),    pointer, intent(in) :: c
     real(dp), dimension(0:,:,:),  intent(in) :: data, rms, model
     integer(i4b),   dimension(2), intent(in) :: map_inds
     integer(i4b),   optional,     intent(in) :: pixel
@@ -71,9 +71,9 @@ contains
     !         lnL: real(dp)                                                      |
     !                                                                            |
     ! if pixel < 0,  evaluate full sky, otherwise sample that pixel              |
-    ! if map_n > 0,  evaluate that poltype                                       |
-    ! if map_n = -1, evaluate Q+U jointly                                        |
-    ! if map_n = -2, evaluate T+Q+U jointly                                      |
+    ! if pol > 0,  evaluate that poltype                                       |
+    ! if pol = -1, evaluate Q+U jointly                                        |
+    ! if pol = -2, evaluate T+Q+U jointly                                      |
     !============================================================================|
     implicit none
 
@@ -129,16 +129,16 @@ contains
     !         data:  array(real(dp)) - data with which we compare the model
     !         rms:   array(real(dp)) - noise associated with the data
     !         model: array(real(dp)) - the model to compare to the data
-    !         map_n: integer         - poltype for likelihood evaluation
+    !         pol: integer         - poltype for likelihood evaluation
     !         pixel: integer         - pixel number for likelihood evaluation
     !
     ! Output:
     !         lnL: real(dp)
     !
     ! if pixel < 0,  evaluate full sky, otherwise sample that pixel
-    ! if map_n > 0,  evaluate that poltype
-    ! if map_n = -1, evaluate Q+U jointly
-    ! if map_n = -2, evaluate T+Q+U jointly
+    ! if pol > 0,  evaluate that poltype
+    ! if pol = -1, evaluate Q+U jointly
+    ! if pol = -2, evaluate T+Q+U jointly
     !==========================================================================
     implicit none
 
@@ -187,16 +187,16 @@ contains
     !         data:  array(real(dp)) - data with which we compare the model
     !         rms:   array(real(dp)) - noise associated with the data
     !         model: array(real(dp)) - the model to compare to the data
-    !         map_n: integer         - poltype for likelihood evaluation
+    !         pol: integer         - poltype for likelihood evaluation
     !         pixel: integer         - pixel number for likelihood evaluation
     !
     ! Output:
     !         lnL: real(dp)
     !
     ! if pixel < 0,  evaluate full sky, otherwise sample that pixel
-    ! if map_n > 0,  evaluate that poltype
-    ! if map_n = -1, evaluate Q+U jointly
-    ! if map_n = -2, evaluate T+Q+U jointly
+    ! if pol > 0,  evaluate that poltype
+    ! if pol = -1, evaluate Q+U jointly
+    ! if pol = -2, evaluate T+Q+U jointly
     !==========================================================================
     implicit none
 
@@ -245,20 +245,20 @@ contains
     !         data:  array(real(dp)) - data with which we compare the model
     !         rms:   array(real(dp)) - noise associated with the data
     !         model: array(real(dp)) - the model to compare to the data
-    !         map_n: integer         - poltype for likelihood evaluation
+    !         pol: integer         - poltype for likelihood evaluation
     !         pixel: integer         - pixel number for likelihood evaluation
     !
     ! Output:
     !         lnL: real(dp)
     !
     ! if pixel < 0,  evaluate full sky, otherwise sample that pixel
-    ! if map_n > 0,  evaluate that poltype
-    ! if map_n = -1, evaluate Q+U jointly
-    ! if map_n = -2, evaluate T+Q+U jointly
+    ! if pol > 0,  evaluate that poltype
+    ! if pol = -1, evaluate Q+U jointly
+    ! if pol = -2, evaluate T+Q+U jointly
     !==========================================================================
     implicit none
 
-    type(dang_comps),    pointer, intent(in) :: c
+    class(dang_comp),    pointer, intent(in) :: c
     real(dp), dimension(0:,:,:),  intent(in) :: data, rms, model
     real(dp), dimension(0:),      intent(in) :: mask
     integer(i4b),   dimension(2), intent(in) :: map_inds
@@ -292,7 +292,7 @@ contains
           if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
           do k = inds(1,1), inds(1,2)
              do j = 1, nbands
-                ss  = c%eval_signal(j,i,k,theta)
+                ss  = c%evalSignal(j,i,k,theta=theta)
                 sum = sum + (((1.0/rms(i,k,j))**2)*(ss/c%amplitude(i,k))*&
                      & log(bp(j)%nu_c/c%nu_ref))**2.0
              end do

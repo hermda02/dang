@@ -22,8 +22,8 @@ module dang_cg_mod
      integer(i4b) :: nflag
      integer(i4b) :: ntemp
      logical(lgt) :: sample
-     integer(i4b),            allocatable, dimension(:) :: pol_flag
-     type(component_pointer), allocatable, dimension(:) :: cg_component
+     integer(i4b),   allocatable, dimension(:) :: pol_flag
+     type(comp_ptr), allocatable, dimension(:) :: cg_component
 
      real(dp), allocatable, dimension(:) :: x ! The amplitude vector for this CG group
      real(dp), allocatable, dimension(:) :: sInv ! vector for the monopole prior variance
@@ -195,7 +195,7 @@ contains
     class(dang_cg_group)                   :: self
     type(dang_data),         intent(in)    :: ddata
     type(dang_params)                      :: dpar
-    type(dang_comps),        pointer       :: c
+    class(dang_comp),        pointer       :: c
 
     integer(i4b),            intent(in)    :: flag_n
     real(dp), allocatable, dimension(:),  intent(inout)    :: b
@@ -343,7 +343,7 @@ contains
     class(dang_cg_group)                               :: self
     type(dang_data),                     intent(in)    :: ddata
     real(dp), allocatable, dimension(:), intent(inout) :: b
-    type(dang_comps),                    pointer       :: c
+    class(dang_comp),                    pointer       :: c
     integer(i4b)                                       :: component
     real(dp), allocatable, dimension(:,:,:)            :: data
     integer(i4b),                        intent(in)    :: flag_n
@@ -352,14 +352,14 @@ contains
 
     integer(i4b)                            :: i, j, k, l, m, n
     integer(i4b)                            :: offset
-    integer(i4b)                            :: map_n, comp
+    integer(i4b)                            :: pol, comp
 
     if (iand(self%pol_flag(flag_n),1) .ne. 0) then
-       map_n = 1
+       pol = 1
     else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
-       map_n = 2
+       pol = 2
     else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
-       map_n = 3
+       pol = 3
     end if
 
     ! Here is an object we'll call data, which we will correct to be the                                                      
@@ -434,7 +434,7 @@ contains
              if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) cycle
              do k = 1, nmaps
                 do j = 1, nbands
-                   data(i,k,j) = data(i,k,j) - c%eval_signal(j,i,k)
+                   data(i,k,j) = data(i,k,j) - c%evalSignal(j,i,k)
                 end do
              end do
           end do
@@ -450,7 +450,7 @@ contains
                 do i = 0, npix-1
                    if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) cycle
                    do k = 1, nmaps
-                      data(i,k,j) = data(i,k,j) - c%eval_signal(j,i,k)
+                      data(i,k,j) = data(i,k,j) - c%evalSignal(j,i,k)
                    end do
                 end do
                 !$OMP END DO
@@ -487,25 +487,25 @@ contains
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                       b(offset+i) = b(offset+i) + (data(i-1,2,j)*&
-                           & c%eval_sed(j,i-1,2))/&
+                           & c%S(band=j,pol=2,theta=c%indices(i-1,2,:)))/&
                            & (ddata%rms_map(i-1,2,j)**2.d0)
                       b(npix+offset+i) = b(npix+offset+i) + (data(i-1,3,j)*&
-                           & c%eval_sed(j,i-1,3))/&
+                           & c%S(band=j,pol=3,theta=c%indices(i-1,3,:)))/&
                            & (ddata%rms_map(i-1,3,j)**2.d0)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
                       b(offset+i) = b(offset+i) + (data(i-1,1,j)*&
-                           & c%eval_sed(j,i-1,1))/&
+                           & c%S(band=j,pol=1,theta=c%indices(i-1,1,:)))/&
                            & (ddata%rms_map(i-1,1,j)**2.d0)
                       b(offset+i) = b(offset+i) + (data(i-1,2,j)*&
-                           & c%eval_sed(j,i-1,2))/&
+                           & c%S(band=j,pol=2,theta=c%indices(i-1,2,:)))/&
                            & (ddata%rms_map(i-1,2,j)**2.d0)
                       b(offset+i) = b(offset+i) + (data(i-1,3,j)*&
-                           & c%eval_sed(j,i-1,3))/&
+                           & c%S(band=j,pol=3,theta=c%indices(i-1,3,:)))/&
                            & (ddata%rms_map(i-1,3,j)**2.d0)
                    else
-                      b(offset+i) = b(offset+i) + (data(i-1,map_n,j)*&
-                           & c%eval_sed(j,i-1,map_n))/&
-                           & (ddata%rms_map(i-1,map_n,j)**2.d0)
+                      b(offset+i) = b(offset+i) + (data(i-1,pol,j)*&
+                           & c%S(band=j,pol=pol,theta=c%indices(i-1,pol,:)))/&
+                           & (ddata%rms_map(i-1,pol,j)**2.d0)
                    end if
                 end if
              end do
@@ -528,7 +528,8 @@ contains
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   val_array(i) = val_array(i) + data(i-1,1,j)/(ddata%rms_map(i-1,1,j)**2.d0)*c%eval_sed(j,i-1,1)
+                   val_array(i) = val_array(i) + data(i-1,1,j)/(ddata%rms_map(i-1,1,j)**2.d0)*&
+                        & c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -547,7 +548,8 @@ contains
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   val_array(i) = val_array(i) + data(i-1,1,j)/(ddata%rms_map(i-1,1,j)**2.d0)*c%eval_sed(j,i-1,1)
+                   val_array(i) = val_array(i) + data(i-1,1,j)/(ddata%rms_map(i-1,1,j)**2.d0)*&
+                        & c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -568,14 +570,20 @@ contains
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      val_array(i) = val_array(i) + data(i-1,2,j)/(ddata%rms_map(i-1,2,j)**2.d0)*c%eval_sed(j,i-1,2)
-                      val_array(i) = val_array(i) + data(i-1,3,j)/(ddata%rms_map(i-1,3,j)**2.d0)*c%eval_sed(j,i-1,3)
+                      val_array(i) = val_array(i) + data(i-1,2,j)/(ddata%rms_map(i-1,2,j)**2.d0)*&
+                           & c%S(band=j,pol=2,pixel=i-1)
+                      val_array(i) = val_array(i) + data(i-1,3,j)/(ddata%rms_map(i-1,3,j)**2.d0)*&
+                           & c%S(band=j,pol=3,pixel=i-1)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      val_array(i) = val_array(i) + data(i-1,1,j)/(ddata%rms_map(i-1,1,j)**2.d0)*c%eval_sed(j,i-1,1)
-                      val_array(i) = val_array(i) + data(i-1,2,j)/(ddata%rms_map(i-1,2,j)**2.d0)*c%eval_sed(j,i-1,2)
-                      val_array(i) = val_array(i) + data(i-1,3,j)/(ddata%rms_map(i-1,3,j)**2.d0)*c%eval_sed(j,i-1,3)
+                      val_array(i) = val_array(i) + data(i-1,1,j)/(ddata%rms_map(i-1,1,j)**2.d0)*&
+                           & c%S(band=j,pol=1,pixel=i-1)
+                      val_array(i) = val_array(i) + data(i-1,2,j)/(ddata%rms_map(i-1,2,j)**2.d0)*&
+                           & c%S(band=j,pol=2,pixel=i-1)
+                      val_array(i) = val_array(i) + data(i-1,3,j)/(ddata%rms_map(i-1,3,j)**2.d0)*&
+                           & c%S(band=j,pol=3,pixel=i-1)
                    else
-                      val_array(i) = val_array(i) + data(i-1,map_n,j)/(ddata%rms_map(i-1,map_n,j)**2.d0)*c%eval_sed(j,i-1,map_n)
+                      val_array(i) = val_array(i) + data(i-1,pol,j)/(ddata%rms_map(i-1,pol,j)**2.d0)*&
+                           & c%S(band=j,pol=pol,pixel=i-1)
                    end if
                 end do
                 !$OMP END DO
@@ -628,23 +636,23 @@ contains
     real(dp), dimension(:), intent(in)    :: x
     integer(i4b),           intent(in)    :: nbands, flag_n
     real(dp), allocatable,  dimension(:)  :: temp1, temp2, temp3, res
-    type(dang_comps),       pointer       :: c
+    class(dang_comp),       pointer       :: c
     
     real(dp), allocatable, dimension(:)   :: val_array
 
     integer(i4b), allocatable, dimension(:) :: l ! counting template fitting ticks per template
 
-    integer(i4b)                          :: i, j, k, map_n, comp
+    integer(i4b)                          :: i, j, k, pol, comp
     integer(i4b)                          :: m, n, offset, pix
     integer(i4b)                          :: l_ind ! Tracks which template we're on
 
     ! Initialize CG group stuff based off of pol_flags
     if (iand(self%pol_flag(flag_n),1) .ne. 0) then
-       map_n = 1
+       pol = 1
     else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
-       map_n = 2
+       pol = 2
     else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
-       map_n = 3
+       pol = 3
     end if
 
     allocate(l(self%ntemp))
@@ -694,14 +702,15 @@ contains
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                   temp1(i)        = temp1(i)        + x(offset+i)       *c%eval_sed(j,i-1,2)
-                   temp1(npix+i)   = temp1(npix+i)   + x(offset+npix+i)  *c%eval_sed(j,i-1,3)
+                   temp1(i)        = temp1(i)        + x(offset+i)       *c%S(band=j,pol=2,theta=c%indices(i-1,2,:))
+                   temp1(npix+i)   = temp1(npix+i)   + x(offset+npix+i)  *c%S(band=j,pol=3,theta=c%indices(i-1,3,:))
                 else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                   temp1(i)        = temp1(i)        + x(offset+i)       *c%eval_sed(j,i-1,1)
-                   temp1(npix+i)   = temp1(npix+i)   + x(offset+npix+i)  *c%eval_sed(j,i-1,2)
-                   temp1(2*npix+i) = temp1(2*npix+i) + x(offset+2*npix+i)*c%eval_sed(j,i-1,3)
+                   temp1(i)        = temp1(i)        + x(offset+i)       *c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
+                   temp1(npix+i)   = temp1(npix+i)   + x(offset+npix+i)  *c%S(band=j,pol=2,theta=c%indices(i-1,2,:))
+                   temp1(2*npix+i) = temp1(2*npix+i) + x(offset+2*npix+i)*c%S(band=j,pol=3,theta=c%indices(i-1,3,:))
                 else
-                   temp1(i)        = temp1(i)        + x(offset+i)       *c%eval_sed(j,i-1,map_n)
+                   temp1(i)        = temp1(i)        + x(offset+i)&
+                        &       *c%S(band=j,pol=pol,theta=c%indices(i-1,pol,:))
                 end if
              end do
              !$OMP END DO
@@ -720,7 +729,7 @@ contains
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp1(i) = temp1(i) + x(offset+l(l_ind))*c%eval_sed(j,i-1,1)
+                   temp1(i) = temp1(i) + x(offset+l(l_ind))*c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -734,7 +743,7 @@ contains
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp1(i) = temp1(i) + x(offset+l(l_ind))*c%eval_sed(j,i-1,1)
+                   temp1(i) = temp1(i) + x(offset+l(l_ind))*c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -749,14 +758,20 @@ contains
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      temp1(i)      = temp1(i)          + x(offset+l(l_ind))*c%eval_sed(j,i-1,2)
-                      temp1(npix+i) = temp1(npix+i)     + x(offset+l(l_ind))*c%eval_sed(j,i-1,3)
+                      temp1(i)      = temp1(i)          + x(offset+l(l_ind))*&
+                           & c%S(band=j,pol=2,pixel=i-1)
+                      temp1(npix+i) = temp1(npix+i)     + x(offset+l(l_ind))*&
+                           & c%S(band=j,pol=3,pixel=i-1)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      temp1(i)        = temp1(i)        + x(offset+l(l_ind))*c%eval_sed(j,i-1,1)
-                      temp1(npix+i)   = temp1(npix+i)   + x(offset+l(l_ind))*c%eval_sed(j,i-1,2)
-                      temp1(2*npix+i) = temp1(2*npix+i) + x(offset+l(l_ind))*c%eval_sed(j,i-1,3)
+                      temp1(i)        = temp1(i)        + x(offset+l(l_ind))*&
+                           & c%S(band=j,pol=1,pixel=i-1)
+                      temp1(npix+i)   = temp1(npix+i)   + x(offset+l(l_ind))*&
+                           & c%S(band=j,pol=2,pixel=i-1)
+                      temp1(2*npix+i) = temp1(2*npix+i) + x(offset+l(l_ind))*&
+                           & c%S(band=j,pol=3,pixel=i-1)
                    else
-                      temp1(i)        = temp1(i)        + x(offset+l(l_ind))*c%eval_sed(j,i-1,map_n)
+                      temp1(i)        = temp1(i)        + x(offset+l(l_ind))*&
+                           & c%S(band=j,pol=pol,theta=c%indices(i-1,pol,:))
                    end if
                 end do
                 !$OMP END DO
@@ -784,7 +799,7 @@ contains
              temp1(npix+i)   = temp1(npix+i)/(ddata%rms_map(i-1,2,j)**2.d0)
              temp1(2*npix+i) = temp1(2*npix+i)/(ddata%rms_map(i-1,3,j)**2.d0)
           else
-             temp1(i)        = temp1(i)/(ddata%rms_map(i-1,map_n,j)**2.d0)
+             temp1(i)        = temp1(i)/(ddata%rms_map(i-1,pol,j)**2.d0)
           end if
        end do
        !$OMP END DO
@@ -810,14 +825,14 @@ contains
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                   temp3(offset+i)        = temp1(i)       *c%eval_sed(j,i-1,2)
-                   temp3(offset+npix+i)   = temp1(npix+i)  *c%eval_sed(j,i-1,3)
+                   temp3(offset+i)        = temp1(i)       *c%S(band=j,pol=2,theta=c%indices(i-1,2,:))
+                   temp3(offset+npix+i)   = temp1(npix+i)  *c%S(band=j,pol=3,theta=c%indices(i-1,3,:))
                 else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                   temp3(offset+i)        = temp1(i)       *c%eval_sed(j,i-1,1)
-                   temp3(offset+npix+i)   = temp1(npix+i)  *c%eval_sed(j,i-1,2)
-                   temp3(offset+2*npix+i) = temp1(2*npix+i)*c%eval_sed(j,i-1,3)
+                   temp3(offset+i)        = temp1(i)       *c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
+                   temp3(offset+npix+i)   = temp1(npix+i)  *c%S(band=j,pol=2,theta=c%indices(i-1,2,:))
+                   temp3(offset+2*npix+i) = temp1(2*npix+i)*c%S(band=j,pol=3,theta=c%indices(i-1,3,:))
                 else
-                   temp3(offset+i)        = temp1(i)       *c%eval_sed(j,i-1,map_n)
+                   temp3(offset+i)        = temp1(i)       *c%S(band=j,pol=pol,theta=c%indices(i-1,pol,:))
                 end if
              end do
              !$OMP END DO
@@ -837,7 +852,7 @@ contains
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   val_array(i) = val_array(i) + temp1(i)*c%eval_sed(j,i-1,1)
+                   val_array(i) = val_array(i) + temp1(i)*c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -872,14 +887,19 @@ contains
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      val_array(i)        = val_array(i)        + temp1(i)*c%eval_sed(j,i-1,2)
-                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*c%eval_sed(j,i-1,3)
+                      val_array(i)        = val_array(i)        + temp1(i)*&
+                           & c%S(band=j,pol=2,pixel=i-1)
+                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*&
+                           & c%S(band=j,pol=3,pixel=i-1)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      val_array(i)        = val_array(i)        + temp1(i)*c%eval_sed(j,i-1,1)
-                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*c%eval_sed(j,i-1,2)
-                      val_array(2*npix+i) = val_array(2*npix+i) + temp1(2*npix+i)*c%eval_sed(j,i-1,3)
+                      val_array(i)        = val_array(i)        + temp1(i)*&
+                           & c%S(band=j,pol=1,pixel=i-1)
+                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*&
+                           & c%S(band=j,pol=2,pixel=i-1)
+                      val_array(2*npix+i) = val_array(2*npix+i) + temp1(2*npix+i)*&
+                           & c%S(band=j,pol=3,pixel=i-1)
                    else
-                      val_array(i) = val_array(i) + temp1(i)*c%eval_sed(j,i-1,map_n)
+                      val_array(i) = val_array(i) + temp1(i)*c%S(band=j,pol=pol,pixel=i-1)
                    end if
                 end do
                 !$OMP END DO
@@ -948,20 +968,20 @@ contains
     integer(i4b),           intent(in)    :: nbands, flag_n
     
     real(dp), allocatable, dimension(:)   :: temp1, temp2, res
-    type(dang_comps),       pointer       :: c
+    class(dang_comp),       pointer       :: c
     real(dp), allocatable, dimension(:)   :: val_array
 
-    integer(i4b)                          :: i, j, k, map_n, comp
+    integer(i4b)                          :: i, j, k, pol, comp
     integer(i4b)                          :: offset, l, m, n
 
 
     ! Initialize CG group stuff based off of pol_flags
     if (iand(self%pol_flag(flag_n),1) .ne. 0) then
-       map_n = 1
+       pol = 1
     else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
-       map_n = 2
+       pol = 2
     else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
-       map_n = 3
+       pol = 3
     end if
 
     n      = size(eta)
@@ -1012,7 +1032,7 @@ contains
              temp1(npix+i)   = eta(npix+i)/(ddata%rms_map(i-1,2,j))
              temp1(2*npix+i) = eta(2*npix+i)/(ddata%rms_map(i-1,3,j))
           else
-             temp1(i)        = eta(i)/(ddata%rms_map(i-1,map_n,j))
+             temp1(i)        = eta(i)/(ddata%rms_map(i-1,pol,j))
           end if
        end do
        !$OMP END DO
@@ -1030,14 +1050,14 @@ contains
              do i = 1, npix
                 if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                 if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                   temp2(i)        = temp1(i)*c%eval_sed(j,i-1,2)
-                   temp2(npix+i)   = temp1(npix+i)*c%eval_sed(j,i-1,3)
+                   temp2(i)        = temp1(i)*c%S(band=j,pol=2,theta=c%indices(i-1,2,:))
+                   temp2(npix+i)   = temp1(npix+i)*c%S(band=j,pol=3,theta=c%indices(i-1,3,:))
                 else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                   temp2(i)        = temp1(i)*c%eval_sed(j,i-1,1)
-                   temp2(npix+i)   = temp1(npix+i)*c%eval_sed(j,i-1,2)
-                   temp2(2*npix+i) = temp1(2*npix+i)*c%eval_sed(j,i-1,3)
+                   temp2(i)        = temp1(i)*c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
+                   temp2(npix+i)   = temp1(npix+i)*c%S(band=j,pol=2,theta=c%indices(i-1,2,:))
+                   temp2(2*npix+i) = temp1(2*npix+i)*c%S(band=j,pol=3,theta=c%indices(i-1,3,:))
                 else
-                   temp2(i)        = temp1(i)*c%eval_sed(j,i-1,map_n)
+                   temp2(i)        = temp1(i)*c%S(band=j,pol=pol,theta=c%indices(i-1,pol,:))
                 end if
              end do
              !$OMP END DO
@@ -1049,7 +1069,7 @@ contains
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   val_array(i) = val_array(i) + temp1(i)*c%eval_sed(j,i-1,1)
+                   val_array(i) = val_array(i) + temp1(i)*c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -1078,14 +1098,19 @@ contains
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      val_array(i)        = val_array(i)        + temp1(i)*c%eval_sed(j,i-1,2)
-                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*c%eval_sed(j,i-1,3)
+                      val_array(i)        = val_array(i)        + temp1(i)*&
+                           & c%S(band=j,pol=2,pixel=i-1)
+                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*&
+                           & c%S(band=j,pol=3,pixel=i-1)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
-                      val_array(i)        = val_array(i)        + temp1(i)*c%eval_sed(j,i-1,1)
-                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*c%eval_sed(j,i-1,2)
-                      val_array(2*npix+i) = val_array(2*npix+i) + temp1(2*npix+i)*c%eval_sed(j,i-1,3)
+                      val_array(i)        = val_array(i)        + temp1(i)*&
+                           & c%S(band=j,pol=1,pixel=i-1)
+                      val_array(npix+i)   = val_array(npix+i)   + temp1(npix+i)*&
+                           & c%S(band=j,pol=2,theta=c%indices(i-1,2,:))
+                      val_array(2*npix+i) = val_array(2*npix+i) + temp1(2*npix+i)*&
+                           & c%S(band=j,pol=3,pixel=i-1)
                    else
-                      val_array(i) = val_array(i) + temp1(i)*c%eval_sed(j,i-1,map_n)
+                      val_array(i) = val_array(i) + temp1(i)*c%S(band=j,pol=pol,pixel=i-1)
                    end if
                 end do
                 !$OMP END DO
@@ -1116,18 +1141,18 @@ contains
    implicit none
    class(dang_cg_group)               :: self
    integer(i4b),        intent(in)    :: flag_n
-   type(dang_comps),    pointer       :: c
+   class(dang_comp),    pointer       :: c
    
    integer(i4b)                       :: offset, i, j, k, l
-   integer(i4b)                       :: map_n, comp
+   integer(i4b)                       :: pol, comp
 
    ! Initialize CG group stuff based off of pol_flags
    if (iand(self%pol_flag(flag_n),1) .ne. 0) then
-      map_n = 1
+      pol = 1
    else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
-      map_n = 2
+      pol = 2
    else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
-      map_n = 3
+      pol = 3
    end if
 
    offset = 0
@@ -1158,8 +1183,8 @@ contains
          do j = 1, nbands
             if (c%corr(j)) then
                l = l + 1
-               self%sInv(offset+l) = 0.d0!1.d0/sqrt(0.10*c%template_amplitudes(j,map_n))
-               self%m(offset+l)    = 0.d0!c%template_amplitudes(j,map_n)
+               self%sInv(offset+l) = 0.d0!1.d0/sqrt(0.10*c%template_amplitudes(j,pol))
+               self%m(offset+l)    = 0.d0!c%template_amplitudes(j,pol)
             end if
             if (l .ge. c%nfit) exit
          end do
@@ -1187,18 +1212,18 @@ contains
    implicit none
    class(dang_cg_group)               :: self
    integer(i4b),        intent(in)    :: flag_n
-   type(dang_comps),    pointer       :: c
+   class(dang_comp),    pointer       :: c
    
    integer(i4b)                       :: offset, i, j, k, l
-   integer(i4b)                       :: map_n, comp
+   integer(i4b)                       :: pol, comp
 
    ! Initialize CG group stuff based off of pol_flags
    if (iand(self%pol_flag(flag_n),1) .ne. 0) then
-      map_n = 1
+      pol = 1
    else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
-      map_n = 2
+      pol = 2
    else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
-      map_n = 3
+      pol = 3
    end if
 
    offset = 0
@@ -1237,7 +1262,7 @@ contains
             offset = offset + npix
          else
             do i = 1, npix
-               self%x(offset+i) = c%amplitude(i-1,map_n)
+               self%x(offset+i) = c%amplitude(i-1,pol)
             end do
             offset = offset + npix
          end if
@@ -1246,7 +1271,7 @@ contains
          do j = 1, nbands
             if (c%corr(j)) then
                l = l + 1
-               self%x(offset+l) = c%template_amplitudes(j,map_n)
+               self%x(offset+l) = c%template_amplitudes(j,pol)
             end if
             if (l .ge. c%nfit) exit
          end do
@@ -1256,7 +1281,7 @@ contains
          do j = 1, nbands
             if (c%corr(j)) then
                l = l + 1
-               self%x(offset+l) = c%template_amplitudes(j,map_n)
+               self%x(offset+l) = c%template_amplitudes(j,pol)
             end if
             if (l .ge. c%nfit) exit
          end do
@@ -1271,7 +1296,7 @@ contains
                else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
                   self%x(offset+l) = c%template_amplitudes(j,1)
                else
-                  self%x(offset+l) = c%template_amplitudes(j,map_n)
+                  self%x(offset+l) = c%template_amplitudes(j,pol)
                end if
             end if
             if (l .ge. c%nfit) exit
@@ -1298,18 +1323,18 @@ contains
     implicit none
     class(dang_cg_group)               :: self
     integer(i4b),        intent(in)    :: flag_n
-    type(dang_comps),    pointer       :: c
+    class(dang_comp),    pointer       :: c
     
     integer(i4b)                       :: offset, i, j, k, l
-    integer(i4b)                       :: map_n, comp
+    integer(i4b)                       :: pol, comp
 
     ! Initialize CG group stuff based off of pol_flags
     if (iand(self%pol_flag(flag_n),1) .ne. 0) then
-       map_n = 1
+       pol = 1
     else if (iand(self%pol_flag(flag_n),2) .ne. 0) then
-       map_n = 2
+       pol = 2
     else if (iand(self%pol_flag(flag_n),4) .ne. 0) then
-       map_n = 3
+       pol = 3
     end if
 
     offset = 0
@@ -1348,7 +1373,7 @@ contains
              offset = offset + npix
           else
              do i = 1, npix
-                c%amplitude(i-1,map_n) = self%x(offset+i)
+                c%amplitude(i-1,pol) = self%x(offset+i)
              end do
              offset = offset + npix
           end if
@@ -1357,7 +1382,7 @@ contains
           do j = 1, nbands
              if (c%corr(j)) then
                 l = l + 1
-                c%template_amplitudes(j,map_n) = self%x(offset+l)
+                c%template_amplitudes(j,pol) = self%x(offset+l)
              end if
              if (l .ge. c%nfit) exit
           end do
@@ -1367,7 +1392,7 @@ contains
           do j = 1, nbands
              if (c%corr(j)) then
                 l = l + 1
-                c%template_amplitudes(j,map_n) = self%x(offset+l)
+                c%template_amplitudes(j,pol) = self%x(offset+l)
              end if
              if (l .ge. c%nfit) exit
           end do
@@ -1385,7 +1410,7 @@ contains
                    c%template_amplitudes(j,2)     = self%x(offset+l)
                    c%template_amplitudes(j,3)     = self%x(offset+l)
                 else
-                   c%template_amplitudes(j,map_n) = self%x(offset+l)
+                   c%template_amplitudes(j,pol) = self%x(offset+l)
                 end if
              end if
              if (l .ge. c%nfit) exit

@@ -374,7 +374,7 @@ contains
     end if
 
   end subroutine udgrade_mask
-
+  
   subroutine apply_dang_mask(map,mask,missing)
     implicit none
 
@@ -409,5 +409,20 @@ contains
     !$OMP END PARALLEL
     !$OMP BARRIER
   end subroutine apply_dang_mask
+
+  function tsum(x, y)
+    implicit none
+
+    real(dp), dimension(:), intent(in) :: x, y
+    real(dp)                           :: tsum
+
+    integer(i4b) :: i
+
+    tsum = 0.d0
+    do i = 1, size(x)-1
+       tsum = tsum + 0.5d0 * (y(i)+y(i+1)) * (x(i+1)-x(i))
+    end do
+
+  end function tsum
   
 end module dang_util_mod

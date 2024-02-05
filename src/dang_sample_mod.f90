@@ -28,7 +28,7 @@ contains
 
     type(dang_data)              :: ddata
     type(dang_params)            :: dpar
-    type(dang_comps), pointer    :: c
+    class(dang_comp), pointer    :: c
     integer(i4b)                 :: i, j, k
 
     logical(lgt)                 :: sampled
@@ -85,7 +85,7 @@ contains
 
   end subroutine sample_spectral_parameters
   
-  subroutine sample_index_mh(ddata,c,nind,map_n)
+  subroutine sample_index_mh(ddata,c,nind,pol)
     ! ============================================== |
     ! Implementation of the Metropolis-Hastings      |
     ! sampling algorithm. The user is responsible    |
@@ -96,26 +96,26 @@ contains
     ! combination of poltypes (Q+U,T+Q+U).           |
     !                                                |
     ! Modes defined as follows:                      |
-    ! if map_n > 0,  evaluate that poltype           |
-    ! if map_n = -1, evaluate Q+U jointly            |
-    ! if map_n = -2, evaluate T+Q+U jointly          |
+    ! if pol > 0,  evaluate that poltype           |
+    ! if pol = -1, evaluate Q+U jointly            |
+    ! if pol = -2, evaluate T+Q+U jointly          |
     !------------------------------------------------!
     !                                                |
     ! Inputs:                                        |
     !   ddata: type(dang_data)                       |
-    !   c: type(dang_comps) - pointer to component   |
+    !   c: class(dang_comp) - pointer to component   |
     !   nind: integer - index to sample              |
-    !   map_n: integer - map to sample, or flag for  |
+    !   pol: integer - map to sample, or flag for  |
     !                    poltype combinations        |
     !                                                |
     ! ============================================== |
     implicit none
     
     type(dang_data),             intent(in) :: ddata
-    type(dang_comps),   pointer, intent(in) :: c
+    class(dang_comp),   pointer, intent(in) :: c
     integer(i4b),                intent(in) :: nind
-    integer(i4b),                intent(in) :: map_n
-    type(dang_comps),   pointer             :: c2
+    integer(i4b),                intent(in) :: pol
+    class(dang_comp),   pointer             :: c2
     logical(lgt)                            :: sample_it
      
     integer(i4b),          dimension(2)     :: map_inds
@@ -150,16 +150,16 @@ contains
     
     ! Little extra section here for mode determination
     !=================================================
-    ! if map_n > 0,  evaluate that poltype
-    ! if map_n = -1, evaluate Q+U jointly
-    ! if map_n = -2, evaluate T+Q+U jointly
+    ! if pol > 0,  evaluate that poltype
+    ! if pol = -1, evaluate Q+U jointly
+    ! if pol = -2, evaluate T+Q+U jointly
     !=================================================
-    if (map_n == -1) then
+    if (pol == -1) then
        map_inds(1) = 2; map_inds(2) = 3
-    else if (map_n == -2) then
+    else if (pol == -2) then
        map_inds(1) = 1; map_inds(2) = 3
     else
-       map_inds(1) = map_n; map_inds(2) = map_n
+       map_inds(1) = pol; map_inds(2) = pol
     end if
     !=================================================
 
@@ -186,7 +186,7 @@ contains
           do i = 0, npix-1
              do k = 1, nmaps
                 do j = 1, nbands
-                   data_raw(i,k,j) = data_raw(i,k,j) - c2%eval_signal(j,i,k)
+                   data_raw(i,k,j) = data_raw(i,k,j) - c2%evalSignal(j,i,k)
                 end do
              end do
           end do
@@ -526,7 +526,7 @@ contains
     !=======================================================================|
     ! Inputs:                                                               |
     !    model: array(real(dp)) - the model to compare to the data          |
-    !    c: type(dang_comps) - pointer to component                         |
+    !    c: class(dang_comp) - pointer to component                         |
     !    map_inds: array(integer) - poltype for likelihood evaluation       |
     !    sample: array(real(dp))  - array of spectral indices for component |
     !    pixel: integer           - pixel number for likelihood evaluation  |
@@ -536,7 +536,7 @@ contains
     implicit none
 
     real(dp),  dimension(0:,:,:), intent(inout) :: model 
-    type(dang_comps),    pointer, intent(in)    :: c
+    class(dang_comp),    pointer, intent(in)    :: c
     integer(i4b),   dimension(2), intent(in)    :: map_inds
     real(dp),       dimension(:), intent(in)    :: sample
     integer(i4b),   optional,     intent(in)    :: pixel
@@ -548,7 +548,7 @@ contains
     if (present(pixel)) then
        do k = map_inds(1), map_inds(2)
           do j = 1, nbands
-             model(pixel,k,j) = c%eval_signal(j,pixel,k,sample)
+             model(pixel,k,j) = c%evalSignal(j,pixel,k,sample)
           end do
        end do
     else
@@ -557,7 +557,7 @@ contains
        do i = 0, sample_npix-1
           do k = map_inds(1), map_inds(2)
              do j = 1, nbands
-                model(i,k,j) = c%eval_signal(j,i,k,sample)
+                model(i,k,j) = c%evalSignal(j,i,k,sample)
              end do
           end do
        end do
@@ -567,11 +567,11 @@ contains
 
   end subroutine update_sample_model
   
-  subroutine fit_band_gain(ddata, map_n, band)
+  subroutine fit_band_gain(ddata, pol, band)
     
     implicit none
     type(dang_data)                     :: ddata
-    integer(i4b),            intent(in) :: map_n
+    integer(i4b),            intent(in) :: pol
     integer(i4b),            intent(in) :: band
     real(dp), allocatable, dimension(:) :: map1, map2, mask, noise, N_inv
     real(dp)                            :: norm, gain
@@ -587,11 +587,11 @@ contains
     map2 = 0.d0
     mask = 0.d0
     
-    noise = ddata%rms_map(:,map_n,band)
+    noise = ddata%rms_map(:,pol,band)
     N_inv = 1.d0/(noise**2)
     ! map1 is the map we calibrate against here, being the full sky model.
-    map1(:) = ddata%sky_model(:,map_n,band)
-    map2(:) = (ddata%res_map(:,map_n,band)+ddata%sky_model(:,map_n,band))
+    map1(:) = ddata%sky_model(:,pol,band)
+    map2(:) = (ddata%res_map(:,pol,band)+ddata%sky_model(:,pol,band))
 
     ! Make sure our mask doesn't have any missvals, as we'll be multiplying by it
     do i = 0, ddata%npix-1
@@ -623,7 +623,7 @@ contains
   subroutine tune_spectral_parameter_length(c,nind,theta_init,data,rms,model,map_inds,mask)
     implicit none
 
-    type(dang_comps),    pointer, intent(in) :: c
+    class(dang_comp),    pointer, intent(in) :: c
     integer(i4b),   dimension(2), intent(in) :: map_inds
     real(dp), dimension(2),       intent(in) :: theta_init
     real(dp), dimension(0:,:,:),  intent(inout) :: model 

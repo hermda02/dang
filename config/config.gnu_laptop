@@ -1,0 +1,20 @@
+# GNU Fortran
+export F90       := gfortran
+export MPF90     := mpif90
+export F90FLAGS  := -g -C -fbounds-check
+
+export LOCAL := /home/daniel/local
+
+# Export library locations
+export LAPACK_LINK := -L/usr/lib -llapack
+export BLAS_LINK   := -L/usr/lib -lblas
+
+#CFITSIO
+export CFITSIO_INCLUDE :=
+export CFITSIO_LINK    := -L$(LOCAL)/lib -lcfitsio
+
+# HEALPIX
+export HEALPIX         := /home/daniel/libraries/Healpix_3.82
+
+export HEALPIX_INCLUDE := -I$(HEALPIX)/include
+export HEALPIX_LINK    := -L$(HEALPIX)/lib -lhealpix

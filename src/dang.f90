@@ -9,6 +9,7 @@ program dang
   use dang_linalg_mod
   use dang_data_mod
   use dang_component_mod
+  use dang_signal_mod
   use dang_sample_mod
   use dang_cg_mod
   implicit none
@@ -38,7 +39,6 @@ program dang
   ! Object Orient
   type(dang_params) :: dpar
   type(dang_data)   :: ddata
-  type(dang_comps)  :: dcomps
 
   call init_mpi()
   call read_param_file(dpar)
@@ -60,7 +60,7 @@ program dang
   nump       = 0
   namps      = 0
   nlheader   = size(header)
-  verbosity  = 1
+  verbosity  = 2
   !----------------------------------------------------------------------------------------------------------
   !----------------------------------------------------------------------------------------------------------
 

@@ -3,6 +3,7 @@ module dang_data_mod
   use dang_util_mod
   use dang_param_mod
   use dang_component_mod
+  use dang_signal_mod
   use dang_bp_mod
   implicit none
 
@@ -230,7 +231,7 @@ contains
     implicit none
     class(dang_data),       intent(inout) :: self
     type(dang_params),      intent(in)    :: dpar
-    type(dang_comps),         pointer     :: c
+    class(dang_comp),         pointer     :: c
     character(len=512)                    :: file
     character(len=128)                    :: fmt, nband_str, band
 
@@ -347,7 +348,7 @@ contains
    !  """
     implicit none
     class(dang_data),  intent(inout) :: self
-    type(dang_comps),  pointer       :: c
+    class(dang_comp),  pointer       :: c
     integer(i4b)                     :: i, j, k, l
     
     ! Reset sky model to zero
@@ -364,7 +365,7 @@ contains
        do i = 0, npix-1
           do k = 1, nmaps
              do j = 1, nbands
-                self%sky_model(i,k,j) = self%sky_model(i,k,j) + c%eval_signal(j,i,k)
+                self%sky_model(i,k,j) = self%sky_model(i,k,j) + c%evalSignal(j,i,k)
              end do
           end do
        end do
@@ -399,7 +400,7 @@ contains
     implicit none
     class(dang_data),            intent(inout) :: self
     type(dang_params)                          :: dpar
-    type(dang_comps),   pointer                :: c
+    class(dang_comp),   pointer                :: c
     integer(i4b)                               :: i, j, k
 
     do i = 1, ncomp
@@ -529,7 +530,7 @@ contains
     implicit none
 
     type(dang_data)                     :: self
-    type(dang_comps),        pointer    :: c
+    class(dang_comp),        pointer    :: c
     integer(i4b),            intent(in) :: iter
     integer(i4b)                        :: i, j, k
 
@@ -575,7 +576,7 @@ contains
     
     type(dang_params)                   :: dpar
     class(dang_data)                    :: self
-    type(dang_comps),         pointer   :: c
+    class(dang_comp),         pointer   :: c
     character(len=*), intent(in), optional :: suff
     real(dp), dimension(0:npix-1,nmaps) :: map
     real(dp)                            :: s, signal
@@ -603,13 +604,14 @@ contains
              !$OMP DO
              do i = 0, npix-1
                 do k = 1, nmaps
-                   map(i,k) = c%eval_signal(j,i,k)!/self%conversion(j)
+                   map(i,k) = c%evalSignal(j,i,k)
                 end do
              end do
              !$OMP END DO
              !$OMP END PARALLEL
              !$OMP BARRIER
              ! Mask it!
+             map(:,:) = map(:,:)/self%conversion(j)
              call apply_dang_mask(map,self%masks(:,1),missing=.true.)
              call write_result_map(trim(title), nside, ordering, header, map)
           end do
@@ -663,12 +665,12 @@ contains
     
   end subroutine write_maps
   
-  subroutine write_data(self, dpar, map_n)
+  subroutine write_data(self, dpar, pol)
     implicit none
     type(dang_params)                   :: dpar
     class(dang_data)                    :: self
-    type(dang_comps),         pointer   :: c
-    integer(i4b),            intent(in) :: map_n
+    class(dang_comp),         pointer   :: c
+    integer(i4b),            intent(in) :: pol
     integer(i4b)                        :: i, j, n, unit
     character(len=2)                    :: temp_n
     character(len=128)                  :: title, fmt, str_fmt
@@ -684,7 +686,7 @@ contains
     write(nmaps_str, '(i1)') nmaps
     
     ! Output total chisquare
-    title = trim(dpar%outdir) // 'total_chisq_' // trim(tqu(map_n)) // '.dat'
+    title = trim(dpar%outdir) // 'total_chisq_' // trim(tqu(pol)) // '.dat'
     inquire(file=title,exist=exist)
     if (exist) then
        open(33,file=title, status="old",position="append", action="write")
@@ -700,7 +702,7 @@ contains
        c => component_list(n)%p
        if (trim(c%type) == 'template' .or. trim(c%type) == 'hi_fit') then
           unit = getlun()
-          title = trim(dpar%outdir) //  trim(c%label) // '_' //trim(tqu(map_n)) // '_amplitudes.dat'
+          title = trim(dpar%outdir) //  trim(c%label) // '_' //trim(tqu(pol)) // '_amplitudes.dat'
           inquire(file=title,exist=exist)
           if (exist) then
              open(unit,file=title, status="old", &
@@ -709,7 +711,7 @@ contains
              open(unit,file=title, status="new", action="write")
              write(unit,fmt='('//trim(nband_str)//'(A17))') self%label
           endif
-          write(unit,fmt='('//trim(nband_str)//'(E17.8))') c%template_amplitudes(:,map_n)/c%temp_norm(map_n)
+          write(unit,fmt='('//trim(nband_str)//'(E17.8))') c%template_amplitudes(:,pol)/c%temp_norm(pol)
           close(unit)
        end if
        
@@ -718,14 +720,14 @@ contains
           if (c%sample_index(j)) then
              fmt = '('//nmaps_str//'(f12.8))'
              unit = getlun()
-             title = trim(dpar%outdir) // trim(c%label) //'_' // trim(c%ind_label(j))//'_mean_'// trim(tqu(map_n)) // '.dat'
+             title = trim(dpar%outdir) // trim(c%label) //'_' // trim(c%ind_label(j))//'_mean_'// trim(tqu(pol)) // '.dat'
              inquire(file=title,exist=exist)
              if (exist) then
                 open(unit,file=title,status="old",position="append",action="write")
              else
                 open(unit,file=title,status="new",action="write")
              end if
-             write(unit,fmt=fmt) mask_avg(c%indices(:,map_n,j),self%masks(:,1))
+             write(unit,fmt=fmt) mask_avg(c%indices(:,pol,j),self%masks(:,1))
              close(unit)
           end if
        end do
@@ -764,7 +766,7 @@ contains
     implicit none
     class(dang_data),       intent(inout) :: self
     type(dang_params),      intent(in)    :: dpar
-    type(dang_comps),         pointer     :: c
+    class(dang_comp),         pointer     :: c
     character(len=512)                    :: file
     character(len=128)                    :: fmt, nband_str, band
 
