@@ -55,6 +55,12 @@ contains
           call read_bandpass(trim(dpar%datadir)//trim(dpar%bp_file(i)), threshold, bp(i)%n, bp(i)%nu0, bp(i)%tau0)
           bp(i)%tau0 = normalize_bandpass(bp(i)%tau0)
           allocate(bp(i)%nu(bp(i)%n), bp(i)%tau(bp(i)%n))
+       else
+         bp(i)%n = 1
+         allocate(bp(i)%nu0(bp(i)%n))
+         allocate(bp(i)%tau0(bp(i)%n))
+         bp(i)%nu0 = bp(i)%nu_c
+         bp(i)%tau0 = 1.0
        end if
     end do
 
@@ -68,7 +74,11 @@ contains
     real(dp),     dimension(:), intent(in) :: signal
     real(dp)                               :: integratedSignal
 
-    integratedSignal = tsum(self%nu0, self%tau0 * signal)
+    if (self%id == 'delta') then
+      integratedSignal = signal(1)
+    else
+       integratedSignal = tsum(self%nu0, self%tau0 * signal)
+    end if
 
   end function integratedSignal
   

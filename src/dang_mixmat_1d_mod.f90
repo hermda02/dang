@@ -45,7 +45,7 @@ contains
     class(dang_mixmat_1d)                     :: self
     integer(i4b),   intent(in), optional  :: pol
     
-    real(dp), allocatable, dimension(:)   :: theta
+    real(dp), allocatable, dimension(:,:) :: theta
     real(dp), allocatable, dimension(:)   :: f, s
 
     integer(i4b)                          :: i, j, k
@@ -53,17 +53,17 @@ contains
 
     m = self%bp%n
     
-    allocate(theta(n))
+    allocate(theta(n, self%comp%nindices))
     allocate(s(m))
     allocate(f(n))
     do i = 1, n
-       theta(i) = self%comp%uni_prior(1,1) + (self%comp%uni_prior(1,2)-self%comp%uni_prior(1,1))/(n-1) * (i-1)
+       theta(i,1) = self%comp%uni_prior(1,1) + (self%comp%uni_prior(1,2)-self%comp%uni_prior(1,1))/(n-1) * (i-1)
        do j = 1, m
-          s(j)  = self%comp%S(nu=self%bp%nu0(j),pol=pol,theta=theta)
+          s(j)  = self%comp%S(nu=self%bp%nu0(j), pol=pol, theta=theta(i,:))
        end do
        f(i) = self%bp%integrate(s)
     end do
-    call spline_simple(self%s, theta, f, regular=.true.)
+    call spline_simple(self%s, theta(:,1), f, regular=.true.)
 
   end subroutine init_spline
 

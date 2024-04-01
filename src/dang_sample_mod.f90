@@ -38,7 +38,6 @@ contains
     ! Loop over all foregrounds and sample for indices
     do i = 1, ncomp
        c => component_list(i)%p
-       write(*,*) c%sample_index(:)
        ! if there are no indices, don't even look
        if (c%nindices == 0) cycle
        ! if none get sampled, don't even look
@@ -218,8 +217,8 @@ contains
     deallocate(data_raw,rms_raw,mask_raw)
 
     ! Allocate and initialize empty arrays
-    allocate(index_map(0:sample_npix-1,nmaps))   
-    allocate(index_full_res(0:npix-1,nmaps))
+    allocate(index_map(0:sample_npix-1, nmaps))   
+    allocate(index_full_res(0:npix-1, nmaps))
     index_map(:,:)      = 0.d0
     index_full_res(:,:) = 0.d0
 
@@ -228,8 +227,8 @@ contains
     ! Index mode 1 corresponds to full sky value for the spectral parameter
     if (c%index_mode(nind) == 1) then
        write(*,*) 'Sampling fullsky'
-       allocate(sample(c%nindices),theta(c%nindices))
-       allocate(model(0:sample_npix-1,nmaps,nbands))   
+       allocate(sample(c%nindices), theta(c%nindices))
+       allocate(model(0:sample_npix-1, nmaps, nbands))   
 
        model(:,:,:)        = 0.d0
 
@@ -238,12 +237,12 @@ contains
        ! Initialize index map from previous Gibbs iteration
        ! Ensure proper handling of poltypes
        do l = 1, c%nindices
-          sample(l) = c%indices(0,map_inds(1),l)
+          sample(l) = c%indices(0, map_inds(1), l)
        end do
        theta = sample
        
        ! Define the model to toss into the likelihood evaluation
-       call update_sample_model(model,c,map_inds,sample)
+       call update_sample_model(model, c, map_inds, sample, mask(:,1))
        
        ! Evaluate the lnL (already includes the -0.5 out front)
        if (c%lnl_type(nind) == 'chisq') then
@@ -267,6 +266,12 @@ contains
 
        lnl_old = lnl + lnl_prior
 
+       
+       write(*,*) '-----------------'
+       write(*,fmt='(1(f12.5))') theta(nind)
+       write(*,fmt='(3(E12.4))') -2*lnl_old, -2*lnl, lnl_prior
+       write(*,*) '-----------------'
+
        ! Now we do the real sampling
        if (sample_it) then
           if (.not. c%tuned(nind)) then
@@ -283,10 +288,10 @@ contains
              
              ! Update theta with the new sample
              ! Evaluate model for likelihood evaluation
-             theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
+             theta(nind) = sample(nind) + rand_normal(0.d0, c%step_size(nind))
              if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
              
-             call update_sample_model(model,c,map_inds,theta)
+             call update_sample_model(model, c, map_inds, theta, mask(:,1))
 
              ! Evaluate the lnL (already includes the -0.5 out front)
              if (c%lnl_type(nind) == 'chisq') then
@@ -308,6 +313,10 @@ contains
              ! Accept/reject
              diff  = lnl_new - lnl_old
              ratio = exp(diff)
+             write(*,fmt='(2(f12.5))') theta(nind), sample(nind)
+             write(*,fmt='(4(E12.4))') -2*lnl_new, -2*lnl_old, -2*lnl, lnl_prior
+             write(*,fmt='(2(E12.4))') diff, exp(diff)
+             write(*,*) '-----------------'
              
              if (trim(ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
@@ -322,9 +331,10 @@ contains
                 end if
              end if
           end do
+          
+          lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1), map_out=.true.)
           !========================
        end if
-
        ! Cast the final sample back to the dummy index map
        index_full_res(:,map_inds(1):map_inds(2)) = sample(nind)
 
@@ -377,7 +387,7 @@ contains
           theta = sample
 
           ! Define the model to toss into the likelihood evaluation
-          call update_sample_model(model,c,map_inds,sample,i)
+          call update_sample_model(model,c,map_inds,sample, mask(:,1),i)
           
           ! Evaluate the lnL (already includes the -0.5 out front)
           if (c%lnl_type(nind) == 'chisq') then
@@ -413,7 +423,7 @@ contains
                 ! Evaluate model for likelihood evaluation
                 theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
                 if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
-                call update_sample_model(model,c,map_inds,theta,i)
+                call update_sample_model(model,c,map_inds,theta, mask(:,1),i)
                 
                 ! Evaluate likelihood of sample
                 if (c%lnl_type(nind) == 'chisq') then
@@ -517,7 +527,7 @@ contains
     
   end subroutine sample_calibrators
 
-  subroutine update_sample_model(model,c,map_inds,sample,pixel)
+  subroutine update_sample_model(model,c,map_inds,sample,mask,pixel)
     !=======================================================================|
     !                                                                       |  
     ! This routine simply takes in an array, the component                  |
@@ -540,6 +550,7 @@ contains
     integer(i4b),   dimension(2), intent(in)    :: map_inds
     real(dp),       dimension(:), intent(in)    :: sample
     integer(i4b),   optional,     intent(in)    :: pixel
+    real(dp), dimension(0:),      intent(in)    :: mask
 
     integer(i4b)                                :: i, j, k, sample_npix
 
@@ -548,16 +559,17 @@ contains
     if (present(pixel)) then
        do k = map_inds(1), map_inds(2)
           do j = 1, nbands
-             model(pixel,k,j) = c%evalSignal(j,pixel,k,sample)
+             model(pixel,k,j) = c%evalSignal(j, pixel, k, sample)
           end do
        end do
     else
        !!$OMP PARALLEL PRIVATE(i,j,k)
        !!$OMP DO SCHEDULE(static)
        do i = 0, sample_npix-1
+         if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
           do k = map_inds(1), map_inds(2)
              do j = 1, nbands
-                model(i,k,j) = c%evalSignal(j,i,k,sample)
+               model(i,k,j) = c%evalSignal(j, i, k, sample)
              end do
           end do
        end do
@@ -644,7 +656,7 @@ contains
     sample = theta_init
     theta = theta_init
     ! Define the model to toss into the likelihood evaluation
-    call update_sample_model(model,c,map_inds,sample)
+    call update_sample_model(model,c,map_inds,sample, mask)
     
     ! Evaluate the lnL (already includes the -0.5 out front)
     if (c%lnl_type(nind) == 'chisq') then
@@ -668,7 +680,7 @@ contains
           theta(nind) = sample(nind) + rand_normal(0.d0,c%step_size(nind))
           if (theta(nind) .lt. c%uni_prior(nind,1) .or. theta(nind) .gt. c%uni_prior(nind,2)) cycle
           
-          call update_sample_model(model,c,map_inds,theta)
+          call update_sample_model(model,c,map_inds,theta, mask)
           
           ! Evaluate the lnL (already includes the -0.5 out front)
           if (c%lnl_type(nind) == 'chisq') then

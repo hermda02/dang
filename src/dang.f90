@@ -95,6 +95,7 @@ program dang
         call convert_cg_maps(ddata)
         write(*,*) ''
      end if
+     call write_stats_to_term(ddata,iter)
      ! ------------------------------------------------------------------------------------------
      ! Sample each CG group for amplitudes
      ! ------------------------------------------------------------------------------------------

@@ -342,6 +342,8 @@ contains
    !  Subroutine made to update the sky model after changes.
    !  This sets up for writing of residual and component maps
    !  and model evaluation.
+   !
+   ! Updates each components band
 
    !  self: dang_data - holds all of our data objects 
 
@@ -354,12 +356,13 @@ contains
     ! Reset sky model to zero
     self%sky_model(:,:,:) = 0.d0
     do l = 1, ncomp
-       c => component_list(l)%p
-       if (c%type == 'monopole') then
-          self%offset = c%template_amplitudes(:,1)
-          ! Don't add the band monopoles as part of the sky model
-          cycle
-       end if
+      c => component_list(l)%p
+      ! Let's first update each components sig_map
+      if (c%type == 'monopole') then
+         self%offset = c%template_amplitudes(:,1)
+         ! Don't add the band monopoles as part of the sky model
+         cycle
+      end if
        !$OMP PARALLEL PRIVATE(i,j,k)
        !$OMP DO SCHEDULE(static)
        do i = 0, npix-1
@@ -508,8 +511,10 @@ contains
        do k = self%pol_type(1), self%pol_type(size(self%pol_type))
           if (k == 1) then
              do j = 1, nbands
-                self%chi_map(i,k) = self%chi_map(i,k) + ((self%sig_map(i,k,j)-self%offset(j))/self%gain(j) - & 
-                     self%sky_model(i,k,j))**2.d0/(self%rms_map(i,k,j)**2.d0)
+               self%chi_map(i,k) = self%chi_map(i,k) + (self%sig_map(i,k,j) - self%sky_model(i,k,j))**2.d0 / &
+                    & (self%rms_map(i,k,j)**2.d0)
+               !  self%chi_map(i,k) = self%chi_map(i,k) + ((self%sig_map(i,k,j)-self%offset(j))/self%gain(j) - & 
+               !       self%sky_model(i,k,j))**2.d0/(self%rms_map(i,k,j)**2.d0)
              end do
           else
              do j = 1, nbands
@@ -521,8 +526,8 @@ contains
     end do
     !$OMP END DO
     !$OMP END PARALLEL
-    self%chi_map(:,:) = self%chi_map(:,:)/nbands
-    self%chisq = self%chisq + sum(self%chi_map)/nump
+   !  self%chi_map(:,:) = self%chi_map(:,:)/nbands
+    self%chisq = self%chisq + sum(self%chi_map)!/nump
     
   end subroutine compute_chisq
 
@@ -786,6 +791,8 @@ contains
     allocate(loaded(nbands))
     allocate(amplitudes(nbands))
 
+    write(*,*) "Reading Template Amplitudes"
+
     do l = 1, ncomp
       c => component_list(l)%p
       if (c%type == 'hi_fit') then
@@ -793,7 +800,6 @@ contains
          amplitudes(:) = 0.d0
 
          file = trim(dpar%datadir)//trim(c%amplitude_file)
-
          unit = getlun()
          ierror  = 0
          

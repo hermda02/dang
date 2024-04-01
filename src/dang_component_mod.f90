@@ -78,7 +78,7 @@ module dang_component_mod
   
 contains 
 
-  function evalSignal(self,band,pixel,pol,theta)
+  function evalSignal(self, band, pixel, pol, theta)
     implicit none
     class(dang_comp)                              :: self
     integer(i4b), intent(in)                      :: band, pixel, pol
@@ -86,10 +86,22 @@ contains
     real(dp)                                      :: evalSignal
 
     if (present(theta)) then
-       evalSignal = self%amplitude(pixel,pol)*self%mixmat(band,pol)%p%eval(theta)
+      if ((trim(self%type) == 'monopole') .or. (trim(self%type) == 'template')) then
+         evalSignal = self%template_amplitudes(band,pol)*self%template(pixel,pol)
+      else if (trim(self%type) == 'hi_fit') then
+         evalSignal = self%template_amplitudes(band, pol)*self%template(pixel, pol)*self%temp_norm(pol)* &
+            & self%mixmat(band,pol)%p%eval(theta)
+      else
+         evalSignal = self%amplitude(pixel,pol)*self%mixmat(band,pol)%p%eval(theta)
+      end if
     else
        if ((trim(self%type) == 'monopole') .or. (trim(self%type) == 'template')) then
           evalSignal = self%template_amplitudes(band,pol)*self%template(pixel,pol)
+       else if (trim(self%type) == 'hi_fit') then
+         ! write(*,*) self%template_amplitudes(band, pol)!, self%template(pixel, pol), self%temp_norm(pol), &
+         ! & self%mixmat(band,pol)%p%eval(self%indices(pixel,pol,:))
+         evalSignal = self%template_amplitudes(band, pol)*self%template(pixel, pol)*self%temp_norm(pol)* &
+            & self%mixmat(band,pol)%p%eval(self%indices(pixel,pol,:))
        else
           evalSignal = self%amplitude(pixel,pol)*self%mixmat(band,pol)%p%eval(self%indices(pixel,pol,:))
        end if
