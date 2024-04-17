@@ -526,8 +526,8 @@ contains
     end do
     !$OMP END DO
     !$OMP END PARALLEL
-   !  self%chi_map(:,:) = self%chi_map(:,:)/nbands
-    self%chisq = self%chisq + sum(self%chi_map)!/nump
+    self%chi_map(:,:) = self%chi_map(:,:)/nbands
+    self%chisq = self%chisq + sum(self%chi_map)/nump
     
   end subroutine compute_chisq
 
@@ -803,7 +803,7 @@ contains
          unit = getlun()
          ierror  = 0
          
-         if (trim(file) == '') then
+         if (trim(c%amplitude_file) == '') then
             write(*,*) 'No BAND_OFFSET_FILE -- setting all offsets to 0'
             self%offset(:) = 0.d0
          else

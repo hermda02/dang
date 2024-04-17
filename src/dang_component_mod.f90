@@ -89,7 +89,7 @@ contains
       if ((trim(self%type) == 'monopole') .or. (trim(self%type) == 'template')) then
          evalSignal = self%template_amplitudes(band,pol)*self%template(pixel,pol)
       else if (trim(self%type) == 'hi_fit') then
-         evalSignal = self%template_amplitudes(band, pol)*self%template(pixel, pol)*self%temp_norm(pol)* &
+         evalSignal = self%template_amplitudes(band, pol)*self%template(pixel, pol)*&!self%temp_norm(pol)* &
             & self%mixmat(band,pol)%p%eval(theta)
       else
          evalSignal = self%amplitude(pixel,pol)*self%mixmat(band,pol)%p%eval(theta)
@@ -100,7 +100,7 @@ contains
        else if (trim(self%type) == 'hi_fit') then
          ! write(*,*) self%template_amplitudes(band, pol)!, self%template(pixel, pol), self%temp_norm(pol), &
          ! & self%mixmat(band,pol)%p%eval(self%indices(pixel,pol,:))
-         evalSignal = self%template_amplitudes(band, pol)*self%template(pixel, pol)*self%temp_norm(pol)* &
+         evalSignal = self%template_amplitudes(band, pol)*self%template(pixel, pol)*&!self%temp_norm(pol)* &
             & self%mixmat(band,pol)%p%eval(self%indices(pixel,pol,:))
        else
           evalSignal = self%amplitude(pixel,pol)*self%mixmat(band,pol)%p%eval(self%indices(pixel,pol,:))

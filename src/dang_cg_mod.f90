@@ -487,24 +487,30 @@ contains
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                       b(offset+i) = b(offset+i) + (data(i-1,2,j)*&
-                           & c%S(band=j,pol=2,theta=c%indices(i-1,2,:)))/&
+                           ! & c%S(band=j,pol=2,theta=c%indices(i-1,2,:)))/&
+                           & c%mixmat(j,2)%p%eval(c%indices(i-1,2,:)))/ &
                            & (ddata%rms_map(i-1,2,j)**2.d0)
                       b(npix+offset+i) = b(npix+offset+i) + (data(i-1,3,j)*&
-                           & c%S(band=j,pol=3,theta=c%indices(i-1,3,:)))/&
+                           ! & c%S(band=j,pol=3,theta=c%indices(i-1,3,:)))/&
+                           & c%mixmat(j,3)%p%eval(c%indices(i-1,3,:)))/ &
                            & (ddata%rms_map(i-1,3,j)**2.d0)
                    else if (iand(self%pol_flag(flag_n),0) .ne. 0) then
                       b(offset+i) = b(offset+i) + (data(i-1,1,j)*&
-                           & c%S(band=j,pol=1,theta=c%indices(i-1,1,:)))/&
+                           ! & c%S(band=j,pol=1,theta=c%indices(i-1,1,:)))/&
+                           & c%mixmat(j,1)%p%eval(c%indices(i-1,1,:)))/ &
                            & (ddata%rms_map(i-1,1,j)**2.d0)
                       b(offset+i) = b(offset+i) + (data(i-1,2,j)*&
-                           & c%S(band=j,pol=2,theta=c%indices(i-1,2,:)))/&
+                           ! & c%S(band=j,pol=2,theta=c%indices(i-1,2,:)))/&
+                           & c%mixmat(j,2)%p%eval(c%indices(i-1,2,:)))/ &
                            & (ddata%rms_map(i-1,2,j)**2.d0)
                       b(offset+i) = b(offset+i) + (data(i-1,3,j)*&
-                           & c%S(band=j,pol=3,theta=c%indices(i-1,3,:)))/&
+                           ! & c%S(band=j,pol=3,theta=c%indices(i-1,3,:)))/&
+                           & c%mixmat(j,3)%p%eval(c%indices(i-1,3,:)))/ &
                            & (ddata%rms_map(i-1,3,j)**2.d0)
                    else
                       b(offset+i) = b(offset+i) + (data(i-1,pol,j)*&
-                           & c%S(band=j,pol=pol,theta=c%indices(i-1,pol,:)))/&
+                           ! & c%S(band=j,pol=pol,theta=c%indices(i-1,pol,:)))/&
+                           & c%mixmat(j,pol)%p%eval(c%indices(i-1,pol,:)))/ &
                            & (ddata%rms_map(i-1,pol,j)**2.d0)
                    end if
                 end if
@@ -529,7 +535,7 @@ contains
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
                    val_array(i) = val_array(i) + data(i-1,1,j)/(ddata%rms_map(i-1,1,j)**2.d0)*&
-                        & c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
+                        & c%mixmat(j,1)%p%eval(c%indices(i-1,1,:))*c%template(i-1,1)
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -729,7 +735,8 @@ contains
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   temp1(i) = temp1(i) + x(offset+l(l_ind))*c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
+                   temp1(i) = temp1(i) + x(offset+l(l_ind))*&!c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
+                   & c%mixmat(j,1)%p%eval(c%indices(i-1,1,:))*c%template(i-1,1)
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
@@ -852,7 +859,8 @@ contains
                 !$OMP DO SCHEDULE(static) 
                 do i = 1, npix
                    if (ddata%masks(i-1,1) == 0.d0 .or. ddata%masks(i-1,1) == missval) cycle
-                   val_array(i) = val_array(i) + temp1(i)*c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
+                   val_array(i) = val_array(i) + temp1(i)*&!c%S(band=j,pol=1,theta=c%indices(i-1,1,:))
+                   & c%mixmat(j,1)%p%eval(c%indices(i-1,1,:))*c%template(i-1,1)
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL

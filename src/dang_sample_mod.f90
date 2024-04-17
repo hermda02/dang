@@ -265,13 +265,7 @@ contains
        end if
 
        lnl_old = lnl + lnl_prior
-
        
-       write(*,*) '-----------------'
-       write(*,fmt='(1(f12.5))') theta(nind)
-       write(*,fmt='(3(E12.4))') -2*lnl_old, -2*lnl, lnl_prior
-       write(*,*) '-----------------'
-
        ! Now we do the real sampling
        if (sample_it) then
           if (.not. c%tuned(nind)) then
@@ -313,10 +307,6 @@ contains
              ! Accept/reject
              diff  = lnl_new - lnl_old
              ratio = exp(diff)
-             write(*,fmt='(2(f12.5))') theta(nind), sample(nind)
-             write(*,fmt='(4(E12.4))') -2*lnl_new, -2*lnl_old, -2*lnl, lnl_prior
-             write(*,fmt='(2(E12.4))') diff, exp(diff)
-             write(*,*) '-----------------'
              
              if (trim(ml_mode) == 'optimize') then
                 if (ratio > 1.d0) then
@@ -332,7 +322,6 @@ contains
              end if
           end do
           
-          lnl = evaluate_lnL(data,rms,model,map_inds,-1,mask(:,1), map_out=.true.)
           !========================
        end if
        ! Cast the final sample back to the dummy index map
@@ -445,11 +434,6 @@ contains
 
                 ! Accept/reject
                 diff  = lnl_new - lnl_old
-                ! write(*,fmt='(2(E12.4))') theta(nind), sample(nind)
-                ! write(*,fmt='(2(E12.4))') lnl_new, lnl_old
-                ! write(*,fmt='(1(E12.4))') diff
-                ! write(*,*) '-----------------'
-                ! ratio = exp(diff)
                 if (trim(ml_mode) == 'optimize') then
                    if (diff > 0.d0) then
                       sample(nind) = theta(nind)

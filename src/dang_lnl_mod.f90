@@ -123,7 +123,7 @@ contains
 
   end function evaluate_marginal_lnL
 
-  function evaluate_lnL(data,rms,model,map_inds,pixel,mask, map_out) result(lnL)
+  function evaluate_lnL(data,rms,model,map_inds,pixel,mask) result(lnL)
     !==========================================================================
     ! Inputs:
     !         data:  array(real(dp)) - data with which we compare the model
@@ -150,18 +150,9 @@ contains
     integer(i4b),   dimension(2,2)           :: inds
     real(dp)                                 :: lnL, lnL_local
 
-    
-    logical(lgt), optional, intent(in) :: map_out
-
-    real(dp), allocatable, dimension(:,:)                 :: lnL_map
-
     ! Initialize the result to null
     lnL = 0.d0
     lnl_local = 0.d0
-
-    allocate(lnL_map(0:ubound(data,DIM=1),1))
-
-    lnL_map = 0.d0
 
     ! Initialize the inds array to condense the following lines:
     inds(1,:) = map_inds
@@ -174,28 +165,20 @@ contains
        inds(2,1) = lbound(data,DIM=1); inds(2,2) = ubound(data,DIM=1)
     end if
 
-    !$OMP PARALLEL PRIVATE(i,j,k)
-    !$OMP DO SCHEDULE(static)
+    !!$OMP PARALLEL PRIVATE(i,j,k,lnl_local)
+    !!$OMP DO SCHEDULE(static)
     do i = inds(2,1), inds(2,2)
        if (mask(i) == 0.d0 .or. mask(i) == missval) cycle
        do k = inds(1,1), inds(1,2)
           do j = 1, nbands
-            lnL_map(i,k) = lnL_map(i,k) - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
-             lnL_local = lnL_local - 0.5d0*((data(i,k,j)-model(i,k,j))/rms(i,k,j))**2
+            lnL_local = lnL_local - 0.5d0*((data(i,k,j)-model(i,k,j)))**2/(rms(i,k,j))**2
           end do
        end do
     end do
-    !$OMP END DO
-    !$OMP END PARALLEL
+    !!$OMP END DO
+    !!$OMP END PARALLEL
     lnL = lnL + lnL_local
 
-   if (present(map_out)) then
-      if (map_out) then
-         write(iter_str, '(i0.5)') iter
-         call apply_dang_mask(lnL_map, mask, missing=.true.)
-         call write_result_map('lnl_map_k'// trim(iter_str)//'.fits', 16, 1, header, lnL_map)
-      end if
-   end if
 
   end function evaluate_lnL
 
