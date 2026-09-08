@@ -363,7 +363,7 @@ contains
     real(dp), dimension(1:),    intent(out)           :: eigenvals
     real(dp), dimension(1:,1:), intent(out)           :: eigenvectors
 
-    integer(i8b)     :: i, n, liwork, lwork, lda, ldb, info
+    integer(i4b)     :: i, n, liwork, lwork, lda, ldb, info
     character(len=1) :: job, uplo
     real(dp)         :: cutoff_int
     real(dp),     allocatable, dimension(:,:) :: A_int
@@ -405,7 +405,7 @@ contains
     real(dp), dimension(1:,1:), intent(in)            :: A
     real(dp), dimension(1:),    intent(out)           :: eigenvals
 
-    integer(i8b)     :: n, lda, lwork, liwork, info
+    integer(i4b)     :: n, lda, lwork, liwork, info
     character(len=1) :: job, uplo
     real(dp),     allocatable, dimension(:,:) :: A_copy
     real(dp),     allocatable, dimension(:)   :: W, work
@@ -451,7 +451,7 @@ contains
     real(dp)              :: matrix(:,:), eigenvals(:), eigenvectors(:,:)
     real(dp), allocatable :: work(:)
     integer(i4b), allocatable :: iwork(:)
-    integer(i8b)          :: n, wsize, liwork, status
+    integer(i4b)          :: n, wsize, liwork, status
     n = size(matrix,1)
     allocate(work(2*n**2+6*n+1), iwork(5*n+3))
     eigenvectors = matrix
@@ -468,7 +468,7 @@ contains
     real(dp),                   intent(in)    :: pow
     real(dp), dimension(1:,1:), intent(inout) :: A
 
-    integer(i8b)     :: i, j, n, liwork, lwork, lda, ldb, info
+    integer(i4b)     :: i, j, n, liwork, lwork, lda, ldb, info
     character(len=1) :: job, uplo
     real(dp)         :: cutoff_int
     real(dp),     allocatable, dimension(:,:) :: V
@@ -974,6 +974,7 @@ contains
     real(dp), allocatable, dimension(:) :: temp_row
 
     N = size(A(1,:))
+    if (present(ierr)) ierr = 0
 
     L = A
     call dpotrf( 'L', N, L, N, stat )
@@ -1036,6 +1037,7 @@ contains
     real(dp), allocatable, dimension(:) :: temp_row
 
     N = size(A(1,:))
+    if (present(ierr)) ierr = 0
 
     call dpotrf( 'L', N, A, N, stat )
 
