@@ -9,6 +9,14 @@ export LINK    := $(HEALPIX_LINK) $(CFITSIO_LINK) $(LAPACK_LINK) $(BLAS_LINK)
 # Executable
 all : dang
 
+test :
+	python3 -m unittest discover -s tests -v
+
+fortran-test :
+	$(MAKE) -C tests/fortran run
+
+check : test fortran-test
+
 dang :
 	cd src; $(MAKE) 
 
@@ -17,6 +25,6 @@ dang :
 	$(MPF90) $(F90COMP) -c $<
 
 # Cleaning command
-.PHONY: clean
+.PHONY: clean test fortran-test check
 clean :
 	@cd src; $(MAKE) clean
