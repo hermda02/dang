@@ -1,21 +1,13 @@
 import numpy as np
-import healpy as hp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.colors as colors
-from scipy.stats import norm
-from scipy.optimize import curve_fit
-from decimal import Decimal
+import sys
 
 mpl.rcParams['text.usetex'] = True
 
 missval = -1.6375e30
 
-# For beautiful maps
-planck  = np.loadtxt('/home/daniel/graduate_school/masters/tools/Planck_color.txt')/255.
-pl_cmap = colors.LinearSegmentedColormap.from_list('planck',planck)
-
-files  = ['accept.dat'. 'prob.dat', 'chi.dat', 'temps.dat']
+files = ['accept.dat', 'prob.dat', 'chi.dat', 'temps.dat']
 
 #-----------------------------------------
 
@@ -72,23 +64,27 @@ def trace_chisq():
     plt.savefig('chisq_trace',dpi=300,bbox_inches='tight')
     plt.close()
 
-USAGE = f"Usage: python3 {sys.argv[0]} [--help] |  -accept -beta -chisq -prob"
+USAGE = f"Usage: python3 {sys.argv[0]} [--help] | -accept -beta -chisq -prob"
 
 def plot() -> None:
-    commander = sys.argv[1:]
+    command = sys.argv[1:]
     if not command:
         raise SystemExit(USAGE)
 
     for i in command:
-        if (i == '--help'):
-            SystemExit(USAGE)
-        if (i == '-accept'):
+        if i == '--help':
+            raise SystemExit(USAGE)
+        elif i == '-accept':
             plot_accept()
-        if (i == '-beta'):
+        elif i == '-beta':
             trace_beta()
-        if (i == '-chisq'):
+        elif i == '-chisq':
             trace_chisq()
-        if (i == '-prob'):
+        elif i == '-prob':
             plot_prob()
         else:
-            SystemExit(USAGE)
+            raise SystemExit(USAGE)
+
+
+if __name__ == "__main__":
+    plot()
