@@ -4,3 +4,10 @@
 
 # ignore the dang executable
 src/dang
+
+# python test artifacts
+__pycache__/
+*.pyc
+
+# local fortran test build output
+build/
