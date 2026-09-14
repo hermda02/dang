@@ -556,7 +556,7 @@ contains
                       else if (iand(c%pol_flag(j,k),8) .ne. 0) then
                          write(*,fmt='(a,a,a,a,a,f12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' Q+U mean:   ',&
                               mask_avg(c%indices(:,2,j),self%masks(:,1))
-                      else if (iand(c%pol_flag(j,k),0) .ne. 0) then
+                      else if (c%pol_flag(j,k) == 0) then
                          write(*,fmt='(a,a,a,a,a,f12.5)')  '     ',trim(c%label), ' ', trim(c%ind_label(j)), ' I+Q+U mean:   ',&
                               mask_avg(c%indices(:,1,j),self%masks(:,1))
                       end if
