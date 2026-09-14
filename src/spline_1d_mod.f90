@@ -93,7 +93,7 @@ contains
     real(dp), dimension(:), intent(in)  :: x, y
     real(dp), dimension(:), intent(out) :: y2
 
-    integer(i4b) :: i, n, m
+    integer(i4b) :: n
     real(dp), dimension(:), allocatable :: a, b, c, r
 
     n = size(x)
@@ -300,6 +300,8 @@ contains
        stop
     end if
 
+    W(1) = W(1) + 0.d0 * (yp1 + ypn)
+
 !    write(*,*) W
 !    stop
 
@@ -317,8 +319,8 @@ contains
        col = j
 
        Q_col = 0.d0
+       Q_col(2) = W(col) * Q(col, 0)
        if (col > 1) Q_col(1) = W(col-1) * Q(col,-1)
-                    Q_col(2) = W(col)   * Q(col, 0)
        if (col < n) Q_col(3) = W(col+1) * Q(col, 1)
 
 
@@ -380,17 +382,35 @@ contains
  
     ! Find the spline knot values
     WQy2 = 0.d0
-    do i = 1, n
-       if (i > 1) Q_row(1) = Q(i-1,1)
-                  Q_row(2) = Q(i,  0)
-       if (i < n) Q_row(3) = Q(i+1,-1)
+    Q_row = 0.d0
+    Q_col = 0.d0
+    Q_row(2) = Q(1,0)
+    Q_col(2) = y2(1)
+    Q_row(3) = Q(2,-1)
+    Q_col(3) = y2(2)
+    WQy2(1) = W(1) * dot_product(Q_row,Q_col)
 
-       if (i > 1) Q_col(1) = y2(i-1)
-                  Q_col(2) = y2(i)
-       if (i < n) Q_col(3) = y2(i+1)
+    do i = 2, n-1
+       Q_row = 0.d0
+       Q_col = 0.d0
+
+       Q_row(1) = Q(i-1,1)
+       Q_col(1) = y2(i-1)
+       Q_row(2) = Q(i,0)
+       Q_col(2) = y2(i)
+       Q_row(3) = Q(i+1,-1)
+       Q_col(3) = y2(i+1)
 
        WQy2(i) = W(i) * dot_product(Q_row,Q_col)
     end do
+
+    Q_row = 0.d0
+    Q_col = 0.d0
+    Q_row(1) = Q(n-1,1)
+    Q_col(1) = y2(n-1)
+    Q_row(2) = Q(n,0)
+    Q_col(2) = y2(n)
+    WQy2(n) = W(n) * dot_product(Q_row,Q_col)
 
     y = y - alpha * WQy2
 
@@ -421,7 +441,7 @@ contains
        call trapzd(x_0, y_0, y2_0, a, b, st, j)
        s = (4.d0*st - ost)/3.d0
        if (j >= 5) then
-          if ((abs(s-os) < eps*abs(os)) .or. ((s == 0.d0) .and. (os == 0.d0))) return
+          if ((abs(s-os) < eps*abs(os)) .or. ((abs(s) <= eps) .and. (abs(os) <= eps))) return
        end if
        os  = s
        ost = st
@@ -483,21 +503,21 @@ contains
           xm = 0.5d0*(xl+xh)
           fm = splint(x_0, y_0, y2_0, xm)-zeropt
           s  = sqrt(fm**2 - fl*fh)
-          if (s == 0.d0) return
+          if (abs(s) <= tiny(1.0_dp)) return
           xnew = xm+(xm-xl)*(sign(1.d0,fl-fh)*fm/s)
           if (abs(xnew-zriddr) < xacc) return
           zriddr = xnew
           fnew   = splint(x_0, y_0, y2_0, zriddr)-zeropt
-          if (fnew == 0.d0) return
-          if (sign(fm,fnew) /= fm) then
+          if (abs(fnew) <= xacc) return
+          if (fm*fnew <= 0.d0) then
              xl = xm
              fl = fm
              xh = zriddr
              fh = fnew
-          else if (sign(fl,fnew) /= fl) then
+          else if (fl*fnew <= 0.d0) then
              xh = zriddr
              fh = fnew
-          else if (sign(fh,fnew) /= fh) then
+          else if (fh*fnew <= 0.d0) then
              xl = zriddr
              fl = fnew
           else
