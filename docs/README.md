@@ -2,6 +2,8 @@
 
 This directory contains brief functionality notes for each `dang_*_mod.f90` module under `src/`.
 
+- `model-equations.md` (end-to-end equations + consistency checks)
+
 - `dang_bp_mod.md`
 - `dang_cg_mod.md`
 - `dang_cmb_comp_mod.md`
