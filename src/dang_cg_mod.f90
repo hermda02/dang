@@ -769,10 +769,10 @@ contains
                            & c%S(band=j,pol=2,pixel=i-1)
                       temp1(2*npix+i) = temp1(2*npix+i) + x(offset+l(l_ind))*&
                            & c%S(band=j,pol=3,pixel=i-1)
-                   else
-                      temp1(i)        = temp1(i)        + x(offset+l(l_ind))*&
-                           & c%S(band=j,pol=pol,theta=c%indices(i-1,pol,:))
-                   end if
+                    else
+                       temp1(i)        = temp1(i)        + x(offset+l(l_ind))*&
+                            & c%S(band=j,pol=pol,pixel=i-1)
+                    end if
                 end do
                 !$OMP END DO
                 !$OMP END PARALLEL
