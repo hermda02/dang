@@ -4,11 +4,10 @@ This note ties the main equations to the current implementation so docs can be u
 
 ## 1) Forward model
 
-For band \(\nu\), pixel \(p\), map/pol channel \(k\):
+For band $\nu$, pixel $p$, map/pol channel $k$:
 
 $$
-\hat d_{\nu p k} = \sum_{c \in \text{pixel-amp}} a_{c p k}\,S_{c,\nu p k}(\theta_c)
-+ \sum_{t \in \text{template-like}} A_{t\nu k}\,T_{tpk}.
+\hat d_{\nu p k} = \sum_{c \in \text{pixel-amp}} a_{c p k}\,S_{c,\nu p k}(\theta_c) + \sum_{t \in \text{template-like}} A_{t\nu k}\,T_{tpk}.
 $$
 
 Residual and weighted loss:
@@ -38,17 +37,15 @@ Code anchors: `src/dang_bp_mod.f90`, `src/dang_mixmat_1d_mod.f90`, `src/dang_mix
 With nonlinear parameters fixed, amplitudes are solved from
 
 $$
-\left(\sum_\nu T_\nu^{\mathsf T}N_\nu^{-1}T_\nu\right)x
-=
-\sum_\nu T_\nu^{\mathsf T}N_\nu^{-1}d_\nu^\ast,
+\left(\sum_\nu T_\nu^{\mathrm{T}}N_\nu^{-1}T_\nu\right)x = \sum_\nu T_\nu^{\mathrm{T}}N_\nu^{-1}d_\nu^*
 $$
 
-where \(d_\nu^\ast\) is data after subtracting components not included in the active CG solve.
+where $d_\nu^*$ is data after subtracting components not included in the active CG solve.
 
 Matrix-free operator application in code is
 
 $$
-x \to T_\nu x \to N_\nu^{-1}(T_\nu x) \to T_\nu^{\mathsf T}N_\nu^{-1}T_\nu x,
+x \to T_\nu x \to N_\nu^{-1}(T_\nu x) \to T_\nu^{\mathrm{T}}N_\nu^{-1}T_\nu x,
 \quad
 Ax=\sum_\nu(\cdot).
 $$
@@ -68,7 +65,7 @@ $$
 In CG sampling mode, RHS is perturbed by
 
 $$
-b \leftarrow b + \sum_\nu T_\nu^{\mathsf T}N_\nu^{-1/2}\eta,
+b \leftarrow b + \sum_\nu T_\nu^{\mathrm{T}}N_\nu^{-1/2}\eta,
 \qquad \eta\sim\mathcal N(0,I).
 $$
 
@@ -85,8 +82,7 @@ $$
 Modified blackbody (dust-like):
 
 $$
-S(\nu;\beta,T)\propto \left(\frac{\nu}{\nu_{\mathrm{ref}}}\right)^\beta
-\frac{B_\nu(T)}{B_{\nu_{\mathrm{ref}}}(T)}.
+S(\nu;\beta,T)\propto \left(\frac{\nu}{\nu_{\mathrm{ref}}}\right)^\beta \frac{B_\nu(T)}{B_{\nu_{\mathrm{ref}}}(T)}.
 $$
 
 Template-like components:
@@ -95,7 +91,7 @@ $$
 m_{\nu p} = A_\nu\,t_p,
 $$
 
-and monopole special case \(t_p=1\).
+and monopole special case $t_p=1$.
 
 Code anchors: `src/dang_powlaw_comp_mod.f90`, `src/dang_mbb_comp_mod.f90`, `src/dang_template_comp_mod.f90`, `src/dang_monopole_comp_mod.f90`.
 
@@ -104,11 +100,11 @@ Code anchors: `src/dang_powlaw_comp_mod.f90`, `src/dang_mbb_comp_mod.f90`, `src/
 Use this as a quick intended-vs-actual checklist during doc/code updates.
 
 1. **Data subtraction before CG RHS**
-   - Expected: \(d_\nu^\ast = d_\nu - \sum_{c\notin g}\hat d_{c,\nu}\) before building \(b\).
+   - Expected: $d_\nu^* = d_\nu - \sum_{c\notin g}\hat d_{c,\nu}$ before building $b$.
    - Check: `compute_rhs` subtracts non-group and non-sampled components.
 
 2. **Noise weighting location**
-   - Expected: one factor of \(\sigma^{-2}\) in `compute_rhs`, and one in `compute_Ax` after \(T_\nu x\).
+   - Expected: one factor of $\sigma^{-2}$ in `compute_rhs`, and one in `compute_Ax` after $T_\nu x$.
    - Check: divisions by `rms_map**2` appear in those exact stages.
 
 3. **Template-like parameterization**
@@ -116,7 +112,7 @@ Use this as a quick intended-vs-actual checklist during doc/code updates.
    - Check: vector offsets advance by `c%nfit` for these component types.
 
 4. **Bandpass consistency across components**
-   - Expected: single-\(\nu\) and integrated-band evaluation paths map to the same physical SED definition.
+   - Expected: single-$\nu$ and integrated-band evaluation paths map to the same physical SED definition.
    - Check: component `eval` methods and mixmat precompute/integration routines agree.
 
 5. **Pol-flag branch reachability (important code-level check)**
