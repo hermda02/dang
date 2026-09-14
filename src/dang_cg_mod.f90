@@ -492,16 +492,16 @@ contains
                       b(npix+offset+i) = b(npix+offset+i) + (data(i-1,3,j)*&
                            & c%S(band=j,pol=3,theta=c%indices(i-1,3,:)))/&
                            & (ddata%rms_map(i-1,3,j)**2.d0)
-                   else if (self%pol_flag(flag_n) == 0) then
-                      b(offset+i) = b(offset+i) + (data(i-1,1,j)*&
-                           & c%S(band=j,pol=1,theta=c%indices(i-1,1,:)))/&
-                           & (ddata%rms_map(i-1,1,j)**2.d0)
-                      b(offset+i) = b(offset+i) + (data(i-1,2,j)*&
-                           & c%S(band=j,pol=2,theta=c%indices(i-1,2,:)))/&
-                           & (ddata%rms_map(i-1,2,j)**2.d0)
-                      b(offset+i) = b(offset+i) + (data(i-1,3,j)*&
-                           & c%S(band=j,pol=3,theta=c%indices(i-1,3,:)))/&
-                           & (ddata%rms_map(i-1,3,j)**2.d0)
+                    else if (self%pol_flag(flag_n) == 0) then
+                       b(offset+i) = b(offset+i) + (data(i-1,1,j)*&
+                            & c%S(band=j,pol=1,theta=c%indices(i-1,1,:)))/&
+                            & (ddata%rms_map(i-1,1,j)**2.d0)
+                       b(npix+offset+i) = b(npix+offset+i) + (data(i-1,2,j)*&
+                            & c%S(band=j,pol=2,theta=c%indices(i-1,2,:)))/&
+                            & (ddata%rms_map(i-1,2,j)**2.d0)
+                       b(2*npix+offset+i) = b(2*npix+offset+i) + (data(i-1,3,j)*&
+                            & c%S(band=j,pol=3,theta=c%indices(i-1,3,:)))/&
+                            & (ddata%rms_map(i-1,3,j)**2.d0)
                    else
                       b(offset+i) = b(offset+i) + (data(i-1,pol,j)*&
                            & c%S(band=j,pol=pol,theta=c%indices(i-1,pol,:)))/&
