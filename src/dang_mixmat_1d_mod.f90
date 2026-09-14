@@ -48,7 +48,7 @@ contains
     real(dp), allocatable, dimension(:)   :: theta
     real(dp), allocatable, dimension(:)   :: f, s
 
-    integer(i4b)                          :: i, j, k
+    integer(i4b)                          :: i, j
     integer(i4b)                          :: m
 
     m = self%bp%n
@@ -59,7 +59,7 @@ contains
     do i = 1, n
        theta(i) = self%comp%uni_prior(1,1) + (self%comp%uni_prior(1,2)-self%comp%uni_prior(1,1))/(n-1) * (i-1)
        do j = 1, m
-          s(j)  = self%comp%S(nu=self%bp%nu0(j),pol=pol,theta=theta)
+          s(j)  = self%comp%S(nu=self%bp%nu0(j),pol=pol,theta=[theta(i)])
        end do
        f(i) = self%bp%integrate(s)
     end do
@@ -82,8 +82,6 @@ contains
     integer(i4b),                      intent(in) :: par
     real(dp)                                      :: evalIntegratedDSignal
 
-    real(dp) :: p(2), delta = 1.d-10, f1, f2
-    
     evalIntegratedDSignal = splint_deriv(self%s%x, self%s%y, self%s%y2, theta(1))
     
   end function evalIntegratedDSignal

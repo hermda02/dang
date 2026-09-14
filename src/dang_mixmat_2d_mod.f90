@@ -46,7 +46,7 @@ contains
     class(dang_mixmat_2d)                 :: self
     integer(i4b),   intent(in), optional  :: pol
     
-    real(dp), allocatable, dimension(:)   :: theta, s
+    real(dp), allocatable, dimension(:)   :: s
     real(dp), allocatable, dimension(:,:) :: f
 
     integer(i4b)                          :: i, j, k
@@ -66,7 +66,7 @@ contains
     do i = 1, n
        do j = 1, n
           do k = 1, m
-             s(k) = self%comp%S(nu=self%comp%nu_ref,pol=pol,theta=[self%x(i),self%y(j)])
+             s(k) = self%comp%S(nu=self%bp%nu0(k),pol=pol,theta=[self%x(i),self%y(j)])
           end do
           f(i,j) = self%bp%integrate(s)
        end do
