@@ -487,7 +487,6 @@ contains
     call dsyevd(job, uplo, n, V, lda, W, work, lwork, iwork, liwork, info)
 
     if (any(W <= 0.d0)) then
-       write(*,*) 'W = ', W
        A(1,1) = -1.d30
        return
     end if
