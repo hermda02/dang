@@ -55,11 +55,13 @@ contains
 
     integer(i4b) :: n, jl, jm, ju
     logical(lgt) :: ascnd
+    real(dp)     :: boundary_tol
 
     n     = size(xx)
     ascnd = (xx(n) >= xx(1))
     jl    = 0
     ju    = n+1
+    boundary_tol = epsilon(1.0_dp) * max(1.0_dp, abs(xx(1)), abs(xx(n)))
 
     do 
        if (ju-jl <= 1) exit
@@ -71,9 +73,9 @@ contains
        end if
     end do
 
-    if (x == xx(1)) then
+    if (abs(x - xx(1)) <= boundary_tol) then
        locate_dp = 1
-    else if (x == xx(n)) then
+    else if (abs(x - xx(n)) <= boundary_tol) then
        locate_dp = n-1
     else
        locate_dp = jl

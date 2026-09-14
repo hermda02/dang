@@ -363,18 +363,15 @@ contains
     real(dp), dimension(1:),    intent(out)           :: eigenvals
     real(dp), dimension(1:,1:), intent(out)           :: eigenvectors
 
-    integer(i4b)     :: i, n, liwork, lwork, lda, ldb, info
+    integer(i4b)     :: i, n, liwork, lwork, lda, info
     character(len=1) :: job, uplo
-    real(dp)         :: cutoff_int
-    real(dp),     allocatable, dimension(:,:) :: A_int
-    real(dp),     allocatable, dimension(:)   :: W, work
+    real(dp),     allocatable, dimension(:)   :: work
     integer(i4b), allocatable, dimension(:)   :: iwork    
 
     job    = 'v'
     uplo   = 'l'
     n      = size(eigenvals)
     lda    = n
-    ldb    = n
     liwork = 5*n + 3
     lwork  = 2*n**2 + 6*n + 1
     info   = 0
@@ -408,7 +405,7 @@ contains
     integer(i4b)     :: n, lda, lwork, liwork, info
     character(len=1) :: job, uplo
     real(dp),     allocatable, dimension(:,:) :: A_copy
-    real(dp),     allocatable, dimension(:)   :: W, work
+    real(dp),     allocatable, dimension(:)   :: work
     integer(i4b), allocatable, dimension(:)   :: iwork    
 
     n      = size(eigenvals)
@@ -468,9 +465,8 @@ contains
     real(dp),                   intent(in)    :: pow
     real(dp), dimension(1:,1:), intent(inout) :: A
 
-    integer(i4b)     :: i, j, n, liwork, lwork, lda, ldb, info
+    integer(i4b)     :: i, n, liwork, lwork, lda, info
     character(len=1) :: job, uplo
-    real(dp)         :: cutoff_int
     real(dp),     allocatable, dimension(:,:) :: V
     real(dp),     allocatable, dimension(:)   :: W, work
     integer(i4b), allocatable, dimension(:)   :: iwork    
@@ -479,7 +475,6 @@ contains
     uplo   = 'l'
     n      = size(A(1,:))
     lda    = n
-    ldb    = n
     liwork = 5*n + 3
     lwork  = 2*n**2 + 6*n + 1
       
@@ -545,7 +540,7 @@ contains
           m (I, K+1:N+1) = m (I, K+1:N+1) - &
                temp_row (I) * m (K, K+1:N+1)
        end do
-       m (K+1:N, K) = cmplx(0.d0,0.d0)
+       m (K+1:N, K) = cmplx(0.d0, 0.d0, kind=dpc)
 
     end do 
 
@@ -565,10 +560,9 @@ contains
     
     real(dp), allocatable, dimension(:)               :: eigenvals
     real(dp), allocatable, dimension(:,:)             :: eigenvectors, matrix2
-    integer(i4b)                                      :: myid, i, n    
+    integer(i4b)                                      :: i, n
     real(dp)                                          :: maxeigenval  
 
-    myid = 1000
     n = size(matrix(1,:))
     allocate(matrix2(n,n))
     allocate(eigenvals(n))
@@ -576,9 +570,9 @@ contains
     call get_eigen_decomposition(matrix, eigenvals, eigenvectors)
     maxeigenval = maxval(eigenvals)
     do i = 1, n
-       if (eigenvals(i) == 0.d0) then 
+       if (abs(eigenvals(i)) <= tiny(1.0_dp)) then
           cycle
-       else if (eigenvals(i) > threshold * maxeigenval .or. threshold ==0.d0) then
+       else if (threshold <= 0.d0 .or. eigenvals(i) > threshold * maxeigenval) then
           eigenvals(i) = 1.d0/eigenvals(i)
        else 
           eigenvals(i) = 0.d0
@@ -708,15 +702,12 @@ contains
     REAL(DP),     DIMENSION(0:nlmax), INTENT(OUT) :: plm
     
     INTEGER(I4B) :: nmmax
-    INTEGER(I4B) l, ith, indl, mm               !, m ...  alm related
+    INTEGER(I4B) :: l, mm
     
     REAL(DP) sq4pi_inv
     REAL(DP) cth, sth
     REAL(DP) a_rec, lam_mm, lam_lm, lam_0, lam_1, lam_2, par_lm
     REAL(DP) f2m, fm2, fl2
-    
-    Character(LEN=7), PARAMETER :: code = 'ALM2MAP'
-    INTEGER(I4B) :: status
     
     REAL(DP), PARAMETER :: bignorm = 1.d-20*max_dp
     !=======================================================================
@@ -817,7 +808,7 @@ contains
     real(dp), intent(out) :: sigma
 
     integer(i4b)   :: maxit, j
-    real(dp)       :: dx, fr, fl, fm, xl, xr, xm
+    real(dp)       :: fl, fm, xl, xr, xm
 
     maxit = 40
 
@@ -832,8 +823,6 @@ contains
        xm = (xl+xr)/2.d0
 
        fl = -fract
-       fr = corr_erf(xr)-fract
-
        do j = 1, maxit
           if (abs(xl-xr) < 1d-7) exit
 
@@ -842,7 +831,6 @@ contains
 
           if (fm*fl < 0.d0) then
              xr = xm
-             fr = fm
           else
              xl = xm
              fl = fm
@@ -868,32 +856,30 @@ contains
     real(sp), intent(out) :: sigma
 
     integer(i4b)   :: maxit, j
-    real(dp)       :: dx, fr, fl, fm, xl, xr, xm
+    real(dp)       :: fl, fm, xl, xr, xm
 
     maxit = 40
 
-    if (fract > 0.999999426) then
-       sigma = 5.
-    else if (fract < 1e-7) then
-       sigma = 0.
+    if (fract > 0.999999426_sp) then
+       sigma = 5.0_sp
+    else if (fract < 1.0e-7_sp) then
+       sigma = 0.0_sp
     else
 
-       xl = 0.
-       xr = 10.
-       xm = (xl+xr)/2.
+       xl = 0.0_dp
+       xr = 10.0_dp
+       xm = (xl+xr)/2.0_dp
 
        fl = -fract
-       fr = corr_erf(xr)-fract
 
        do j = 1, maxit
-          if (abs(xl-xr) < 1e-7) exit
+          if (abs(xl-xr) < 1.0e-7_dp) exit
 
-          xm = (xl+xr)/2.
+          xm = (xl+xr)/2.0_dp
           fm = corr_erf(xm)-fract
 
-          if (fm*fl < 0.0) then
+          if (fm*fl < 0.0_dp) then
              xr = xm
-             fr = fm
           else
              xl = xm
              fl = fm
@@ -905,7 +891,7 @@ contains
           write(*,*) 'ERROR: Too many iterations in the fract2sigma search'
        end if
 
-       sigma = sqrt(2.) * xm
+       sigma = real(sqrt(2.0_dp) * xm, sp)
 
     end if
 
@@ -969,9 +955,7 @@ contains
     real(dp), dimension(:,:), intent(out) :: L
     integer(i4b),             intent(out), optional :: ierr
 
-    integer(i4b) :: N, i, j, k, stat
-    real(dp) :: temp
-    real(dp), allocatable, dimension(:) :: temp_row
+    integer(i4b) :: N, i, j, stat
 
     N = size(A(1,:))
     if (present(ierr)) ierr = 0
@@ -1032,9 +1016,7 @@ contains
     real(dp), dimension(:,:), intent(inout)  :: A
     integer(i4b),             intent(out), optional :: ierr
 
-    integer(i4b) :: N, i, j, k, stat
-    real(dp) :: temp
-    real(dp), allocatable, dimension(:) :: temp_row
+    integer(i4b) :: N, i, j, stat
 
     N = size(A(1,:))
     if (present(ierr)) ierr = 0
