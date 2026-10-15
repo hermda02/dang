@@ -402,13 +402,15 @@ contains
           m = m + c%nfit
        else if (c%type  == 'monopole') then
           m = m + c%nfit
-       else if (c%type == 'template') then
-          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-             m = m + c%nfit
-          else if (self%pol_flag(flag_n) == 0) then
-             m = m + c%nfit
-          end if
-       else
+        else if (c%type == 'template') then
+           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+              m = m + c%nfit
+           else if (self%pol_flag(flag_n) == 0) then
+              m = m + c%nfit
+           else
+              m = m + c%nfit
+           end if
+        else
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
              m = m + 2*npix
           else if (self%pol_flag(flag_n) == 0) then
