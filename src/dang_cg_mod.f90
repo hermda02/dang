@@ -207,6 +207,7 @@ contains
     integer(i4b)                           :: offset
     real(dp)                               :: alpha, beta, delta_0
     real(dp)                               :: delta_old, delta_new
+    logical(lgt)                           :: needs_init
 
     t1         = mpi_wtime()
     ! How big is the input RHS vector?
@@ -223,15 +224,30 @@ contains
        m      = m + npix
     end if
 
-    ! To ensure that we only allocate the CG group amplitude vector once
-    if (iter == 1) then
-       allocate(self%x(n))
-       allocate(self%sInv(n))
-       allocate(self%m(n))
+    needs_init = .false.
+    if (allocated(self%x)) then
+       if (size(self%x) /= n) then
+          deallocate(self%x)
+          if (allocated(self%sInv)) deallocate(self%sInv)
+          if (allocated(self%m)) deallocate(self%m)
+          needs_init = .true.
+       end if
+    else
+       needs_init = .true.
+    end if
 
-       ! Initialize on foreground amplitude maps
-       write(*,*) 'Initialize on foreground amplitude maps'
-       self%sInv(:) = 0.d0
+    if (needs_init) then
+        allocate(self%x(n))
+        allocate(self%sInv(n))
+        allocate(self%m(n))
+    end if
+
+    ! Initialize amplitude and prior vectors on first Gibbs iteration
+    ! or when a polarization-flag solve requires a resized state vector.
+    if (iter == 1 .or. needs_init) then
+        ! Initialize on foreground amplitude maps
+        write(*,*) 'Initialize on foreground amplitude maps'
+        self%sInv(:) = 0.d0
        self%x(:) = 0.d0
        self%m(:) = 0.d0
        call self%initialize_sInv(flag_n)
