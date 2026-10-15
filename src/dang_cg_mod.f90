@@ -458,12 +458,11 @@ contains
           end do
           !$OMP END DO
           !$OMP END PARALLEL
-       end if
        ! Still subtract templates which exist but may not be fit here
-        else if (c%type == 'template' .or. c%type == 'monopole') then
+       else if (c%type == 'template' .or. c%type == 'monopole') then
            do j = 1, nbands
               if (.not. c%corr(j)) then
-                !$OMP PARALLEL PRIVATE(i,k)
+                 !$OMP PARALLEL PRIVATE(i,k)
                 !$OMP DO SCHEDULE(static) 
                 do i = 0, npix-1
                    if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) cycle
