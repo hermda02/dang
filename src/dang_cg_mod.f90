@@ -107,11 +107,11 @@ contains
     do i = 1, dpar%ncomp
        if (component_list(i)%p%cg_group == cg_group) then
           constructor_cg%cg_component(count)%p => component_list(i)%p
+          if (component_list(i)%p%type == 'hi_fit') constructor_cg%ntemp = constructor_cg%ntemp + 1
+          if (component_list(i)%p%type == 'monopole') constructor_cg%ntemp = constructor_cg%ntemp + 1
+          if (component_list(i)%p%type == 'template') constructor_cg%ntemp = constructor_cg%ntemp + 1
           count = count + 1
        end if
-       if (component_list(i)%p%type == 'hi_fit') constructor_cg%ntemp = constructor_cg%ntemp + 1
-       if (component_list(i)%p%type == 'monopole') constructor_cg%ntemp = constructor_cg%ntemp + 1
-       if (component_list(i)%p%type == 'template') constructor_cg%ntemp = constructor_cg%ntemp + 1
     end do
 
     constructor_cg%pol_flag = return_poltype_flag(dpar%cg_poltype(cg_group))
