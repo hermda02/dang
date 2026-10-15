@@ -107,11 +107,11 @@ contains
     do i = 1, dpar%ncomp
        if (component_list(i)%p%cg_group == cg_group) then
           constructor_cg%cg_component(count)%p => component_list(i)%p
+          if (component_list(i)%p%type == 'hi_fit') constructor_cg%ntemp = constructor_cg%ntemp + 1
+          if (component_list(i)%p%type == 'monopole') constructor_cg%ntemp = constructor_cg%ntemp + 1
+          if (component_list(i)%p%type == 'template') constructor_cg%ntemp = constructor_cg%ntemp + 1
           count = count + 1
        end if
-       if (component_list(i)%p%type == 'hi_fit') constructor_cg%ntemp = constructor_cg%ntemp + 1
-       if (component_list(i)%p%type == 'monopole') constructor_cg%ntemp = constructor_cg%ntemp + 1
-       if (component_list(i)%p%type == 'template') constructor_cg%ntemp = constructor_cg%ntemp + 1
     end do
 
     constructor_cg%pol_flag = return_poltype_flag(dpar%cg_poltype(cg_group))
@@ -207,6 +207,7 @@ contains
     integer(i4b)                           :: offset
     real(dp)                               :: alpha, beta, delta_0
     real(dp)                               :: delta_old, delta_new
+    logical(lgt)                           :: needs_init
 
     t1         = mpi_wtime()
     ! How big is the input RHS vector?
@@ -223,15 +224,30 @@ contains
        m      = m + npix
     end if
 
-    ! To ensure that we only allocate the CG group amplitude vector once
-    if (iter == 1) then
-       allocate(self%x(n))
-       allocate(self%sInv(n))
-       allocate(self%m(n))
+    needs_init = .false.
+    if (allocated(self%x)) then
+       if (size(self%x) /= n) then
+          deallocate(self%x)
+          if (allocated(self%sInv)) deallocate(self%sInv)
+          if (allocated(self%m)) deallocate(self%m)
+          needs_init = .true.
+       end if
+    else
+       needs_init = .true.
+    end if
 
-       ! Initialize on foreground amplitude maps
-       write(*,*) 'Initialize on foreground amplitude maps'
-       self%sInv(:) = 0.d0
+    if (needs_init) then
+        allocate(self%x(n))
+        allocate(self%sInv(n))
+        allocate(self%m(n))
+    end if
+
+    ! Initialize amplitude and prior vectors on first Gibbs iteration
+    ! or when a polarization-flag solve requires a resized state vector.
+    if (iter == 1 .or. needs_init) then
+        ! Initialize on foreground amplitude maps
+        write(*,*) 'Initialize on foreground amplitude maps'
+        self%sInv(:) = 0.d0
        self%x(:) = 0.d0
        self%m(:) = 0.d0
        call self%initialize_sInv(flag_n)
@@ -402,13 +418,15 @@ contains
           m = m + c%nfit
        else if (c%type  == 'monopole') then
           m = m + c%nfit
-       else if (c%type == 'template') then
-          if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-             m = m + c%nfit
-          else if (self%pol_flag(flag_n) == 0) then
-             m = m + c%nfit
-          end if
-       else
+        else if (c%type == 'template') then
+           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+              m = m + c%nfit
+           else if (self%pol_flag(flag_n) == 0) then
+              m = m + c%nfit
+           else
+              m = m + c%nfit
+           end if
+        else
           if (iand(self%pol_flag(flag_n),8) .ne. 0) then
              m = m + 2*npix
           else if (self%pol_flag(flag_n) == 0) then
@@ -440,12 +458,11 @@ contains
           end do
           !$OMP END DO
           !$OMP END PARALLEL
-       end if
        ! Still subtract templates which exist but may not be fit here
-       if (c%type == 'template' .or. c%type == 'monopole') then
-          do j = 1, nbands
-             if (.not. c%corr(j)) then
-                !$OMP PARALLEL PRIVATE(i,k)
+       else if (c%type == 'template' .or. c%type == 'monopole') then
+           do j = 1, nbands
+              if (.not. c%corr(j)) then
+                 !$OMP PARALLEL PRIVATE(i,k)
                 !$OMP DO SCHEDULE(static) 
                 do i = 0, npix-1
                    if (ddata%masks(i,1) == 0.d0 .or. ddata%masks(i,1) == missval) cycle
@@ -471,19 +488,19 @@ contains
           !$OMP DO SCHEDULE(static) 
           do i = 1, npix
              do j = 1, nbands
-                if (ddata%masks(i-1,1) == 0.d0) then
-                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      b(i)        = 0.d0
-                      b(npix+i)   = 0.d0
-                   else if (self%pol_flag(flag_n) == 0) then
-                      b(i)        = 0.d0
-                      b(npix+i)   = 0.d0
-                      b(2*npix+i) = 0.d0
-                   else 
-                      b(i)        = 0.d0
-                   end if
-                   cycle
-                else
+                 if (ddata%masks(i-1,1) == 0.d0) then
+                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                       b(offset+i)        = 0.d0
+                       b(offset+npix+i)   = 0.d0
+                    else if (self%pol_flag(flag_n) == 0) then
+                       b(offset+i)        = 0.d0
+                       b(offset+npix+i)   = 0.d0
+                       b(offset+2*npix+i) = 0.d0
+                    else 
+                       b(offset+i)        = 0.d0
+                    end if
+                    cycle
+                 else
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                       b(offset+i) = b(offset+i) + (data(i-1,2,j)*&
