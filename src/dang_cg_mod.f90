@@ -471,19 +471,19 @@ contains
           !$OMP DO SCHEDULE(static) 
           do i = 1, npix
              do j = 1, nbands
-                if (ddata%masks(i-1,1) == 0.d0) then
-                   if (iand(self%pol_flag(flag_n),8) .ne. 0) then
-                      b(i)        = 0.d0
-                      b(npix+i)   = 0.d0
-                   else if (self%pol_flag(flag_n) == 0) then
-                      b(i)        = 0.d0
-                      b(npix+i)   = 0.d0
-                      b(2*npix+i) = 0.d0
-                   else 
-                      b(i)        = 0.d0
-                   end if
-                   cycle
-                else
+                 if (ddata%masks(i-1,1) == 0.d0) then
+                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
+                       b(offset+i)        = 0.d0
+                       b(offset+npix+i)   = 0.d0
+                    else if (self%pol_flag(flag_n) == 0) then
+                       b(offset+i)        = 0.d0
+                       b(offset+npix+i)   = 0.d0
+                       b(offset+2*npix+i) = 0.d0
+                    else 
+                       b(offset+i)        = 0.d0
+                    end if
+                    cycle
+                 else
                    ! Bit flag selection for matrix building
                    if (iand(self%pol_flag(flag_n),8) .ne. 0) then
                       b(offset+i) = b(offset+i) + (data(i-1,2,j)*&
