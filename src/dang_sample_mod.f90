@@ -62,7 +62,7 @@ contains
                 else if (iand(c%pol_flag(j,k),8) .ne. 0) then
                    write(*,*) 'Sampling spectral index ', trim(c%ind_label(j)), ' for ', trim(c%label), ', poltype = Q+U.'
                    call sample_index_mh(ddata,c,j,-1)
-                else if (iand(c%pol_flag(j,k),0) .ne. 0) then
+                else if (c%pol_flag(j,k) == 0) then
                    write(*,*) 'Sampling spectral index ', trim(c%ind_label(j)), ' for ', trim(c%label), ', poltype = I+Q+U.'
                    call sample_index_mh(ddata,c,j,-2)
                 else

@@ -285,7 +285,7 @@ contains
           i = i + 1
        end if
     end do
-    if (iand(local_flag,0) .ne. 0) then
+    if (local_flag == 0) then
        flag(i) = 0
     end if
 
