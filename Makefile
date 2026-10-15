@@ -17,6 +17,9 @@ dang :
 	$(MPF90) $(F90COMP) -c $<
 
 # Cleaning command
-.PHONY: clean
+.PHONY: clean stub-cg-check
 clean :
 	@cd src; $(MAKE) clean
+
+stub-cg-check:
+	./scripts/stub_build_polarization.sh
