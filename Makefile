@@ -17,9 +17,12 @@ dang :
 	$(MPF90) $(F90COMP) -c $<
 
 # Cleaning command
-.PHONY: clean stub-cg-check
+.PHONY: clean stub-cg-check stub-cg-polflag-regression
 clean :
 	@cd src; $(MAKE) clean
 
 stub-cg-check:
 	./scripts/stub_build_polarization.sh
+
+stub-cg-polflag-regression:
+	./scripts/stub_regression_cg_polflags.sh
